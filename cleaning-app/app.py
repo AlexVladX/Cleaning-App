@@ -149,6 +149,7 @@ def analyze_with_gemini(text, filename):
             "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
             "User-Agent": "Cleaning-App/1.0"
         }
+    )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
