@@ -133,9 +133,12 @@ def analyze_with_gemini(text, filename):
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-        add_log(f"GROQ HTTP {e.code}")
-        add_log(error_body[:2000])   # primele 2000 de caractere
+        if e.code == 429:
+            body = e.read().decode("utf-8", errors="ignore")
+            add_log("Rate limit. Aștept 20 secunde și reîncerc...")
+            time.sleep(20)
+            return analyze_with_gemini(text, filename)
+            
         raise
     raw = data["choices"][0]["message"]["content"].strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
