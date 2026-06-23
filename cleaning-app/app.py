@@ -116,7 +116,7 @@ def analyze_with_gemini(text, filename):
     )
     url = "https://openrouter.ai/api/v1/chat/completions"
     body = json.dumps({
-        "model": "mistralai/mistral-7b-instruct:free",
+        "model": "meta-llama/llama-3.2-3b-instruct:free",
         "messages": [{"role": "user", "content": prompt}]
     }).encode()
     req = urllib.request.Request(
