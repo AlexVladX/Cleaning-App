@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-import anthropic
+import urllib.request
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -18,7 +18,7 @@ from collections import defaultdict
 app = Flask(__name__)
 
 # --- Config ---
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
@@ -85,8 +85,7 @@ def extract_text_from_pdf(pdf_bytes):
     return text.strip()
 
 
-def analyze_with_claude(text, filename):
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+def analyze_with_gemini(text, filename):
     prompt = f"""Ești contabil pentru o firmă de curățenie din Corsica. Analizează această factură și extrage toate intervențiile de curățenie.
 
 FIȘIER: {filename}
@@ -110,12 +109,12 @@ Returnează DOAR un obiect JSON valid (fără markdown, fără backtick-uri):
 
 Dacă nu găsești date clare, deduce din context. Returnează lista goală dacă nu e o factură de curățenie."""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = message.content[0].text.strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read())
+    raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 
@@ -140,7 +139,7 @@ def process_file(file_info):
             raise ValueError("PDF scanat sau gol — nu s-a putut extrage text")
 
         add_log(f"Analizez cu AI: {name}")
-        result = analyze_with_claude(text, name)
+        result = analyze_with_gemini(text, name)
         interventii = result.get("interventii", [])
         for iv in interventii:
             iv["_source"] = name
