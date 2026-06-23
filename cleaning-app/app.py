@@ -176,9 +176,11 @@ def process_file(file_info):
 
 def worker_loop():
     """Procesează fișierele unul câte unul cu pauză între ele."""
+    add_log("Worker pornit si asteapta fisiere...")
     while True:
         try:
-            file_info = file_queue.get(timeout=1)
+            file_info = file_queue.get(timeout=2)
+            add_log(f"Worker preluat din coada: {file_info.get('name')}")
             process_file(file_info)
             file_queue.task_done()
             add_log("Pauza 15s inainte de urmatoarea factura...")
@@ -186,7 +188,8 @@ def worker_loop():
         except queue.Empty:
             continue
         except Exception as e:
-            add_log(f"Eroare worker: {e}")
+            import traceback
+            add_log(f"Eroare CRITICA worker: {e} | {traceback.format_exc()[-200:]}")
 
 
 def scan_folder():
@@ -373,6 +376,17 @@ def api_export():
         as_attachment=True,
         download_name=f"analiza-curatenie-{date_str}.xlsx"
     )
+
+
+@app.route("/api/test")
+def api_test():
+    return jsonify({
+        "openrouter_key": bool(OPENROUTER_API_KEY),
+        "folder_id": bool(FOLDER_ID),
+        "queue_size": file_queue.qsize(),
+        "files_count": len(state["files"]),
+        "worker_alive": True
+    })
 
 
 @app.route("/api/reset", methods=["POST"])
