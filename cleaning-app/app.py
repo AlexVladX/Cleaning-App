@@ -17,7 +17,7 @@ from collections import defaultdict
 
 app = Flask(__name__)
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
@@ -114,18 +114,17 @@ def analyze_with_gemini(text, filename):
         "\"type_facturation\": \"heure ou forfait\", \"qty\": 1.0, "
         "\"pret_unitar\": 26.0, \"suma\": 130.0, \"moneda\": \"EUR\"}]}"
     )
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
-        "model": "meta-llama/llama-3.2-3b-instruct:free",
-        "messages": [{"role": "user", "content": prompt}]
+        "model": "llama-3.1-8b-instant",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1000
     }).encode()
     req = urllib.request.Request(
         url, data=body,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://cleaning-app-production-3647.up.railway.app",
-            "X-Title": "Cleaning Invoice Analyzer"
+            "Authorization": f"Bearer {GROQ_API_KEY}"
         }
     )
     with urllib.request.urlopen(req, timeout=60) as resp:
