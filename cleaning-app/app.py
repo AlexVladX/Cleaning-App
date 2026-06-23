@@ -4,6 +4,7 @@ import io
 import threading
 import time
 import urllib.request
+import urllib.error
 import queue
 from datetime import datetime
 from flask import Flask, render_template, jsonify, send_file, request
