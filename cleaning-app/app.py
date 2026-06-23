@@ -18,7 +18,7 @@ from collections import defaultdict
 
 app = Flask(__name__)
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
