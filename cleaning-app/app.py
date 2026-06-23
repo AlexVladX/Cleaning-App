@@ -3,13 +3,12 @@ import json
 import io
 import threading
 import time
+import urllib.request
 from datetime import datetime
 from flask import Flask, render_template, jsonify, send_file, request
-from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-import urllib.request
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -17,16 +16,14 @@ from collections import defaultdict
 
 app = Flask(__name__)
 
-# --- Config ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
 
-# --- State (in-memory) ---
 state = {
-    "files": {},          # fileId -> {id, name, status, interventii, error}
-    "interventii": [],    # all extracted interventions
+    "files": {},
+    "interventii": [],
     "last_scan": None,
     "monitoring": False,
     "log": []
@@ -67,6 +64,7 @@ def list_pdf_files(folder_id):
             if f["mimeType"] == "application/pdf":
                 all_files.append(f)
             elif f["mimeType"] == "application/vnd.google-apps.folder":
+                add_log(f"Subfolder: {f['name']}")
                 search_folder(f["id"])
 
     search_folder(folder_id)
@@ -75,9 +73,9 @@ def list_pdf_files(folder_id):
 
 def download_pdf(file_id):
     service = get_drive_service()
-    request = service.files().get_media(fileId=file_id)
+    req = service.files().get_media(fileId=file_id)
     buf = io.BytesIO()
-    downloader = MediaIoBaseDownload(buf, request)
+    downloader = MediaIoBaseDownload(buf, req)
     done = False
     while not done:
         _, done = downloader.next_chunk()
@@ -96,32 +94,25 @@ def extract_text_from_pdf(pdf_bytes):
 
 
 def analyze_with_gemini(text, filename):
-    prompt = f"""Ești contabil pentru o firmă de curățenie din Corsica. Analizează această factură și extrage toate intervențiile de curățenie.
-
-FIȘIER: {filename}
-CONȚINUT:
-{text[:4000]}
-
-Returnează DOAR un obiect JSON valid (fără markdown, fără backtick-uri):
-{{
-  "interventii": [
-    {{
-      "proprietate": "Numele vilei/casei/apartamentului",
-      "adresa": "adresa dacă există",
-      "data": "DD/MM/YYYY",
-      "tip_serviciu": "tip de curățenie",
-      "suma": 150.00,
-      "moneda": "EUR",
-      "client": "numele clientului dacă există"
-    }}
-  ]
-}}
-
-Dacă nu găsești date clare, deduce din context. Returnează lista goală dacă nu e o factură de curățenie."""
-
-url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    prompt = (
+        "Ești contabil pentru o firmă de curățenie din Corsica. "
+        "Analizează această factură și extrage toate intervențiile de curățenie.\n\n"
+        f"FIȘIER: {filename}\n"
+        f"CONȚINUT:\n{text[:4000]}\n\n"
+        "Returnează DOAR un obiect JSON valid (fără markdown, fără backtick-uri):\n"
+        '{"interventii": [{"proprietate": "...", "adresa": "...", "data": "DD/MM/YYYY", '
+        '"tip_serviciu": "...", "suma": 0.00, "moneda": "EUR", "client": "..."}]}\n\n'
+        "Dacă nu găsești date clare, deduce din context. "
+        "Returnează lista goală dacă nu e o factură de curățenie."
+    )
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    )
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"}
+    )
     with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read())
     raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -133,37 +124,30 @@ def process_file(file_info):
     file_id = file_info["id"]
     name = file_info["name"]
     add_log(f"Descarc: {name}")
-
     with state_lock:
         state["files"][file_id] = {
             "id": file_id, "name": name,
             "status": "processing", "interventii": [], "error": None
         }
-
     try:
         pdf_bytes = download_pdf(file_id)
         add_log(f"Extrag text: {name}")
         text = extract_text_from_pdf(pdf_bytes)
-
         if not text:
             raise ValueError("PDF scanat sau gol — nu s-a putut extrage text")
-
         add_log(f"Analizez cu AI: {name}")
         result = analyze_with_gemini(text, name)
         interventii = result.get("interventii", [])
         for iv in interventii:
             iv["_source"] = name
             iv["_file_id"] = file_id
-
         with state_lock:
             state["files"][file_id]["status"] = "done"
             state["files"][file_id]["interventii"] = interventii
             state["interventii"] = [
                 iv for iv in state["interventii"] if iv.get("_file_id") != file_id
             ] + interventii
-
         add_log(f"✓ {name}: {len(interventii)} intervenții extrase")
-
     except Exception as e:
         with state_lock:
             state["files"][file_id]["status"] = "error"
@@ -176,28 +160,23 @@ def scan_folder():
     if not folder_id:
         add_log("DRIVE_FOLDER_ID nu e setat")
         return
-
-    add_log("Scanez folderul Drive...")
+    add_log("Scanez folderul Drive (inclusiv subdosare)...")
     try:
         files = list_pdf_files(folder_id)
-        add_log(f"{len(files)} PDF-uri găsite")
-
+        add_log(f"{len(files)} PDF-uri găsite în total")
         with state_lock:
             known_ids = set(state["files"].keys())
-
         new_files = [f for f in files if f["id"] not in known_ids]
         if new_files:
-            add_log(f"{len(new_files)} fișiere noi detectate")
+            add_log(f"{len(new_files)} fișiere noi de analizat")
             for f in new_files:
                 t = threading.Thread(target=process_file, args=(f,))
                 t.daemon = True
                 t.start()
         else:
             add_log("Nicio factură nouă.")
-
         with state_lock:
             state["last_scan"] = datetime.now().isoformat()
-
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
 
@@ -214,13 +193,9 @@ def monitor_loop():
 def build_excel():
     with state_lock:
         interventii = list(state["interventii"])
-
     wb = openpyxl.Workbook()
-
-    # --- Sheet 1: Clasament ---
     ws1 = wb.active
-    ws1.title = "Clasament proprietăți"
-
+    ws1.title = "Clasament proprietati"
     prop_map = defaultdict(lambda: {"count": 0, "total": 0.0, "client": ""})
     for iv in interventii:
         k = iv.get("proprietate") or "Necunoscut"
@@ -228,10 +203,8 @@ def build_excel():
         prop_map[k]["total"] += float(iv.get("suma") or 0)
         if iv.get("client"):
             prop_map[k]["client"] = iv["client"]
-
     props = sorted(prop_map.items(), key=lambda x: x[1]["count"], reverse=True)
     max_count = props[0][1]["count"] if props else 1
-
     header_fill = PatternFill("solid", fgColor="1F2937")
     header_font = Font(bold=True, color="FFFFFF", size=11)
     thin = Border(
@@ -240,20 +213,18 @@ def build_excel():
         top=Side(style="thin", color="D1D5DB"),
         bottom=Side(style="thin", color="D1D5DB")
     )
-
-    headers1 = ["Rang", "Proprietate", "Client", "Intervenții", "Venit total (€)", "Performanță"]
+    headers1 = ["Rang", "Proprietate", "Client", "Interventii", "Venit total (EUR)", "Performanta"]
     ws1.append(headers1)
-    for col, h in enumerate(headers1, 1):
+    for col in range(1, 7):
         cell = ws1.cell(1, col)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin
-
     for i, (name, data) in enumerate(props, 1):
-        perf = "Performant" if data["count"] >= max_count * 0.7 else "Mediu" if data["count"] >= max_count * 0.4 else "Rar"
-        row = [i, name, data["client"], data["count"], round(data["total"], 2), perf]
-        ws1.append(row)
+        perf = ("Performant" if data["count"] >= max_count * 0.7
+                else "Mediu" if data["count"] >= max_count * 0.4 else "Rar")
+        ws1.append([i, name, data["client"], data["count"], round(data["total"], 2), perf])
         for col in range(1, 7):
             cell = ws1.cell(i + 1, col)
             cell.border = thin
@@ -262,55 +233,33 @@ def build_excel():
                 cell.fill = PatternFill("solid", fgColor="D1FAE5")
             elif perf == "Rar":
                 cell.fill = PatternFill("solid", fgColor="FEE2E2")
-
-    ws1.column_dimensions["A"].width = 6
-    ws1.column_dimensions["B"].width = 30
-    ws1.column_dimensions["C"].width = 20
-    ws1.column_dimensions["D"].width = 14
-    ws1.column_dimensions["E"].width = 18
-    ws1.column_dimensions["F"].width = 14
-
-    # --- Sheet 2: Detalii ---
-    ws2 = wb.create_sheet("Detalii intervenții")
-    headers2 = ["Proprietate", "Client", "Data", "Tip serviciu", "Sumă (€)", "Monedă", "Sursă factură"]
+    for col, w in zip("ABCDEF", [6, 30, 20, 14, 18, 14]):
+        ws1.column_dimensions[col].width = w
+    ws2 = wb.create_sheet("Detalii interventii")
+    headers2 = ["Proprietate", "Client", "Data", "Tip serviciu", "Suma (EUR)", "Moneda", "Sursa factura"]
     ws2.append(headers2)
-    for col, h in enumerate(headers2, 1):
+    for col in range(1, 8):
         cell = ws2.cell(1, col)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin
-
     for iv in interventii:
-        row = [
-            iv.get("proprietate", ""),
-            iv.get("client", ""),
-            iv.get("data", ""),
-            iv.get("tip_serviciu", ""),
-            round(float(iv.get("suma") or 0), 2),
-            iv.get("moneda", "EUR"),
-            iv.get("_source", "")
-        ]
-        ws2.append(row)
-        r = ws2.max_row
+        ws2.append([
+            iv.get("proprietate", ""), iv.get("client", ""), iv.get("data", ""),
+            iv.get("tip_serviciu", ""), round(float(iv.get("suma") or 0), 2),
+            iv.get("moneda", "EUR"), iv.get("_source", "")
+        ])
         for col in range(1, 8):
-            ws2.cell(r, col).border = thin
-
-    ws2.column_dimensions["A"].width = 28
-    ws2.column_dimensions["B"].width = 20
-    ws2.column_dimensions["C"].width = 12
-    ws2.column_dimensions["D"].width = 28
-    ws2.column_dimensions["E"].width = 12
-    ws2.column_dimensions["F"].width = 10
-    ws2.column_dimensions["G"].width = 28
-
+            ws2.cell(ws2.max_row, col).border = thin
+    for col, w in zip("ABCDEFG", [28, 20, 12, 28, 12, 10, 28]):
+        ws2.column_dimensions[col].width = w
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
     return buf
 
 
-# --- Routes ---
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -319,9 +268,14 @@ def index():
 @app.route("/api/state")
 def api_state():
     with state_lock:
+        prop_map = defaultdict(lambda: {"count": 0, "total": 0.0})
+        for iv in state["interventii"]:
+            k = iv.get("proprietate") or "Necunoscut"
+            prop_map[k]["count"] += 1
+            prop_map[k]["total"] += float(iv.get("suma") or 0)
+        max_c = max((v["count"] for v in prop_map.values()), default=1)
         s = {
             "files": list(state["files"].values()),
-            "total_interventii": len(state["interventii"]),
             "last_scan": state["last_scan"],
             "monitoring": state["monitoring"],
             "log": state["log"][-50:],
@@ -331,24 +285,18 @@ def api_state():
                 "interventii": len(state["interventii"]),
                 "revenue": round(sum(float(iv.get("suma") or 0) for iv in state["interventii"]), 2)
             },
-            "props": []
+            "props": sorted([
+                {
+                    "name": k,
+                    "count": v["count"],
+                    "total": round(v["total"], 2),
+                    "perf": ("Performant" if v["count"] >= max_c * 0.7
+                             else "Mediu" if v["count"] >= max_c * 0.4 else "Rar"),
+                    "pct": round(v["count"] / max_c * 100)
+                }
+                for k, v in prop_map.items()
+            ], key=lambda x: x["count"], reverse=True)
         }
-        prop_map = defaultdict(lambda: {"count": 0, "total": 0.0})
-        for iv in state["interventii"]:
-            k = iv.get("proprietate") or "Necunoscut"
-            prop_map[k]["count"] += 1
-            prop_map[k]["total"] += float(iv.get("suma") or 0)
-        max_c = max((v["count"] for v in prop_map.values()), default=1)
-        s["props"] = sorted([
-            {
-                "name": k,
-                "count": v["count"],
-                "total": round(v["total"], 2),
-                "perf": "Performant" if v["count"] >= max_c * 0.7 else "Mediu" if v["count"] >= max_c * 0.4 else "Rar",
-                "pct": round(v["count"] / max_c * 100)
-            }
-            for k, v in prop_map.items()
-        ], key=lambda x: x["count"], reverse=True)
     return jsonify(s)
 
 
@@ -365,7 +313,7 @@ def api_monitor():
     data = request.json or {}
     with state_lock:
         state["monitoring"] = data.get("active", False)
-    add_log("Monitorizare " + ("activată" if state["monitoring"] else "oprită"))
+    add_log("Monitorizare " + ("activata" if state["monitoring"] else "oprita"))
     return jsonify({"monitoring": state["monitoring"]})
 
 
@@ -397,7 +345,7 @@ if __name__ == "__main__":
     monitor_thread = threading.Thread(target=monitor_loop)
     monitor_thread.daemon = True
     monitor_thread.start()
-    add_log("Aplicație pornită.")
+    add_log("Aplicatie pornita.")
     if FOLDER_ID:
         scan_folder()
     port = int(os.environ.get("PORT", 5000))
