@@ -119,7 +119,7 @@ Returnează DOAR un obiect JSON valid (fără markdown, fără backtick-uri):
 
 Dacă nu găsești date clare, deduce din context. Returnează lista goală dacă nu e o factură de curățenie."""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as resp:
