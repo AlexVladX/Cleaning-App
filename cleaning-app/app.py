@@ -169,10 +169,11 @@ def scan_folder():
         new_files = [f for f in files if f["id"] not in known_ids]
         if new_files:
             add_log(f"{len(new_files)} fișiere noi de analizat")
-            for f in new_files:
-                t = threading.Thread(target=process_file, args=(f,))
-                t.daemon = True
-                t.start()
+        for f in new_files:
+            t = threading.Thread(target=process_file, args=(f,))
+            t.daemon = True
+            t.start()
+            time.sleep(5)
         else:
             add_log("Nicio factură nouă.")
         with state_lock:
