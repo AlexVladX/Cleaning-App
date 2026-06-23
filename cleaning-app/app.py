@@ -174,22 +174,16 @@ def process_file(file_info):
         add_log(f"✗ Eroare la {name}: {e}")
 
 
-def worker_loop():
-    """Procesează fișierele unul câte unul cu pauză între ele."""
-    add_log("Worker pornit si asteapta fisiere...")
-    while True:
-        try:
-            file_info = file_queue.get(timeout=2)
-            add_log(f"Worker preluat din coada: {file_info.get('name')}")
-            process_file(file_info)
-            file_queue.task_done()
-            add_log("Pauza 15s inainte de urmatoarea factura...")
+def process_queue_background(new_files):
+    """Procesează lista de fișiere unul câte unul în background."""
+    add_log(f"Background: incep procesarea a {len(new_files)} fisiere...")
+    for i, f in enumerate(new_files):
+        add_log(f"[{i+1}/{len(new_files)}] Procesez: {f['name']}")
+        process_file(f)
+        if i < len(new_files) - 1:
+            add_log("Pauza 15s...")
             time.sleep(15)
-        except queue.Empty:
-            continue
-        except Exception as e:
-            import traceback
-            add_log(f"Eroare CRITICA worker: {e} | {traceback.format_exc()[-200:]}")
+    add_log("Toate fisierele procesate!")
 
 
 def scan_folder():
@@ -197,7 +191,7 @@ def scan_folder():
     if not folder_id:
         add_log("DRIVE_FOLDER_ID nu e setat")
         return
-    add_log("Scanez folderul Drive (inclusiv subdosare)...")
+    add_log("Scanez folderul Drive...")
     try:
         files = list_pdf_files(folder_id)
         add_log(f"{len(files)} PDF-uri gasite in total")
@@ -205,20 +199,24 @@ def scan_folder():
             known_ids = set(state["files"].keys())
         new_files = [f for f in files if f["id"] not in known_ids]
         if new_files:
-            add_log(f"{len(new_files)} fisiere noi adaugate in coada")
+            add_log(f"{len(new_files)} fisiere noi - pornesc procesarea in background")
             for f in new_files:
                 with state_lock:
                     state["files"][f["id"]] = {
                         "id": f["id"], "name": f["name"],
                         "status": "new", "interventii": [], "error": None
                     }
-                file_queue.put(f)
+            t = threading.Thread(target=process_queue_background, args=(new_files,))
+            t.daemon = True
+            t.start()
+            add_log(f"Thread background pornit (id={t.ident})")
         else:
             add_log("Nicio factura noua.")
         with state_lock:
             state["last_scan"] = datetime.now().isoformat()
     except Exception as e:
-        add_log(f"Eroare scanare: {e}")
+        import traceback
+        add_log(f"Eroare scanare: {e} | {traceback.format_exc()[-300:]}")
 
 
 def monitor_loop():
@@ -405,10 +403,7 @@ if __name__ == "__main__":
     monitor_thread = threading.Thread(target=monitor_loop)
     monitor_thread.daemon = True
     monitor_thread.start()
-    worker_thread = threading.Thread(target=worker_loop)
-    worker_thread.daemon = True
-    worker_thread.start()
-    add_log("Aplicatie pornita. Worker activ — procesare seriala cu pauza 15s.")
+    add_log("Aplicatie pornita. Procesare seriala cu pauza 15s intre facturi.")
     if FOLDER_ID:
         scan_folder()
     port = int(os.environ.get("PORT", 5000))
