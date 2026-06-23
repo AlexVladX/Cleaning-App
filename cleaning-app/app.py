@@ -119,7 +119,7 @@ def analyze_with_gemini(text, filename):
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1000
+        "max_tokens": 250
     }).encode()
     req = urllib.request.Request(
         url, data=body,
