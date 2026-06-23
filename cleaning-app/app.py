@@ -97,24 +97,42 @@ def extract_text_from_pdf(pdf_bytes):
 
 
 def analyze_with_gemini(text, filename):
-    prompt = (
-        "Tu es comptable pour une entreprise de nettoyage en Corse. "
-        "Analyse cette facture et extrait toutes les lignes de la section Detail des prestations.\n\n"
-        "FICHIER: " + filename + "\n"
-        "CONTENU:\n" + text[:5000] + "\n\n"
-        "REGLES:\n"
-        "1. Le client est dans Facture pour\n"
-        "2. Chaque ligne du tableau Detail des prestations est une prestation separee\n"
-        "3. Colonnes: Nom (propriete), Type, Date de nettoyage, Qty/heures, Prix unitaire, Prix total\n"
-        "4. Si prix unitaire < 40 EUR: type_facturation=heure, qty=nombre heures\n"
-        "   Si prix unitaire >= 40 EUR: type_facturation=forfait, qty=1\n"
-        "5. Convertis la date MM/DD/YYYY en DD/MM/YYYY\n\n"
-        "Retourne UNIQUEMENT un JSON valide sans markdown:\n"
-        "{\"interventii\": [{\"proprietate\": \"nom propriete\", \"client\": \"nom client\", "
-        "\"data\": \"DD/MM/YYYY\", \"tip_serviciu\": \"type prestation\", "
-        "\"type_facturation\": \"heure ou forfait\", \"qty\": 1.0, "
-        "\"pret_unitar\": 26.0, \"suma\": 130.0, \"moneda\": \"EUR\"}]}"
-    )
+    start = text.lower().find("détail des prestations".lower())
+    prompt ( f"""
+            Analizează factura de curățenie și extrage fiecare linie din tabelul "Détail des prestations".
+
+            Reguli:
+            - Fiecare linie din tabel = o intervenție.
+            - Proprietate = numele proprietății.
+            - Client = numele clientului.
+            - Data = DD/MM/YYYY.
+            - Tip serviciu = textul prestației.
+            - Dacă prețul unitar < 40 EUR => tip_facturare="heure" și qty=numărul de ore.
+            - Dacă prețul unitar >= 40 EUR => tip_facturare="forfait" și qty=1.
+            - pret_unitar = prețul unitar.
+            - suma = totalul liniei.
+            - moneda = EUR.
+            Răspunde DOAR cu JSON valid, fără explicații și fără markdown.
+
+            {
+              "interventii": [
+                {
+                  "proprietate": "",
+                  "client": "",
+                  "data": "DD/MM/YYYY",
+                  "tip_serviciu": "",
+                  "tip_facturare": "heure",
+                  "qty": 0,
+                  "pret_unitar": 0,
+                  "suma": 0,
+                  "moneda": "EUR"
+                }
+              ]
+            }
+            Textul facturii:
+            {text}
+            """
+           )
     url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
