@@ -213,9 +213,12 @@ function exportExcel() {
 }
 
 async function resetAll() {
-  if (!confirm('Ștergi toate datele analizate?')) return;
-  await fetch('/api/reset', {method:'POST'});
-  fetchState();
+  try {
+    await fetch('/api/reset', {method:'POST'});
+    fetchState();
+  } catch(e) {
+    console.error('Reset error:', e);
+  }
 }
 
 fetchState();
