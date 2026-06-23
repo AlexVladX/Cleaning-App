@@ -407,3 +407,20 @@ if __name__ == "__main__":
         scan_folder()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+
+@app.route("/api/test-groq")
+def test_groq():
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/models",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY.strip()}"
+        }
+    )
+
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.read().decode(), e.code
