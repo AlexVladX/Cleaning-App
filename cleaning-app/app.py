@@ -378,7 +378,7 @@ def api_export():
 @app.route("/api/test")
 def api_test():
     return jsonify({
-        "openrouter_key": bool(OPENROUTER_API_KEY),
+        "groq_key": bool(GROQ_API_KEY),
         "folder_id": bool(FOLDER_ID),
         "queue_size": file_queue.qsize(),
         "files_count": len(state["files"]),
