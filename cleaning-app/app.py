@@ -187,6 +187,7 @@ def scan_folder():
                 t = threading.Thread(target=process_file, args=(f,))
                 t.daemon = True
                 t.start()
+                time.sleep(20)
         else:
             add_log("Nicio factură nouă.")
         with state_lock:
