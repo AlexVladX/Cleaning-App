@@ -129,12 +129,12 @@ def analyze_with_gemini(text, filename):
         }
     )
     try:
-    with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
         data = json.loads(resp.read())
-except urllib.error.HTTPError as e:
+    except urllib.error.HTTPError as e:
     error_body = e.read().decode("utf-8")
     add_log(f"GROQ HTTP {e.code}: {error_body}")
-    raise
+        raise
     raw = data["choices"][0]["message"]["content"].strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     start = raw.find("{")
