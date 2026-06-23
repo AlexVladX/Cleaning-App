@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizator Facturi Curățenie</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F9FAFB;color:#111827;font-size:14px}
+  .topbar{background:#111827;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+  .topbar h1{font-size:16px;font-weight:500;letter-spacing:.01em}
+  .topbar-right{display:flex;align-items:center;gap:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#6B7280}
+  .dot.live{background:#10B981;animation:pulse 2s infinite}
+  .dot.err{background:#EF4444}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .status-txt{font-size:12px;color:#9CA3AF}
+  .main{max-width:1100px;margin:0 auto;padding:24px 16px}
+  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .metric{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px}
+  .metric-label{font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .metric-value{font-size:26px;font-weight:600;color:#111827}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+  .card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px}
+  .card-title{font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#111827;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+  .btn:hover{background:#F3F4F6}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-dark{background:#111827;color:#fff;border-color:#111827}
+  .btn-dark:hover{background:#1F2937}
+  .btn-green{background:#059669;color:#fff;border-color:#059669}
+  .btn-green:hover{background:#047857}
+  .btn-red{background:#DC2626;color:#fff;border-color:#DC2626}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .file-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+  .file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#F9FAFB;border-left:3px solid #E5E7EB}
+  .file-item.processing{border-left-color:#F59E0B}
+  .file-item.done{border-left-color:#3B82F6}
+  .file-item.error{border-left-color:#EF4444}
+  .file-item.new{border-left-color:#10B981}
+  .file-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;font-weight:500}
+  .badge-new{background:#D1FAE5;color:#065F46}
+  .badge-proc{background:#FEF3C7;color:#92400E}
+  .badge-done{background:#DBEAFE;color:#1E40AF}
+  .badge-err{background:#FEE2E2;color:#991B1B}
+  .prop-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+  .prop-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#F9FAFB;border-radius:8px}
+  .prop-rank{font-size:12px;color:#9CA3AF;width:20px}
+  .prop-name{flex:1;font-weight:500;font-size:13px}
+  .prop-bar-wrap{width:80px}
+  .prop-bar-bg{height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden}
+  .prop-bar-fill{height:100%;border-radius:3px;background:#111827}
+  .prop-count{font-size:12px;color:#6B7280;min-width:30px;text-align:right}
+  .perf{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500}
+  .ph{background:#D1FAE5;color:#065F46}.pm{background:#FEF3C7;color:#92400E}.pl{background:#FEE2E2;color:#991B1B}
+  .log{font-size:11px;font-family:monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:120px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB}
+  .empty{text-align:center;padding:2rem;color:#9CA3AF;font-size:13px}
+  .last-scan{font-size:11px;color:#9CA3AF;margin-top:6px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>&#x1F9F9; Analizator Facturi Curățenie</h1>
+  <div class="topbar-right">
+    <div class="dot" id="dot"></div>
+    <span class="status-txt" id="status-txt">Se încarcă...</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="controls">
+    <button class="btn btn-dark" id="btn-scan" onclick="scan()">&#x1F504; Scanare manuală</button>
+    <button class="btn btn-green" id="btn-monitor-start" onclick="startMonitor()">&#x25B6; Start monitorizare</button>
+    <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
+    <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
+    <button class="btn" onclick="resetAll()" style="margin-left:auto">&#x1F5D1; Reset</button>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric"><div class="metric-label">Fișiere detectate</div><div class="metric-value" id="m-files">—</div></div>
+    <div class="metric"><div class="metric-label">Analizate</div><div class="metric-value" id="m-analyzed">—</div></div>
+    <div class="metric"><div class="metric-label">Intervenții totale</div><div class="metric-value" id="m-total">—</div></div>
+    <div class="metric"><div class="metric-label">Venit total</div><div class="metric-value" id="m-revenue">—</div></div>
+  </div>
+
+  <div class="grid2">
+
+    <div class="card">
+      <div class="card-title">Fișiere din Drive</div>
+      <div class="file-list" id="file-list">
+        <div class="empty">Niciun fișier detectat încă</div>
+      </div>
+      <div class="last-scan" id="last-scan"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Clasament proprietăți</div>
+      <div class="prop-list" id="prop-list">
+        <div class="empty">Datele vor apărea după analiză</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="card">
+    <div class="card-title">Jurnal sistem</div>
+    <div class="log" id="log-box">Aștept date...</div>
+  </div>
+
+</div>
+
+<script>
+let monitoring = false;
+
+async function fetchState() {
+  try {
+    const r = await fetch('/api/state');
+    const s = await r.json();
+    renderState(s);
+  } catch(e) {
+    document.getElementById('status-txt').textContent = 'Eroare conexiune server';
+  }
+}
+
+function renderState(s) {
+  // Status dot
+  const dot = document.getElementById('dot');
+  const stxt = document.getElementById('status-txt');
+  if (s.monitoring) {
+    dot.className = 'dot live';
+    stxt.textContent = 'Monitorizare activă';
+  } else {
+    dot.className = 'dot';
+    stxt.textContent = 'Monitorizare oprită';
+  }
+  monitoring = s.monitoring;
+  document.getElementById('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
+  document.getElementById('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
+
+  // Metrics
+  const m = s.metrics || {};
+  document.getElementById('m-files').textContent = m.files ?? '—';
+  document.getElementById('m-analyzed').textContent = m.analyzed ?? '—';
+  document.getElementById('m-total').textContent = m.interventii ?? '—';
+  document.getElementById('m-revenue').textContent = m.revenue != null ? m.revenue.toLocaleString('ro-RO') + '€' : '—';
+
+  // Files
+  const fl = document.getElementById('file-list');
+  if (!s.files || !s.files.length) {
+    fl.innerHTML = '<div class="empty">Niciun fișier detectat</div>';
+  } else {
+    fl.innerHTML = s.files.slice().reverse().map(f => {
+      const cls = f.status;
+      const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>'
+        : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
+        : cls === 'done' ? `<span class="badge badge-done">${f.interventii?.length ?? 0} intervenții</span>`
+        : `<span class="badge badge-err">Eroare</span>`;
+      return `<div class="file-item ${cls}"><span class="file-name" title="${f.name}">${f.name}</span>${badge}</div>`;
+    }).join('');
+  }
+
+  if (s.last_scan) {
+    document.getElementById('last-scan').textContent = 'Ultima scanare: ' + new Date(s.last_scan).toLocaleTimeString('ro-RO');
+  }
+
+  // Props
+  const pl = document.getElementById('prop-list');
+  if (!s.props || !s.props.length) {
+    pl.innerHTML = '<div class="empty">Datele vor apărea după analiză</div>';
+  } else {
+    pl.innerHTML = s.props.map((p, i) => `
+      <div class="prop-row">
+        <span class="prop-rank">${i+1}</span>
+        <span class="prop-name">${p.name}</span>
+        <div class="prop-bar-wrap"><div class="prop-bar-bg"><div class="prop-bar-fill" style="width:${p.pct}%"></div></div></div>
+        <span class="prop-count">${p.count}x</span>
+        <span class="perf ${p.perf==='Performant'?'ph':p.perf==='Mediu'?'pm':'pl'}">${p.perf}</span>
+      </div>`).join('');
+  }
+
+  // Log
+  const lb = document.getElementById('log-box');
+  if (s.log && s.log.length) {
+    lb.innerHTML = s.log.slice(-50).join('<br>');
+    lb.scrollTop = lb.scrollHeight;
+  }
+}
+
+async function scan() {
+  await fetch('/api/scan', {method:'POST'});
+}
+
+async function startMonitor() {
+  await fetch('/api/monitor', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({active:true})});
+  fetchState();
+}
+
+async function stopMonitor() {
+  await fetch('/api/monitor', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({active:false})});
+  fetchState();
+}
+
+function exportExcel() {
+  window.location.href = '/api/export';
+}
+
+async function resetAll() {
+  if (!confirm('Ștergi toate datele analizate?')) return;
+  await fetch('/api/reset', {method:'POST'});
+  fetchState();
+}
+
+fetchState();
+setInterval(fetchState, 5000);
+</script>
+</body>
+</html>
