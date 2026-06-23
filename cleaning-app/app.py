@@ -98,7 +98,11 @@ def extract_text_from_pdf(pdf_bytes):
 
 def analyze_with_gemini(text, filename):
     start = text.lower().find("détail des prestations".lower())
-    prompt ( f"""
+
+    if start != -1:
+        text = text[start:]
+        
+    prompt = f"""
             Analizează factura de curățenie și extrage fiecare linie din tabelul "Détail des prestations".
 
             Reguli:
@@ -146,7 +150,6 @@ def analyze_with_gemini(text, filename):
             "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
             "User-Agent": "Cleaning-App/1.0"
         }
-    )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
