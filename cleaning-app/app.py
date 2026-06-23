@@ -136,7 +136,6 @@ def analyze_with_gemini(text, filename):
             Textul facturii:
             {text}
             """
-           )
     url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
