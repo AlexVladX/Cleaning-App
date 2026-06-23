@@ -55,12 +55,22 @@ def get_drive_service():
 
 def list_pdf_files(folder_id):
     service = get_drive_service()
-    results = service.files().list(
-        q=f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
-        fields="files(id, name, modifiedTime, size)",
-        pageSize=100
-    ).execute()
-    return results.get("files", [])
+    all_files = []
+
+    def search_folder(fid):
+        results = service.files().list(
+            q=f"'{fid}' in parents and trashed=false",
+            fields="files(id, name, mimeType, modifiedTime, size)",
+            pageSize=100
+        ).execute()
+        for f in results.get("files", []):
+            if f["mimeType"] == "application/pdf":
+                all_files.append(f)
+            elif f["mimeType"] == "application/vnd.google-apps.folder":
+                search_folder(f["id"])
+
+    search_folder(folder_id)
+    return all_files
 
 
 def download_pdf(file_id):
