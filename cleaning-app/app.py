@@ -4,6 +4,7 @@ import io
 import threading
 import time
 import urllib.request
+import queue
 from datetime import datetime
 from flask import Flask, render_template, jsonify, send_file, request
 from google.oauth2 import service_account
@@ -29,6 +30,7 @@ state = {
     "log": []
 }
 state_lock = threading.Lock()
+file_queue = queue.Queue()
 
 
 def add_log(msg):
@@ -135,8 +137,6 @@ def analyze_with_gemini(text, filename):
     return json.loads(raw[start:end])
 
 
-import queue
-file_queue = queue.Queue()
 
 
 def process_file(file_info):
