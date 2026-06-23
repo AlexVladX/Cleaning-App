@@ -95,15 +95,29 @@ def extract_text_from_pdf(pdf_bytes):
 
 def analyze_with_gemini(text, filename):
     prompt = (
-        "Ești contabil pentru o firmă de curățenie din Corsica. "
-        "Analizează această factură și extrage toate intervențiile de curățenie.\n\n"
-        f"FIȘIER: {filename}\n"
-        f"CONȚINUT:\n{text[:4000]}\n\n"
-        "Returnează DOAR un obiect JSON valid (fără markdown, fără backtick-uri):\n"
-        '{"interventii": [{"proprietate": "...", "adresa": "...", "data": "DD/MM/YYYY", '
-        '"tip_serviciu": "...", "suma": 0.00, "moneda": "EUR", "client": "..."}]}\n\n'
-        "Dacă nu găsești date clare, deduce din context. "
-        "Returnează lista goală dacă nu e o factură de curățenie."
+        "Tu es comptable pour une entreprise de nettoyage en Corse. "
+        "Analyse cette facture et extrait toutes les lignes de la section Detail des prestations.\n\n"
+        "FICHIER: " + filename + "\n"
+        "CONTENU:\n" + text[:5000] + "\n\n"
+        "REGLES:\n"
+        "1. Le client est dans Facture pour\n"
+        "2. Chaque ligne du tableau Detail des prestations est une prestation separee\n"
+        "3. Colonnes: Nom (propriete), Type, Date de nettoyage, Qty/heures, Prix unitaire, Prix total\n"
+        "4. Si prix unitaire < 40 EUR: type_facturation=heure, qty=nombre heures\n"
+        "   Si prix unitaire >= 40 EUR: type_facturation=forfait, qty=1\n"
+        "5. Convertis la date MM/DD/YYYY en DD/MM/YYYY\n\n"
+        "Retourne UNIQUEMENT un JSON valide sans markdown:\n"
+        "{\"interventii\": [{"
+        "\"proprietate\": \"nom propriete\"\n"
+        "\"client\": \"nom client\"\n"
+        "\"data\": \"DD/MM/YYYY\"\n"
+        "\"tip_serviciu\": \"type prestation\"\n"
+        "\"type_facturation\": \"heure ou forfait\"\n"
+        "\"qty\": 1.0\n"
+        "\"pret_unitar\": 26.0\n"
+        "\"suma\": 130.0\n"
+        "\"moneda\": \"EUR\"\n"
+        "}]}"
     )
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -169,11 +183,10 @@ def scan_folder():
         new_files = [f for f in files if f["id"] not in known_ids]
         if new_files:
             add_log(f"{len(new_files)} fișiere noi de analizat")
-        for f in new_files:
-            t = threading.Thread(target=process_file, args=(f,))
-            t.daemon = True
-            t.start()
-            time.sleep(20)
+            for f in new_files:
+                t = threading.Thread(target=process_file, args=(f,))
+                t.daemon = True
+                t.start()
         else:
             add_log("Nicio factură nouă.")
         with state_lock:
@@ -269,12 +282,19 @@ def index():
 @app.route("/api/state")
 def api_state():
     with state_lock:
-        prop_map = defaultdict(lambda: {"count": 0, "total": 0.0})
+        prop_map = defaultdict(lambda: {"forfait": 0, "ore": 0.0, "total": 0.0, "client": ""})
         for iv in state["interventii"]:
             k = iv.get("proprietate") or "Necunoscut"
-            prop_map[k]["count"] += 1
+            if iv.get("type_facturation") == "heure":
+                prop_map[k]["ore"] += float(iv.get("qty") or 0)
+            else:
+                prop_map[k]["forfait"] += 1
             prop_map[k]["total"] += float(iv.get("suma") or 0)
-        max_c = max((v["count"] for v in prop_map.values()), default=1)
+            if iv.get("client"):
+                prop_map[k]["client"] = iv["client"]
+        max_c = max((v["forfait"] for v in prop_map.values()), default=1)
+        if max_c == 0:
+            max_c = 1
         s = {
             "files": list(state["files"].values()),
             "last_scan": state["last_scan"],
@@ -289,14 +309,16 @@ def api_state():
             "props": sorted([
                 {
                     "name": k,
-                    "count": v["count"],
+                    "forfait": v["forfait"],
+                    "ore": round(v["ore"], 1),
                     "total": round(v["total"], 2),
-                    "perf": ("Performant" if v["count"] >= max_c * 0.7
-                             else "Mediu" if v["count"] >= max_c * 0.4 else "Rar"),
-                    "pct": round(v["count"] / max_c * 100)
+                    "client": v["client"],
+                    "perf": ("Performant" if v["forfait"] >= max_c * 0.7
+                             else "Mediu" if v["forfait"] >= max_c * 0.4 else "Rar"),
+                    "pct": round(v["forfait"] / max_c * 100)
                 }
                 for k, v in prop_map.items()
-            ], key=lambda x: x["count"], reverse=True)
+            ], key=lambda x: x["forfait"], reverse=True)
         }
     return jsonify(s)
 
