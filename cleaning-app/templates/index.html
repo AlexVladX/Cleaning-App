@@ -48,7 +48,7 @@
   .prop-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
   .prop-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#F9FAFB;border-radius:8px}
   .prop-rank{font-size:12px;color:#9CA3AF;width:20px}
-  .prop-name{flex:1;font-weight:500;font-size:13px}
+  .prop-info{flex:1;display:flex;flex-direction:column;gap:2px}.prop-name{font-weight:500;font-size:13px}.prop-client{font-size:11px;color:#6B7280}.prop-stat{font-size:12px;color:#374151;min-width:52px;text-align:right}.prop-total{font-weight:500}
   .prop-bar-wrap{width:80px}
   .prop-bar-bg{height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden}
   .prop-bar-fill{height:100%;border-radius:3px;background:#111827}
@@ -175,9 +175,13 @@ function renderState(s) {
     pl.innerHTML = s.props.map((p, i) => `
       <div class="prop-row">
         <span class="prop-rank">${i+1}</span>
-        <span class="prop-name">${p.name}</span>
-        <div class="prop-bar-wrap"><div class="prop-bar-bg"><div class="prop-bar-fill" style="width:${p.pct}%"></div></div></div>
-        <span class="prop-count">${p.count}x</span>
+        <div class="prop-info">
+          <span class="prop-name">${p.name}</span>
+          <span class="prop-client">${p.client || ''}</span>
+        </div>
+        <span class="prop-stat" title="Interventii forfait">&#x1F3E0; ${p.forfait}x</span>
+        <span class="prop-stat" title="Ore la ora">${p.ore > 0 ? '&#x23F1; ' + p.ore + 'h' : ''}</span>
+        <span class="prop-stat prop-total">${p.total.toLocaleString('fr-FR')}€</span>
         <span class="perf ${p.perf==='Performant'?'ph':p.perf==='Mediu'?'pm':'pl'}">${p.perf}</span>
       </div>`).join('');
   }
