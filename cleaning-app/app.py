@@ -97,50 +97,32 @@ def extract_text_from_pdf(pdf_bytes):
 
 
 def analyze_with_gemini(text, filename):
-    start = text.lower().find("détail des prestations".lower())
+    start_idx = text.lower().find("détail des prestations")
+    if start_idx != -1:
+        text = text[start_idx:]
 
-    if start != -1:
-        text = text[start:]
-        
-    prompt = f"""
-            Analizează factura de curățenie și extrage fiecare linie din tabelul "Détail des prestations".
+    json_example = '{"interventii": [{"proprietate": "Villa Marina", "client": "SASU ARCONCIERGERIE", "data": "28/04/2026", "tip_serviciu": "Ouverture", "tip_facturare": "forfait", "qty": 1, "pret_unitar": 130.0, "suma": 130.0, "moneda": "EUR"}]}'
 
-            Reguli:
-            - Fiecare linie din tabel = o intervenție.
-            - Proprietate = numele proprietății.
-            - Client = numele clientului.
-            - Data = DD/MM/YYYY.
-            - Tip serviciu = textul prestației.
-            - Dacă prețul unitar < 40 EUR => tip_facturare="heure" și qty=numărul de ore.
-            - Dacă prețul unitar >= 40 EUR => tip_facturare="forfait" și qty=1.
-            - pret_unitar = prețul unitar.
-            - suma = totalul liniei.
-            - moneda = EUR.
-            Răspunde DOAR cu JSON valid, fără explicații și fără markdown.
+    prompt = (
+        "Analizează factura de curățenie și extrage fiecare linie din tabelul Détail des prestations.\n\n"
+        "Reguli:\n"
+        "- Fiecare linie din tabel = o intervenție separată\n"
+        "- Proprietate = coloana Nom\n"
+        "- Client = numele din Facture pour\n"
+        "- Data = coloana Date de nettoyage, format DD/MM/YYYY\n"
+        "- Tip serviciu = coloana Type\n"
+        "- Daca pret unitar < 40 EUR => tip_facturare=heure si qty=numarul de ore\n"
+        "- Daca pret unitar >= 40 EUR => tip_facturare=forfait si qty=1\n\n"
+        "Raspunde DOAR cu JSON valid, fara explicatii, fara markdown.\n"
+        "Exemplu format: " + json_example + "\n\n"
+        "Textul facturii:\n" + text[:4000]
+    )
 
-            {
-              "interventii": [
-                {
-                  "proprietate": "",
-                  "client": "",
-                  "data": "DD/MM/YYYY",
-                  "tip_serviciu": "",
-                  "tip_facturare": "heure",
-                  "qty": 0,
-                  "pret_unitar": 0,
-                  "suma": 0,
-                  "moneda": "EUR"
-                }
-              ]
-            }
-            Textul facturii:
-            {text}
-            """
     url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 250
+        "max_tokens": 1000
     }).encode()
     req = urllib.request.Request(
         url, data=body,
@@ -155,18 +137,15 @@ def analyze_with_gemini(text, filename):
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            body = e.read().decode("utf-8", errors="ignore")
-            add_log("Rate limit. Aștept 20 secunde și reîncerc...")
+            add_log("Rate limit. Astept 20 secunde si reincerc...")
             time.sleep(20)
             return analyze_with_gemini(text, filename)
-            
         raise
     raw = data["choices"][0]["message"]["content"].strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    return json.loads(raw[start:end])
-
+    s = raw.find("{")
+    e = raw.rfind("}") + 1
+    return json.loads(raw[s:e])
 
 
 
