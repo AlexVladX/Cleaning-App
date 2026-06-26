@@ -105,14 +105,18 @@ def analyze_with_gemini(text, filename):
 
     prompt = (
         "Analizează factura de curățenie și extrage fiecare linie din tabelul Détail des prestations.\n\n"
-        "Reguli:\n"
-        "- Fiecare linie din tabel = o intervenție separată\n"
-        "- Proprietate = coloana Nom\n"
-        "- Client = numele din Facture pour\n"
-        "- Data = coloana Date de nettoyage, format DD/MM/YYYY\n"
-        "- Tip serviciu = coloana Type\n"
-        "- Daca pret unitar < 40 EUR => tip_facturare=heure si qty=numarul de ore\n"
-        "- Daca pret unitar >= 40 EUR => tip_facturare=forfait si qty=1\n\n"
+        "Reguli OBLIGATORII:\n"
+        "1. Fiecare linie din tabel = o intervenție separată\n"
+        "2. Proprietate = coloana Nom - IMPORTANT:\n"
+        "   - Dacă numele proprietății este pe 2 rânduri (ex: VILLA pe un rând și CHADOURNE pe rândul următor), reunește-le într-un singur nume: 'Villa Chadourne'\n"
+        "   - Normalizează MEREU numele: prima literă mare, restul mici. Ex: 'VILLA MARINA' => 'Villa Marina', 'villa marina' => 'Villa Marina'\n"
+        "   - Corijează greșeli minore de scriere: 'Gls' și 'Glas' sunt același loc, 'Antiontti' și 'ANTIONTTI' sunt același loc\n"
+        "   - Folosește cel mai complet și corect nume găsit în document\n"
+        "3. Client = numele din 'Facture pour' din antetul facturii\n"
+        "4. Data = coloana Date de nettoyage, format DD/MM/YYYY\n"
+        "5. Tip serviciu = coloana Type\n"
+        "6. Daca pret unitar < 40 EUR => tip_facturare=heure si qty=numarul de ore\n"
+        "7. Daca pret unitar >= 40 EUR => tip_facturare=forfait si qty=1\n\n"
         "Raspunde DOAR cu JSON valid, fara explicatii, fara markdown.\n"
         "Exemplu format: " + json_example + "\n\n"
         "Textul facturii:\n" + text[:4000]
@@ -145,7 +149,16 @@ def analyze_with_gemini(text, filename):
     raw = raw.replace("```json", "").replace("```", "").strip()
     s = raw.find("{")
     e = raw.rfind("}") + 1
-    return json.loads(raw[s:e])
+    result = json.loads(raw[s:e])
+    
+    # Normalizare suplimentară în Python: Title Case pentru toate proprietățile
+    for iv in result.get("interventii", []):
+        if iv.get("proprietate"):
+            iv["proprietate"] = " ".join(
+                w.capitalize() for w in iv["proprietate"].strip().split()
+            )
+    
+    return result
 
 
 
