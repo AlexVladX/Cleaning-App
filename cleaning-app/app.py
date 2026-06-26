@@ -90,43 +90,46 @@ def extract_text_from_pdf(pdf_bytes):
     text = ""
     with pdfplumber.open(pdf_bytes) as pdf:
         for page in pdf.pages:
-            t = page.extract_text()
-            if t:
-                text += t + "\n"
+            tables = page.extract_tables()
+            if tables:
+                for table in tables:
+                    for row in table:
+                        if row:
+                            clean = [str(c).strip() if c else "" for c in row]
+                            text += " | ".join(clean) + "\n"
+            else:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
     return text.strip()
 
 
 def analyze_with_gemini(text, filename):
-    start_idx = text.lower().find("détail des prestations")
-    if start_idx != -1:
-        text = text[start_idx:]
-
-    json_example = '{"interventii": [{"proprietate": "Villa Marina", "client": "SASU ARCONCIERGERIE", "data": "28/04/2026", "tip_serviciu": "Ouverture", "tip_facturare": "forfait", "qty": 1, "pret_unitar": 130.0, "suma": 130.0, "moneda": "EUR"}]}'
+    json_example = '[{"proprietate":"Antoniotti","client":"Conciergerie La Clef Dor","data":"03/04/2026","tip_serviciu":"Standard","tip_facturare":"forfait","qty":1,"pret_unitar":117.0,"suma":117.0,"moneda":"EUR"}]'
 
     prompt = (
-        "Analizează factura de curățenie și extrage fiecare linie din tabelul Détail des prestations.\n\n"
-        "Reguli OBLIGATORII:\n"
-        "1. Fiecare linie din tabel = o intervenție separată\n"
-        "2. Proprietate = coloana Nom - IMPORTANT:\n"
-        "   - Dacă numele proprietății este pe 2 rânduri (ex: VILLA pe un rând și CHADOURNE pe rândul următor), reunește-le într-un singur nume: 'Villa Chadourne'\n"
-        "   - Normalizează MEREU numele: prima literă mare, restul mici. Ex: 'VILLA MARINA' => 'Villa Marina', 'villa marina' => 'Villa Marina'\n"
-        "   - Corijează greșeli minore de scriere: 'Gls' și 'Glas' sunt același loc, 'Antiontti' și 'ANTIONTTI' sunt același loc\n"
-        "   - Folosește cel mai complet și corect nume găsit în document\n"
-        "3. Client = numele din 'Facture pour' din antetul facturii\n"
-        "4. Data = coloana Date de nettoyage, format DD/MM/YYYY\n"
-        "5. Tip serviciu = coloana Type\n"
-        "6. Daca pret unitar < 40 EUR => tip_facturare=heure si qty=numarul de ore\n"
-        "7. Daca pret unitar >= 40 EUR => tip_facturare=forfait si qty=1\n\n"
-        "Raspunde DOAR cu JSON valid, fara explicatii, fara markdown.\n"
-        "Exemplu format: " + json_example + "\n\n"
-        "Textul facturii:\n" + text[:4000]
+        "Esti contabil pentru o firma de curatenie. Analizeaza acest tabel extras dintr-o factura.\n\n"
+        "REGULI IMPORTANTE:\n"
+        "1. Tabelul are coloanele: Nom | Type | Date de nettoyage | Qty/heures | Prix unitaire | Prix total\n"
+        "2. O casa poate aparea O SINGURA DATA in tabel dar sa aiba MAI MULTE DATE de interventie.\n"
+        "   Exemplu: ANTONIOTTI cu datele 04/03, 04/18, 04/24 si qty=3 inseamna 3 interventii separate.\n"
+        "   Creaza cate o intrare JSON pentru FIECARE DATA in parte.\n"
+        "3. Imparte suma totala egal intre interventii. Ex: total 351 EUR / 3 interventii = 117 EUR fiecare.\n"
+        "4. Normalizeaza numele: Title Case. Ex: ANTONIOTTI => Antoniotti, FLAMENT => Flament\n"
+        "5. Client = valoarea din 'Facture pour' din antet\n"
+        "6. Data format: DD/MM/YYYY (converteste din MM/DD/YYYY daca e necesar)\n"
+        "7. Daca pret unitar < 40 EUR => tip_facturare=heure\n"
+        "   Daca pret unitar >= 40 EUR => tip_facturare=forfait\n\n"
+        "Raspunde DOAR cu array JSON valid, fara explicatii, fara markdown.\n"
+        "Format exemplu: " + json_example + "\n\n"
+        "Tabelul facturii:\n" + text[:5000]
     )
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1000
+        "max_tokens": 2000
     }).encode()
     req = urllib.request.Request(
         url, data=body,
@@ -147,18 +150,20 @@ def analyze_with_gemini(text, filename):
         raise
     raw = data["choices"][0]["message"]["content"].strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
-    s = raw.find("{")
-    e = raw.rfind("}") + 1
-    result = json.loads(raw[s:e])
-    
-    # Normalizare suplimentară în Python: Title Case pentru toate proprietățile
-    for iv in result.get("interventii", []):
+    s = raw.find("[")
+    e = raw.rfind("]") + 1
+    if s >= 0 and e > s:
+        interventii = json.loads(raw[s:e])
+    else:
+        s = raw.find("{")
+        e = raw.rfind("}") + 1
+        interventii = json.loads(raw[s:e]).get("interventii", [])
+    for iv in interventii:
         if iv.get("proprietate"):
             iv["proprietate"] = " ".join(
                 w.capitalize() for w in iv["proprietate"].strip().split()
             )
-    
-    return result
+    return {"interventii": interventii}
 
 
 
