@@ -109,22 +109,23 @@ def analyze_with_gemini(text, filename):
 
     prompt = (
         "Esti contabil pentru o firma de curatenie. Analizeaza acest tabel extras dintr-o factura.\n\n"
-        "REGULI IMPORTANTE:\n"
-        "1. Tabelul are coloanele: Nom | Type | Date de nettoyage | Qty/heures | Prix unitaire | Prix total\n"
-        "2. O casa poate aparea O SINGURA DATA in tabel dar sa aiba MAI MULTE DATE de interventie.\n"
-        "   Exemplu: ANTONIOTTI cu datele 04/03, 04/18, 04/24 si qty=3 inseamna 3 interventii separate.\n"
-        "   Creaza cate o intrare JSON pentru FIECARE DATA in parte.\n"
-        "3. Imparte suma totala egal intre interventii. Ex: total 351 EUR / 3 interventii = 117 EUR fiecare.\n"
-        "4. Normalizeaza numele: Title Case. Ex: ANTONIOTTI => Antoniotti, FLAMENT => Flament\n"
-        "5. Client = valoarea din 'Facture pour' din antet\n"
-        "6. Data format: DD/MM/YYYY (converteste din MM/DD/YYYY daca e necesar)\n"
+        "STRUCTURA FACTURII:\n"
+        "- In ANTET gasesti 'Facture pour' urmat de numele CLIENTULUI (firma de conciergerie sau persoana care plateste)\n"
+        "- In TABELUL 'Detail des prestations' gasesti coloanele: Nom | Type | Date de nettoyage | Qty/heures | Prix unitaire | Prix total\n"
+        "- Coloana 'Nom' = numele CASEI/PROPRIETATII (ex: ANTONIOTTI, FLAMENT, Villa Marina) - NU clientul!\n\n"
+        "REGULI:\n"
+        "1. proprietate = valoarea din coloana 'Nom' din tabel (casa, vila, apartamentul)\n"
+        "2. client = valoarea de dupa 'Facture pour' din antet (firma sau persoana care plateste)\n"
+        "3. O casa cu qty=3 si 3 date diferite = 3 interventii separate, cate una per data\n"
+        "4. Imparte suma totala egal: ex 351 EUR / 3 interventii = 117 EUR fiecare\n"
+        "5. Normalizeaza numele casei: Title Case. Ex: ANTONIOTTI => Antoniotti\n"
+        "6. Data format: DD/MM/YYYY (converteste din MM/DD/YYYY)\n"
         "7. Daca pret unitar < 40 EUR => tip_facturare=heure\n"
         "   Daca pret unitar >= 40 EUR => tip_facturare=forfait\n\n"
         "Raspunde DOAR cu array JSON valid, fara explicatii, fara markdown.\n"
         "Format exemplu: " + json_example + "\n\n"
         "Tabelul facturii:\n" + text[:5000]
     )
-
     url = "https://api.groq.com/openai/v1/chat/completions"
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
