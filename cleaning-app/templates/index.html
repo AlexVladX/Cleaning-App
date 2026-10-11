@@ -84,6 +84,24 @@
   .w-rank{width:44px;color:var(--faint)}
   .w-80{width:80px}.w-90{width:90px}.w-100{width:100px}.w-110{width:110px}.w-120{width:120px}.w-140{width:140px}.w-160{width:160px}
   .pname{font-weight:500;overflow-wrap:anywhere}
+  .x-btn{border:1px solid var(--line);background:none;color:var(--faint);cursor:pointer;font-size:11px;line-height:1;padding:3px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
+  .x-btn:hover{color:#DC2626;border-color:#FCA5A5}
+  .ex-list{margin-top:10px}
+  .ex-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+  .ex-item .txt{flex:1;min-width:0;overflow-wrap:anywhere}
+  .ex-item .num{white-space:nowrap}
+  .ovl{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:60}
+  .ovl.on{display:flex}
+  .dlg{background:#fff;border-radius:12px;max-width:440px;width:100%;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+  .dlg h3{font-size:16px;margin-bottom:6px;overflow-wrap:anywhere}
+  .dlg .facts{font-size:13px;color:var(--muted);margin-bottom:12px}
+  .dlg .warn{background:var(--bad-bg);color:var(--bad-ink);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+  .dlg .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .btn-red{background:#DC2626;color:#fff;border-color:#DC2626}.btn-red:hover{background:#B91C1C}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:10px;padding:10px 14px;font-size:13px;display:none;align-items:center;gap:14px;z-index:70;max-width:calc(100vw - 32px)}
+  .toast.on{display:flex}
+  .toast span{overflow-wrap:anywhere}
+  .toast button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;flex:none}
   .psub{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .palias{font-size:11px;color:var(--faint);overflow-wrap:anywhere;margin-top:1px}
   .ptypes{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
@@ -272,7 +290,12 @@
           <tbody id="prop-body"><tr><td colspan="8" class="empty">Datele vor apărea după analiză</td></tr></tbody>
         </table>
       </div>
-      <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile).</p>
+      <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile). Butonul ✕ scoate din listă un rând care nu e casă (ex. produse de curățenie facturate).</p>
+      <details class="fold" id="ex-box" style="margin-top:12px;display:none">
+        <summary><span class="card-title" id="ex-title">Scoase din listă</span></summary>
+        <div class="hint">Nu intră în venit, intervenții sau clasament. Rândurile cu cuvintele din <b>Reguli → Produse</b> se scot automat și din facturile viitoare.</div>
+        <div class="ex-list" id="ex-list"></div>
+      </details>
     </section>
 
     <!-- CLIENTI -->
@@ -376,6 +399,7 @@
       <div class="set-grid">
         <div><label for="s-clienti">Clienți facturați doar la oră</label><div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div><textarea id="s-clienti"></textarea></div>
         <div><label for="s-tipuri">Tipuri de menaj facturate la oră</label><div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div><textarea id="s-tipuri"></textarea></div>
+        <div><label for="s-produse">Produse (nu sunt menaje)</label><div class="hint">Câte un cuvânt pe rând. Rândurile din facturi care îl conțin în nume sau tip sunt scoase din listă (ex. „produit”, „savon”).</div><textarea id="s-produse"></textarea></div>
         <div><label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label><input id="s-prag" type="number" min="0" step="1">
           <div style="margin-top:10px"><button class="btn btn-dark" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div></div>
         <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
@@ -402,6 +426,16 @@
 </div>
 
 <div class="tip" id="tip" role="status"></div>
+<div class="ovl" id="ex-ovl" role="dialog" aria-modal="true" aria-labelledby="ex-dlg-title">
+  <div class="dlg">
+    <h3 id="ex-dlg-title"></h3>
+    <div class="facts" id="ex-dlg-facts"></div>
+    <div class="warn" id="ex-dlg-warn"></div>
+    <div class="hint" style="margin-bottom:14px">Rândul nu mai intră în venit, intervenții și clasament. Îl poți pune înapoi oricând din „Scoase din listă”, sub tabel.</div>
+    <div class="acts"><button class="btn" id="ex-dlg-cancel">Anulează</button><button class="btn btn-red" id="ex-dlg-ok">Scoate din listă</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"><span id="toast-txt"></span><button id="toast-undo">Anulează</button></div>
 
 <script>
 // ------------------------------------------------------------ utilitare
@@ -523,7 +557,7 @@ function renderAnalytics() {
   sel.value = cur; period = cur;
   const m = A.metrics, plabel = A.period.label;
   $('m-venit').textContent = eur(m.venit);
-  $('m-venit-sub').textContent = plabel;
+  $('m-venit-sub').textContent = plabel + (m.venit_excluse ? ` · fără ${eur(m.venit_excluse)} produse` : '');
   $('m-int').textContent = m.interventii.toLocaleString('fr-FR');
   $('m-int-sub').textContent = `în medie ${eur(m.medie)} / intervenție`;
   $('m-props').textContent = m.proprietati;
@@ -537,7 +571,7 @@ function renderAnalytics() {
   $('n-props').textContent = A.props.length || '';
   $('n-clients').textContent = A.clients.length || '';
   const np = $('n-prices'); np.textContent = m.abateri || ''; np.classList.toggle('alert', !!m.abateri);
-  renderProps(); renderClients(); renderMonthly(); renderCalendar(); renderPrices(); renderZones();
+  renderProps(); renderExcluded(); renderClients(); renderMonthly(); renderCalendar(); renderPrices(); renderZones();
 }
 
 // ---- proprietati
@@ -569,7 +603,7 @@ function renderProps() {
     const last = p.ultima ? `${fmtDate(p.ultima)}<span class="sub-num">${p.zile_de_la_ultima} zile${p.interval_tipic ? ` · de obicei la ${p.interval_tipic} z.` : ''}</span>` : '—';
     return `<tr>
       <td class="w-rank">${rank}</td>
-      <td><div class="pname">${esc(p.name)} ${p.inactiva ? '<span class="tag bad" title="Fără menaj de mult mai mult timp decât de obicei">inactivă</span>' : ''}</div>
+      <td><div class="pname">${esc(p.name)} ${p.inactiva ? '<span class="tag bad" title="Fără menaj de mult mai mult timp decât de obicei">inactivă</span>' : ''}<button class="x-btn" data-excl="${esc(p.key)}" data-name="${esc(p.name)}" title="Scoate din listă (nu e o casă, ex. produse)" aria-label="Scoate ${esc(p.name)} din listă">✕</button></div>
         <div class="psub" title="${esc(p.client || '')}">${esc(p.client || '')}</div>
         ${others.length ? `<div class="palias">apare și ca: ${others.map(esc).join(', ')}</div>` : ''}
         <div class="ptypes">${types}${p.ore > 0 ? `<span class="tt tt-alt">${num(p.ore)} h${p.pret_ora ? ' · ' + num(p.pret_ora) + ' €/h' : ''}</span>` : ''}</div></td>
@@ -582,6 +616,58 @@ function renderProps() {
     </tr>`;
   }).join('');
 }
+function renderExcluded() {
+  const ex = A.excluse || [], box = $('ex-box');
+  box.style.display = ex.length ? '' : 'none';
+  if (!ex.length) return;
+  const tot = ex.reduce((a, r) => a + r.total, 0);
+  $('ex-title').textContent = `Scoase din listă (${ex.length})` + (tot ? ` · ${eur(tot)} în perioadă` : '');
+  $('ex-list').innerHTML = ex.map(r => `<div class="ex-item"><span class="txt"><b>${esc(r.name)}</b>
+      ${r.in_sheet ? '<span class="tag bad" title="Numele apare în Sheet-ul cu coordonate">e în Sheet</span> ' : ''}<span class="hint">${r.manual ? 'scos manual' : 'produs (cuvânt din Reguli)'}${r.ultima ? ' · ultima ' + fmtDate(r.ultima) : ''}${r.clienti ? ' · ' + esc(r.clienti) : ''}${r.randuri ? ` · ${r.randuri} ${r.randuri === 1 ? 'rând' : 'rânduri'}` : ''}</span></span>
+      <span class="num">${r.total ? eur(r.total) : '—'}</span>
+      <button class="btn btn-sm" data-unexcl="${esc(r.key)}" data-name="${esc(r.name)}">Pune înapoi</button></div>`).join('');
+}
+async function setExcluded(key, name, undo) {
+  const j = await post('/api/exclude', {key, name, undo});
+  if (j) { lastDataKey = null; await fetchState(); fetchAnalytics(); loadSettings(); }
+  return j;
+}
+// confirmare inainte de a scoate un rand; avertisment clar daca pare o casa
+let exPending = null, toastTimer = null;
+function askExclude(key) {
+  const p = (A.props || []).find(x => x.key === key); if (!p) return;
+  exPending = p;
+  $('ex-dlg-title').textContent = `Scoți „${p.name}” din listă?`;
+  $('ex-dlg-facts').textContent = [p.client, `${p.interventii} ${p.interventii === 1 ? 'intervenție' : 'intervenții'}`, eur(p.total),
+    p.ultima ? 'ultima ' + fmtDate(p.ultima) : ''].filter(Boolean).join(' · ');
+  const why = [];
+  if (p.in_sheet) why.push('apare în Sheet-ul cu coordonatele caselor');
+  if (p.interventii >= 3) why.push(`are ${p.interventii} intervenții`);
+  if (Object.keys(p.tipuri || {}).some(t => TL[t])) why.push('are menaje Standard / Ouverture / Intermédiaire');
+  const w = $('ex-dlg-warn');
+  w.style.display = why.length ? '' : 'none';
+  w.textContent = why.length ? `Atenție, pare o casă: ${why.join(', ')}.` : '';
+  $('ex-dlg-ok').textContent = why.length ? 'Scoate oricum' : 'Scoate din listă';
+  $('ex-ovl').classList.add('on');
+  $('ex-dlg-cancel').focus();     // implicit: Anulează (Enter nu scoate din greseala)
+}
+function closeExDialog() { $('ex-ovl').classList.remove('on'); exPending = null; }
+$('ex-dlg-cancel').addEventListener('click', closeExDialog);
+$('ex-ovl').addEventListener('click', e => { if (e.target === $('ex-ovl')) closeExDialog(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('ex-ovl').classList.contains('on')) closeExDialog(); });
+$('ex-dlg-ok').addEventListener('click', async () => {
+  const p = exPending; closeExDialog(); if (!p) return;
+  if (await setExcluded(p.key, p.name, false)) showToast(`„${p.name}” a fost scos din listă`, () => setExcluded(p.key, p.name, true));
+});
+function showToast(text, undo) {
+  $('toast-txt').textContent = text;
+  $('toast-undo').onclick = () => { hideToast(); undo(); };
+  $('toast').classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 12000);
+}
+function hideToast() { $('toast').classList.remove('on'); }
+$('prop-body').addEventListener('click', e => { const b = e.target.closest('[data-excl]'); if (b) askExclude(b.dataset.excl); });
+$('ex-list').addEventListener('click', e => { const b = e.target.closest('[data-unexcl]'); if (b) setExcluded(b.dataset.unexcl, b.dataset.name, true); });
 function setSort(k) { if (SORTS[k]) { sortBy = k; store.set('sortBy2', k); renderProps(); } }
 $('sort-bar').addEventListener('click', e => { const b = e.target.closest('button[data-sort]'); if (b) setSort(b.dataset.sort); });
 document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
@@ -897,6 +983,7 @@ async function loadSettings(data) {
   const ta = $('s-clienti'); if (document.activeElement !== ta) ta.value = (s.clienti_la_ora || []).join('\n');
   const tt = $('s-tipuri'); if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
   const pr = $('s-prag'); if (document.activeElement !== pr) pr.value = s.prag_forfait;
+  const sp = $('s-produse'); if (document.activeElement !== sp) sp.value = (s.cuvinte_produse || []).join('\n');
   const opts = (s.proprietati || []).map(p => `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
   const din = $('m-din'), inn = $('m-in'), keep = [din.value, inn.value];
   din.innerHTML = '<option value="">Proprietatea…</option>' + opts; inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
@@ -917,7 +1004,7 @@ async function saveGeo(force) {
   if (j) { loadSettings(j); $('g-saved').textContent = '✓ Salvat · calculez distanțele (urmărește jurnalul)…'; setTimeout(() => { $('g-saved').textContent = ''; loadSettings(); }, 6000); }
 }
 async function saveSettings() {
-  const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, prag_forfait: $('s-prag').value});
+  const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, cuvinte_produse: $('s-produse').value, prag_forfait: $('s-prag').value});
   if (j) { loadSettings(j); lastDataKey = null; fetchState(); fetchAnalytics(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
 }
 async function mergeProps() {
