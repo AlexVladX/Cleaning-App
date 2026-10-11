@@ -84,6 +84,27 @@
   .w-rank{width:44px;color:var(--faint)}
   .w-80{width:80px}.w-90{width:90px}.w-100{width:100px}.w-110{width:110px}.w-120{width:120px}.w-140{width:140px}.w-160{width:160px}
   .pname{font-weight:500;overflow-wrap:anywhere}
+  .pm{border-collapse:separate;border-spacing:4px;font-size:13px;min-width:100%}
+  .pm th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:6px 8px;text-align:center;white-space:nowrap}
+  .pm th.c,.pm td.c{text-align:left}
+  .pm td{padding:0}
+  .pm td.c{padding:8px 10px 8px 0;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+  .pm td.r{text-align:right;font-weight:600;padding-left:8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .pcell{display:block;width:100%;min-width:84px;box-sizing:border-box;border-radius:8px;padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;line-height:1.25;color:inherit}
+  .pcell .s{display:block;font-size:10px;font-weight:500;opacity:.85}
+  .pcell.ok{background:#BBF7D0;color:#14532D}.pcell.part{background:#FDE68A;color:#78350F}
+  .pcell.late{background:#FECACA;color:#7F1D1D}.pcell.wait{background:#fff;color:var(--ink);border-color:#D1D5DB}
+  .pcell.none{background:transparent;color:#D1D5DB;cursor:default;font-weight:400}
+  .pcell.sel{box-shadow:0 0 0 2px var(--ink)}
+  .pm tr.tot td{font-size:12px;color:var(--muted);text-align:center;padding-top:6px;font-variant-numeric:tabular-nums}
+  .pdet{border:1px solid var(--ink);border-radius:10px;padding:12px 14px;margin:2px 0 8px;background:#fff;white-space:normal;position:sticky;left:0;box-sizing:border-box}
+  .pm td.c{position:sticky;left:0;background:var(--card);z-index:1}
+  @media(max-width:760px){.pm td.c{max-width:120px;white-space:normal;font-size:12px}}
+  .pinv{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line-2);font-size:13px}
+  .pill{border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pill.ok{background:#BBF7D0;color:#14532D}.pill.part{background:#FDE68A;color:#78350F}.pill.late{background:#FECACA;color:#7F1D1D}.pill.wait{background:var(--line-2);color:var(--ink-2);font-weight:500}
+  .leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center;margin:10px 0}
+  .leg i{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-right:5px;box-sizing:border-box}
   .grp-prev{font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
   .grp-prev div{margin-top:3px}
   .x-btn{border:1px solid var(--line);background:none;color:var(--faint);cursor:pointer;font-size:11px;line-height:1;padding:3px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
@@ -260,6 +281,7 @@
       <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
       <button class="tab" role="tab" data-tab="calendar">Calendar</button>
       <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
+      <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
       <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
       <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
     </nav>
@@ -342,6 +364,22 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- INCASARI -->
+    <section class="panel" id="panel-incasari" role="tabpanel">
+      <div class="toolbar" style="margin-top:14px;justify-content:space-between">
+        <div class="headline" id="inc-head" style="margin:0"></div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">An <select id="inc-an" style="width:auto"></select></label>
+      </div>
+      <div class="leg"><span><i style="background:#BBF7D0"></i>încasat</span><span><i style="background:#FDE68A"></i>plată parțială</span><span><i style="background:#FECACA"></i>restant</span><span><i style="background:#fff;border:1px solid #D1D5DB"></i>neîncasat, încă nescadent</span><span class="hint">Click pe o căsuță → facturile din luna aceea</span></div>
+      <div style="overflow-x:auto" id="inc-wrap"><table class="pm" id="inc-table"></table></div>
+      <details class="fold" style="margin-top:12px">
+        <summary><span class="card-title">Pornire rapidă</span></summary>
+        <div class="hint" style="margin:6px 0 8px">La început toate facturile vechi apar neîncasate. Dacă până la o anumită lună totul e plătit, le marchezi dintr-o dată și corectezi apoi doar excepțiile (căsuță cu căsuță).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span>Marchează încasate toate facturile până la</span><select id="inc-pana" style="width:auto"></select><span>inclusiv</span><button class="btn btn-dark btn-sm" id="inc-pana-btn">Marchează</button></div>
+      </details>
+      <p class="hint" style="margin-top:8px">Căsuța = facturile clientului pentru luna lucrărilor (luna menajelor de pe factură). Scadența se citește din factură; dacă lipsește, se consideră 30 de zile de la emitere. Clienții grupați apar pe un singur rând. Facturile duplicate sau cu eroare nu apar.</p>
     </section>
 
     <!-- ZONE -->
@@ -505,6 +543,7 @@ async function fetchAnalytics() {
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json();
     lastDataKey = key;
     renderAnalytics();
+    if (!P || payKey !== key) fetchPayments();
   } finally { anLoading = false; }
 }
 
@@ -664,7 +703,8 @@ $('ex-dlg-ok').addEventListener('click', async () => {
 });
 function showToast(text, undo) {
   $('toast-txt').textContent = text;
-  $('toast-undo').onclick = () => { hideToast(); undo(); };
+  $('toast-undo').style.display = undo ? '' : 'none';
+  $('toast-undo').onclick = () => { hideToast(); if (undo) undo(); };
   $('toast').classList.add('on');
   clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 12000);
 }
@@ -957,6 +997,127 @@ document.addEventListener('click', e => {
   else if (all) markFiles(lastShownFiles.map(f => f.id), false);
 });
 
+// ------------------------------------------------------------ incasari (matrice client x luna)
+let P = null, payYear = store.get('payYear', ''), payOpen = null, payPartial = null, payKey = null;
+async function fetchPayments() {
+  try {
+    P = await (await fetch('/api/incasari' + (payYear ? '?an=' + encodeURIComponent(payYear) : ''))).json();
+    payKey = S ? S.data_key : null;
+    renderPayments();
+  } catch (e) { console.error(e); }
+}
+const STARE_TXT = {ok: 'încasată', part: 'parțial', late: 'restantă', wait: 'nescadentă'};
+function payCellHtml(c, ci, m) {
+  const cell = c.celule[m.key];
+  if (!cell) return '<td><span class="pcell none">—</span></td>';
+  let sub = '';
+  if (cell.stare === 'part') sub = `din ${eur(cell.total)}`;
+  else if (cell.stare === 'late') sub = `${cell.zile} ${cell.zile === 1 ? 'zi' : 'zile'}`;
+  else if (cell.stare === 'wait') sub = cell.scadenta ? 'scad. ' + cell.scadenta.slice(8, 10) + '.' + cell.scadenta.slice(5, 7) : '';
+  const val = cell.stare === 'part' ? cell.incasat : cell.total;
+  const sel = payOpen && payOpen.c === c.client && payOpen.m === m.key ? ' sel' : '';
+  return `<td><button type="button" class="pcell ${cell.stare}${sel}" data-pc="${ci}" data-pm="${esc(m.key)}" aria-label="${esc(c.client)}, ${esc(m.label)}: ${eur(cell.total)}, ${STARE_TXT[cell.stare]}">${eur(val)}${sub ? `<span class="s">${sub}</span>` : ''}</button></td>`;
+}
+function payDetailHtml(c, mkey, cols) {
+  const cell = c.celule[mkey]; if (!cell) return '';
+  const mlab = new Date(mkey + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
+  const open = cell.facturi.filter(f => f.rest > 0.01);
+  const rows = cell.facturi.map(f => {
+    let pill;
+    if (f.stare === 'ok') pill = `<span class="pill ok">încasată${f.data_incasare ? ' ' + fmtDate(f.data_incasare) : ''}</span>`;
+    else if (f.stare === 'part') pill = `<span class="pill part">primit ${eur2(f.incasat)} · rest ${eur2(f.rest)}${f.zile_intarziere ? ` · ${f.zile_intarziere} zile întârziere` : ''}</span>`;
+    else if (f.stare === 'late') pill = `<span class="pill late">restantă ${f.zile_intarziere} ${f.zile_intarziere === 1 ? 'zi' : 'zile'}</span>`;
+    else pill = `<span class="pill wait">scadentă ${fmtDate(f.scadenta)}</span>`;
+    const partialOpen = payPartial === f.id;
+    const acts = f.rest > 0.01
+      ? (partialOpen
+        ? `<label class="hint" style="display:flex;gap:6px;align-items:center">Primit în total <input id="pay-sum" type="text" inputmode="decimal" value="${f.incasat || ''}" placeholder="0" style="width:80px"> din ${eur2(f.total)}</label>
+           <button class="btn btn-sm btn-dark" data-paysave="${esc(f.id)}">Salvează</button><button class="btn btn-sm" data-paycancel="1">Renunță</button>`
+        : `<button class="btn btn-sm" data-payfull="${esc(f.id)}">✓ Încasată</button><button class="btn btn-sm" data-paypart="${esc(f.id)}">Parțial…</button>`)
+        + (f.incasat > 0 ? `<button class="link-btn" data-payundo="${esc(f.id)}">anulează plata</button>` : '')
+      : `<button class="link-btn" data-payundo="${esc(f.id)}">anulează</button>`;
+    return `<div class="pinv"><span style="min-width:96px"><b>${esc(f.numar || '—')}</b>${c.grup ? `<div class="hint">${esc(f.client_factura)}</div>` : ''}</span>
+      <span class="hint" style="min-width:150px">emisă ${fmtDate(f.emisa)} · scadentă ${fmtDate(f.scadenta)}</span>
+      <span class="num" style="min-width:70px;text-align:right;font-weight:600">${eur2(f.total)}</span>${pill}<span style="flex-grow:1"></span>${acts}</div>`;
+  }).join('');
+  return `<tr class="pdrow"><td colspan="${cols}"><div class="pdet">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+      <div><b>${esc(c.client)} · ${esc(mlab)}</b> <span class="hint">· ${cell.facturi.length} ${cell.facturi.length === 1 ? 'factură' : 'facturi'} · ${eur2(cell.total)}${cell.rest > 0.01 ? ` · rest ${eur2(cell.rest)}` : ''}</span></div>
+      ${open.length > 1 || (open.length === 1 && cell.facturi.length > 1) ? `<button class="btn btn-sm btn-dark" data-paymonth="1">✓ Toată luna încasată</button>` : ''}
+    </div>${rows}
+    <div class="hint" style="margin-top:6px">Data încasării se pune automat azi. „Parțial…” = scrii cât ai primit până acum; căsuța devine galbenă și rămâne restul.</div>
+  </div></td></tr>`;
+}
+function renderPayments() {
+  if (!P) return;
+  const sm = P.sumar, nb = $('n-inc');
+  nb.textContent = sm.restant > 0 ? eur(sm.restant) : ''; nb.classList.toggle('alert', sm.restant > 0);
+  $('inc-head').innerHTML = sm.de_incasat > 0
+    ? `Ai de încasat <b>${eur(sm.de_incasat)}</b>` + (sm.restant > 0 ? `, din care <b style="color:var(--bad-ink)">${eur(sm.restant)} restanți</b> (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură trecută' : 'facturi trecute'} de scadență).` : ', nimic restant.')
+    : (P.clienti.length ? 'Toate facturile sunt încasate.' : 'Nicio factură citită încă.');
+  const sel = $('inc-an');
+  sel.innerHTML = P.ani.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  sel.value = P.an;
+  const pn = $('inc-pana'), keepP = pn.value;
+  pn.innerHTML = P.luni.slice().reverse().map(m => `<option value="${esc(m.key)}">${esc(new Date(m.key + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'}))}</option>`).join('');
+  if (keepP && P.luni.some(m => m.key === keepP)) pn.value = keepP;
+  const cols = P.luni.length + 2;
+  if (!P.clienti.length) { $('inc-table').innerHTML = '<tbody><tr><td class="empty">Nicio factură în anul ales</td></tr></tbody>'; return; }
+  let html = `<thead><tr><th class="c">Client</th>${P.luni.map(m => `<th>${esc(m.label)}</th>`).join('')}<th style="text-align:right">De încasat</th></tr></thead><tbody>`;
+  P.clienti.forEach((c, ci) => {
+    html += `<tr><td class="c" title="${esc(c.client)}"><b>${esc(c.client)}</b>${c.grup ? ' <span class="tag info">grup</span>' : ''}</td>${P.luni.map(m => payCellHtml(c, ci, m)).join('')}
+      <td class="r" style="${c.restant > 0 ? 'color:var(--bad-ink)' : ''}">${c.de_incasat > 0 ? eur(c.de_incasat) : '—'}</td></tr>`;
+    if (payOpen && payOpen.c === c.client) html += payDetailHtml(c, payOpen.m, cols);
+  });
+  html += `<tr class="tot"><td class="c">Încasat / facturat</td>${P.totaluri.map(t => `<td title="${eur(t.incasat)} din ${eur(t.facturat)}">${t.procent}%</td>`).join('')}<td class="r" style="color:var(--ink)">${eur(sm.de_incasat_an)}</td></tr></tbody>`;
+  $('inc-table').innerHTML = html;
+  fitPayDetail();
+  const ps = $('pay-sum'); if (ps) ps.focus({preventScroll: true});
+}
+function fitPayDetail() {   // detaliile raman in zona vizibila, si pe telefon (tabelul se deruleaza lateral)
+  const d = document.querySelector('#inc-table .pdet'); if (d) d.style.width = ($('inc-wrap').clientWidth - 8) + 'px';
+}
+addEventListener('resize', fitPayDetail);
+async function payPost(body, undoText) {
+  const j = await post('/api/incasari', body);
+  if (!j) return;
+  payPartial = null;
+  await fetchPayments();
+  if (undoText && !body.undo) showToast(undoText, async () => { await post('/api/incasari', {ids: body.ids, undo: true}); fetchPayments(); });
+}
+function payCurrentCell() {
+  if (!P || !payOpen) return null;
+  const c = P.clienti.find(x => x.client === payOpen.c); return c ? c.celule[payOpen.m] : null;
+}
+$('inc-table').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.pc !== undefined) {
+    const c = P.clienti[+t.dataset.pc], m = t.dataset.pm;
+    payOpen = payOpen && payOpen.c === c.client && payOpen.m === m ? null : {c: c.client, m};
+    payPartial = null; renderPayments(); return;
+  }
+  if (t.dataset.payfull) { const f = (payCurrentCell().facturi || []).find(x => x.id === t.dataset.payfull); payPost({ids: [t.dataset.payfull]}, `${f ? f.numar : 'Factura'} marcată încasată`); return; }
+  if (t.dataset.paypart) { payPartial = t.dataset.paypart; renderPayments(); return; }
+  if (t.dataset.paycancel) { payPartial = null; renderPayments(); return; }
+  if (t.dataset.paysave) { payPost({ids: [t.dataset.paysave], suma: $('pay-sum').value}); return; }
+  if (t.dataset.payundo) { payPost({ids: [t.dataset.payundo], undo: true}); return; }
+  if (t.dataset.paymonth) {
+    const cell = payCurrentCell(); if (!cell) return;
+    const ids = cell.facturi.filter(f => f.rest > 0.01).map(f => f.id);
+    if (ids.length) payPost({ids}, `${ids.length} ${ids.length === 1 ? 'factură marcată' : 'facturi marcate'} încasate`);
+  }
+});
+$('inc-table').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'pay-sum') { const b = document.querySelector('[data-paysave]'); if (b) b.click(); } });
+$('inc-pana-btn').addEventListener('click', async () => {
+  const m = $('inc-pana').value; if (!m) return;
+  const j = await post('/api/incasari', {pana_la: m});
+  if (!j) return;
+  await fetchPayments();
+  if (j.ids && j.ids.length) showToast(`${j.ids.length} facturi marcate încasate`, async () => { await post('/api/incasari', {ids: j.ids, undo: true}); fetchPayments(); });
+  else showToast('Nimic de marcat: totul era deja încasat', null);
+});
+$('inc-an').addEventListener('change', e => { payYear = e.target.value; store.set('payYear', payYear); payOpen = null; fetchPayments(); });
+
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
   tab = t; store.set('tab', t);
@@ -965,6 +1126,7 @@ function showTab(t) {
   if (t === 'evolutie' && A) drawMonthlyCharts();
   if (t === 'calendar' && A) drawCalendar();
   if (t === 'zone' && A) drawZoneChart();
+  if (t === 'incasari') fetchPayments();
 }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
