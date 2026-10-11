@@ -146,6 +146,16 @@ function renderState(s) {
     dot.className = 'dot';
     stxt.textContent = 'Monitorizare oprită';
   }
+  const sc = s.scan || {};
+  if (sc.active) {
+    dot.className = 'dot live';
+    if (sc.phase === 'listare' || !sc.total) {
+      stxt.textContent = 'Scanare: citesc lista din Drive...';
+    } else {
+      const eta = sc.eta == null ? '' : sc.eta >= 60 ? ` · ~${Math.ceil(sc.eta/60)} min rămase` : ` · ~${sc.eta}s rămase`;
+      stxt.textContent = `Scanare ${sc.done}/${sc.total}${eta}`;
+    }
+  }
   monitoring = s.monitoring;
   document.getElementById('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
   document.getElementById('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';

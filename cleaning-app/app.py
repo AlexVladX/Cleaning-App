@@ -13,6 +13,8 @@ from flask import Flask, render_template, jsonify, send_file, request, Response
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+import google_auth_httplib2
+import httplib2
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
@@ -43,6 +45,7 @@ state = {
     "last_scan": None,
     "monitoring": False,
     "log": [],
+    "scan": {"active": False, "phase": None, "done": 0, "total": 0, "eta": None},
 }
 state_lock = threading.Lock()
 scan_lock = threading.Lock()
@@ -69,14 +72,28 @@ def require_password():
 
 
 # ---------------------------------------------------------------- Google Drive
+_drive_local = threading.local()
+
+
 def get_drive_service():
+    """
+    Conexiunea la Drive se creeaza o singura data per fir de executie si se refoloseste.
+    (Inainte se reconecta pentru FIECARE factura — foarte lent pe serverele gratuite.)
+    Timeout de 60s ca o cerere blocata sa nu tina scanarea "in curs" la nesfarsit.
+    """
+    svc = getattr(_drive_local, "service", None)
+    if svc is not None:
+        return svc
     if not GOOGLE_CREDENTIALS_JSON:
         raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
     creds = service_account.Credentials.from_service_account_info(
         json.loads(GOOGLE_CREDENTIALS_JSON),
         scopes=["https://www.googleapis.com/auth/drive.readonly"],
     )
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+    http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=60))
+    svc = build("drive", "v3", http=http, cache_discovery=False)
+    _drive_local.service = svc
+    return svc
 
 
 def list_pdf_files(folder_id):
@@ -290,12 +307,20 @@ def process_file(file_info):
 
 
 def process_queue_background(new_files):
-    add_log(f"Procesez {len(new_files)} fisiere...")
+    n = len(new_files)
+    t0 = time.time()
+    add_log(f"Procesez {n} fisiere...")
     for i, f in enumerate(new_files):
         used_ai = process_file(f)
-        if used_ai and i < len(new_files) - 1:
+        elapsed = time.time() - t0
+        with state_lock:
+            state["scan"].update({"done": i + 1, "total": n,
+                                  "eta": round(elapsed / (i + 1) * (n - i - 1))})
+        if (i + 1) % 10 == 0 and i + 1 < n:
+            add_log(f"Progres: {i + 1}/{n} · {elapsed / (i + 1):.1f}s per factura")
+        if used_ai and i < n - 1:
             time.sleep(3)  # menajam limita gratuita a AI-ului
-    add_log("Toate fisierele procesate.")
+    add_log(f"Toate fisierele procesate in {time.time() - t0:.0f}s.")
 
 
 def scan_folder():
@@ -305,9 +330,13 @@ def scan_folder():
     if not scan_lock.acquire(blocking=False):
         add_log("Scanare deja in curs.")
         return
+    with state_lock:
+        state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0, "eta": None}
     try:
         add_log("Scanez folderul Drive...")
         files = list_pdf_files(FOLDER_ID)
+        with state_lock:
+            state["scan"]["phase"] = "procesare"
         add_log(f"{len(files)} PDF-uri gasite in total")
         with state_lock:
             known = {fid: f for fid, f in state["files"].items()}
@@ -332,7 +361,10 @@ def scan_folder():
             add_log("Nicio factura noua.")
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
+        _drive_local.service = None  # la urmatoarea scanare ne reconectam de la zero
     finally:
+        with state_lock:
+            state["scan"]["active"] = False
         scan_lock.release()
 
 
@@ -483,6 +515,7 @@ def api_state():
             "last_scan": state["last_scan"],
             "monitoring": state["monitoring"],
             "log": state["log"][-50:],
+            "scan": dict(state["scan"]),
         }
     s["metrics"] = {
         "files": len(files),
@@ -563,6 +596,7 @@ def api_reset():
     with state_lock:
         state.update({"files": {}, "interventii": [], "last_scan": None,
                       "monitoring": False, "log": []})
+        state["scan"].update({"done": 0, "total": 0, "eta": None})
     add_log("Reset complet.")
     return jsonify({"ok": True})
 
