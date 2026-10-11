@@ -3,6 +3,7 @@ import re
 import json
 import io
 import hmac
+import socket
 import threading
 import time
 import urllib.request
@@ -105,8 +106,75 @@ def require_password():
                     {"WWW-Authenticate": 'Basic realm="Facturi"'})
 
 
+# ---------------------------------------------------------------- retea
+# Pe unele servere (ex. Render gratuit) conexiunile IPv6 spre Google nu raspund si
+# raman agatate in loc sa esueze rapid. Folosim doar IPv4 (Google are IPv4 peste tot).
+_orig_getaddrinfo = socket.getaddrinfo
+FORCE_IPV4 = os.environ.get("FORCE_IPV4", "1") == "1"
+
+
+def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+    res = _orig_getaddrinfo(host, port, family, type, proto, flags)
+    v4 = [r for r in res if r[0] == socket.AF_INET]
+    return v4 or res
+
+
+if FORCE_IPV4:
+    socket.getaddrinfo = _getaddrinfo_ipv4
+
+
+def _run_with_timeout(fn, seconds, what):
+    """Ruleaza fn() cu limita stricta de timp (si pentru DNS, unde timeout-ul socket nu ajuta)."""
+    box = {}
+
+    def target():
+        try:
+            box["ok"] = fn()
+        except Exception as e:  # noqa: BLE001
+            box["err"] = e
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+    t.join(seconds)
+    if t.is_alive():
+        raise TimeoutError(f"{what}: niciun raspuns in {seconds}s")
+    if "err" in box:
+        raise box["err"]
+    return box.get("ok")
+
+
+def net_check(host="oauth2.googleapis.com", port=443):
+    """Test de retea: DNS + conexiune TCP pe fiecare adresa (IPv4 si IPv6)."""
+    parts = []
+    t = time.time()
+    try:
+        addrs = _run_with_timeout(lambda: _orig_getaddrinfo(host, port, 0, socket.SOCK_STREAM), 10, "DNS")
+    except Exception as e:  # noqa: BLE001
+        return f"{host}: DNS esuat ({e})"
+    parts.append(f"DNS {(time.time() - t) * 1000:.0f}ms")
+    seen = []
+    for fam, _, _, _, sa in addrs:
+        if sa[0] in seen or len(seen) >= 4:
+            continue
+        seen.append(sa[0])
+        kind = "IPv6" if fam == socket.AF_INET6 else "IPv4"
+        s = None
+        t = time.time()
+        try:
+            s = socket.socket(fam, socket.SOCK_STREAM)  # poate esua daca serverul nu are IPv6 deloc
+            s.settimeout(4)
+            s.connect(sa)
+            parts.append(f"{kind} ok {(time.time() - t) * 1000:.0f}ms")
+        except Exception as e:  # noqa: BLE001
+            parts.append(f"{kind} ESUAT ({type(e).__name__})")
+        finally:
+            if s is not None:
+                s.close()
+    return f"{host}: " + " · ".join(parts)
+
+
 # ---------------------------------------------------------------- Google Drive
 _drive_local = threading.local()
+_net_checked = False
 
 
 def get_drive_service():
@@ -132,9 +200,18 @@ def get_drive_service():
         # Service account-ul vede/modifica tot doar ce i-ati partajat explicit.
         scopes=["https://www.googleapis.com/auth/drive"],
     )
+    global _net_checked
+    if not _net_checked:
+        _net_checked = True
+        set_stage("test de retea spre Google")
+        add_log(f"Retea: {net_check()}" + (" · folosesc doar IPv4" if FORCE_IPV4 else ""))
     # autentificare explicita, separat de prima cerere -> erorile de cheie se vad clar
     set_stage("autentificare la Google (oauth2.googleapis.com)")
-    creds.refresh(google_auth_httplib2.Request(httplib2.Http(timeout=30)))
+    try:
+        _run_with_timeout(lambda: creds.refresh(google_auth_httplib2.Request(httplib2.Http(timeout=20))),
+                          45, "Autentificarea la Google")
+    except TimeoutError as e:
+        raise TimeoutError(f"{e} — conexiunea de la server la Google nu raspunde (vezi linia 'Retea:')")
     add_log(f"Autentificat ca {info.get('client_email')} ({time.time() - t0:.1f}s)")
     set_stage("incarc API-ul Google Drive")
     http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=60))
@@ -235,6 +312,9 @@ def load_cache():
     cache["loaded"] = True
     try:
         fid = find_cache_file()
+    except TimeoutError:
+        cache["loaded"] = False  # problema de retea, nu de backup: oprim scanarea, reincercam data viitoare
+        raise
     except Exception as e:
         add_log(f"⚠ Backup indisponibil ({e}) — continui fara backup")
         return
@@ -816,6 +896,14 @@ def api_debug():
     if frame is not None:
         out["unde_asteapta"] = [line.strip() for line in traceback.format_stack(frame)[-8:]]
     return Response(json.dumps(out, ensure_ascii=False, indent=2), mimetype="application/json")
+
+
+@app.route("/api/net")
+def api_net():
+    """Test de retea la cerere: fara IPv4 fortat se vede si daca IPv6 merge."""
+    hosts = ["oauth2.googleapis.com", "www.googleapis.com"]
+    return Response(json.dumps({"ipv4_fortat": FORCE_IPV4, "rezultate": [net_check(h) for h in hosts]},
+                               ensure_ascii=False, indent=2), mimetype="application/json")
 
 
 @app.route("/api/test")
