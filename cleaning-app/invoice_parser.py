@@ -23,7 +23,8 @@ import pdfplumber
 
 FORFAIT_MIN_PRICE = float(os.environ.get("FORFAIT_MIN_PRICE", "40"))
 
-DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
+# anul poate fi scris cu 4 cifre (05/27/2026) sau cu 2 (08/20/26)
+DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/(\d{4}|\d{2})$")
 INVISIBLE = dict.fromkeys(map(ord, "​‌‍﻿  "), None)
 
 
@@ -80,10 +81,12 @@ def is_number(s):
 
 
 def parse_ddmmyyyy(s):
-    try:
-        return datetime.strptime(_clean(s), "%d/%m/%Y").date()
-    except ValueError:
-        return None
+    for fmt in ("%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(_clean(s), fmt).date()
+        except ValueError:
+            pass
+    return None
 
 
 def parse_service_date(s, invoice_date=None):
@@ -102,6 +105,8 @@ def parse_service_date(s, invoice_date=None):
         a, b, y = (int(x) for x in s.split("/"))
     except ValueError:
         return None
+    if y < 100:
+        y += 2000  # '26' -> 2026
     candidates = []
     for month, day in ((a, b), (b, a)):           # MM/DD intai (conventia sablonului)
         try:
@@ -149,7 +154,7 @@ def _parse_header(pages_words, full_text):
     info = {"client": None, "client_adresa": None, "numar": None,
             "data_emitere": None, "scadenta": None}
 
-    m = re.search(r"Soumis le\s+(\d{1,2}/\d{1,2}/\d{4})", full_text)
+    m = re.search(r"Soumis le\s+(\d{1,2}/\d{1,2}/(?:\d{4}|\d{2}))\b", full_text)
     if m:
         info["data_emitere"] = parse_ddmmyyyy(m.group(1))
 
@@ -334,7 +339,16 @@ def _detail_rows(page):
         else:
             bands.append((top, bottom))
 
-    if bands:
+    def in_band(w):
+        mid = (w["top"] + w["bottom"]) / 2
+        return any(top - 1 <= mid <= bottom + 1 for top, bottom in bands)
+
+    # Fundalurile acopera TOATE randurile doar la unele facturi; la altele doar randurile
+    # gri au dreptunghi (cele albe nu). Daca vreo suma din coloana 'Prix total' ramane
+    # in afara fundalurilor, folosim metoda pe ancore, care nu depinde de fundal.
+    totals_col = [w for w in table_words
+                  if is_money(w["text"]) and abs(w["x1"] - right_edges["total"]) < 8]
+    if bands and all(in_band(w) for w in totals_col):
         cells = [[w for w in table_words if top - 1 <= (w["top"] + w["bottom"]) / 2 <= bottom + 1]
                  for top, bottom in bands]
     else:

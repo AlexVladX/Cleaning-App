@@ -54,7 +54,7 @@ CACHE_FILE_NAME = os.environ.get("CACHE_FILE_NAME", "cache-facturi.json").strip(
 CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 # Schimbati valoarea cand se modifica PARSERUL (citirea PDF) -> se recitesc toate facturile.
 # Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
-PARSER_VERSION = "2026-10-11b"
+PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
 
 cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False}
 
@@ -556,10 +556,11 @@ def parse_with_ai(pdf_bytes):
 
 
 # ---------------------------------------------------------------- procesare
-def content_key(client, total, randuri, numar=None):
+def content_key(client, total, randuri, numar=None, data_emitere=None):
     """
-    Doua facturi sunt duplicate doar daca au ACELASI CONTINUT: client, total si aceleasi
-    randuri (casa, date, suma). Numarul facturii nu conteaza (poate fi refolosit).
+    Duplicat = aceeasi factura urcata de doua ori: acelasi numar, aceeasi data de emitere,
+    acelasi client, acelasi total si ACELEASI randuri (casa, date de interventie, suma).
+    Facturi diferite cu acelasi numar (numerotare refolosita) NU sunt duplicate.
     """
     c = norm_text(client)
     try:
@@ -569,12 +570,13 @@ def content_key(client, total, randuri, numar=None):
     if randuri:
         rows = tuple(sorted((norm_text(r.get("nom")), tuple(sorted(r.get("dates_raw") or [])),
                              round(float(r.get("total") or 0), 2)) for r in randuri))
-        return ("continut", c, tot, rows)
+        return ("continut", (numar or "").upper(), data_emitere or "", c, tot, rows)
     return ("numar", (numar or "").upper(), c, tot)  # fara randuri (rar): rezerva veche
 
 
 def entry_dup_key(f):
-    return content_key(f.get("client"), f.get("total"), f.get("randuri"), f.get("numar"))
+    return content_key(f.get("client"), f.get("total"), f.get("randuri"), f.get("numar"),
+                       f.get("data_emitere"))
 
 
 def process_file(file_info, idx=None, total=None):
@@ -614,7 +616,8 @@ def process_file(file_info, idx=None, total=None):
         with state_lock:
             others = [f for fid, f in state["files"].items()
                       if fid != file_id and f.get("status") in ("done", "warning")]
-            key = content_key(a.get("client"), t.get("total"), result["randuri"], a.get("numar"))
+            key = content_key(a.get("client"), t.get("total"), result["randuri"], a.get("numar"),
+                              a.get("data_emitere"))
             dup = next((f for f in others if entry_dup_key(f) == key), None)
 
             entry = state["files"][file_id]
