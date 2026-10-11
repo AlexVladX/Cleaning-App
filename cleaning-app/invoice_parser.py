@@ -154,17 +154,29 @@ def parse_service_date_checked(s, anchor):
         return d, False
     if anchor - WINDOW_BEFORE <= d <= anchor + WINDOW_AFTER:
         return d, False
-    # aceeasi zi si luna, in anul facturii sau anul dinainte: alegem varianta din fereastra
-    best = None
-    for y in (anchor.year, anchor.year - 1):
-        try:
-            c = d.replace(year=y)
-        except ValueError:
-            continue
-        if anchor - WINDOW_BEFORE <= c <= anchor + WINDOW_AFTER:
-            if best is None or abs((anchor - c).days) < abs((anchor - best).days):
-                best = c
-    return (best, True) if best else (d, False)
+    s = _clean(s)
+    try:
+        a, b, y = (int(x) for x in s.split("/"))
+    except ValueError:
+        return d, False     # ISO etc.: nu ghicim
+    if y < 100:
+        y += 2000
+    # Toate combinatiile plauzibile: luna/zi sau zi/luna (ex. '12/08/2027' scris zi/luna)
+    # x anul scris, anul facturii, anul dinainte. Alegem varianta din fereastra, preferand:
+    # anul scris > alt an, ordinea sablonului (luna/zi) > inversata, cea mai apropiata de factura.
+    options = []
+    for o_rank, (m, dd) in enumerate(((a, b), (b, a))):
+        for y_rank, yy in enumerate((y, anchor.year, anchor.year - 1)):
+            try:
+                c = date(yy, m, dd)
+            except ValueError:
+                continue
+            if anchor - WINDOW_BEFORE <= c <= anchor + WINDOW_AFTER:
+                options.append(((y_rank > 0 and yy != y), o_rank, abs((anchor - c).days), c))
+    if not options:
+        return d, False
+    best = min(options)[3]
+    return best, best != d
 
 
 def _lines(words, tol=3.0):
