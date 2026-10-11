@@ -42,16 +42,19 @@
   .period label{font-size:12px;color:var(--muted)}
   .period select{border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
 
-  .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-  @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .metric-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+  .hero-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:640px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero-grid{grid-template-columns:minmax(0,1fr)}}
   .metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;border-top:4px solid var(--acc,var(--line));position:relative}
   .metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px;font-weight:600}
   .metric-label .ic{width:24px;height:24px;border-radius:7px;background:var(--acc-bg,var(--line-2));color:var(--acc,var(--muted));display:inline-flex;align-items:center;justify-content:center;flex:none}
   .metric-value{font-size:26px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
   .metric-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric.hero{grid-column:span 2;background:linear-gradient(0deg,#fff,#fff);border-top-width:4px}
-  .metric.hero .metric-value{font-size:36px;color:var(--money)}
-  @media(max-width:900px){.metric.hero{grid-column:span 2}}
+  .metric.hero .metric-value{font-size:34px;color:var(--money)}
+  .metric.hero.neg .metric-value{color:var(--bad-ink)}
+  .metric.hero .metric-sub{font-size:12px}
+  .metric-grid .metric-value{font-size:22px}
   .metric.money .metric-value{color:var(--money)}
   .metric.alert{border-color:#FCA5A5;--acc:#DC2626;--acc-bg:#FEE2E2;background:#FFFBFB}.metric.alert .metric-value{color:var(--bad-ink)}
   .metric.click{cursor:pointer;transition:box-shadow .15s,transform .15s}.metric.click:hover{box-shadow:0 4px 14px rgba(15,118,110,.12);transform:translateY(-1px)}
@@ -124,6 +127,22 @@
   .pill.ok{background:#BBF7D0;color:#14532D}.pill.part{background:#FDE68A;color:#78350F}.pill.late{background:#FECACA;color:#7F1D1D}.pill.wait{background:var(--line-2);color:var(--ink-2);font-weight:500}
   .leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center;margin:10px 0}
   .leg i{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-right:5px;box-sizing:border-box}
+  .xform{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--brand-bg);border-radius:10px;padding:12px;margin:12px 0}
+  .xform label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--ink-2)}
+  .xform input,.xform select{border:1px solid #CFDAD8;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
+  .xform .chk{flex-direction:row;align-items:center;gap:6px;font-weight:500;padding-bottom:8px}
+  .xcell{display:block;width:100%;min-width:76px;border-radius:8px;padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);line-height:1.25}
+  .xcell:hover{border-color:var(--brand)}
+  .xcell.none{color:#C7D2D0;font-weight:400;border-style:dashed}
+  .xcell.est{color:var(--muted);font-style:italic;font-weight:500;border-style:dashed}
+  .xcell.pers{background:#F5F3FF;border-color:#DDD6FE;color:#5B21B6}
+  .xcell.sel{box-shadow:0 0 0 2px var(--brand)}
+  .pm tr.sum td{padding:6px 4px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;border-top:1px solid var(--line)}
+  .pm tr.sum td.c{text-align:left;font-weight:700}
+  .pos{color:var(--money)}.negv{color:var(--bad-ink)}
+  .catbars{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .catbar{display:grid;grid-template-columns:minmax(120px,200px) minmax(0,1fr) 90px 48px;gap:10px;align-items:center;font-size:13px}
+  @media(max-width:640px){.catbar{grid-template-columns:minmax(0,1fr) 80px 44px}.catbar .share-bar{display:none}}
   .grp-prev{font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
   .grp-prev div{margin-top:3px}
   .x-btn{border:1px solid var(--line);background:none;color:var(--faint);cursor:pointer;font-size:11px;line-height:1;padding:3px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
@@ -286,8 +305,11 @@
     <div class="progress-current" id="p-current"></div>
   </div>
 
-  <div class="metric-grid">
+  <div class="hero-grid">
     <div class="metric hero m-green"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></span>Venit facturat (menaje)</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
+    <div class="metric hero click m-teal" id="m-profit-box" onclick="showTab('cheltuieli')" title="Deschide Cheltuieli"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/></svg></span>Profit (după cheltuieli)</div><div class="metric-value" id="m-profit">—</div><div class="metric-sub" id="m-profit-sub"></div></div>
+  </div>
+  <div class="metric-grid">
     <div class="metric click m-amber" id="m-due-box" onclick="showTab('incasari')" title="Deschide tab-ul Încasări"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg></span>De încasat</div><div class="metric-value" id="m-due">—</div><div class="metric-sub" id="m-due-sub"></div></div>
     <div class="metric m-blue"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
     <div class="metric m-teal"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
@@ -304,6 +326,7 @@
       <button class="tab" role="tab" data-tab="calendar">Calendar</button>
       <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
       <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
+      <button class="tab" role="tab" data-tab="cheltuieli">Cheltuieli &amp; profit</button>
       <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
       <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
     </nav>
@@ -319,7 +342,7 @@
         <div class="toolbar"><span class="hint">Sortează:</span>
           <div class="seg" id="sort-bar">
             <button data-sort="total">Încasări</button><button data-sort="interventii">Intervenții</button>
-            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="distanta_km">Distanță</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
+            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="distanta_km">Distanță</button><button data-sort="profit_est">Profit</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
           </div>
         </div>
       </div>
@@ -332,9 +355,10 @@
             <th class="w-110 num sortable" data-sort="total">Încasări</th>
             <th class="w-100 num sortable hide-m" data-sort="medie">€ / int.</th>
             <th class="w-100 num sortable hide-m" data-sort="distanta_km" title="Pe drum, de la bază">Distanță</th>
+            <th class="w-110 num sortable hide-m" data-sort="profit_est" title="Încasări minus drumul casei, salarii/produse după numărul de menaje și restul cheltuielilor după venit">Profit est.</th>
             <th class="w-140 sortable hide-m" data-sort="zile_de_la_ultima">Ultima intervenție</th>
           </tr></thead>
-          <tbody id="prop-body"><tr><td colspan="8" class="empty">Datele vor apărea după analiză</td></tr></tbody>
+          <tbody id="prop-body"><tr><td colspan="9" class="empty">Datele vor apărea după analiză</td></tr></tbody>
         </table>
       </div>
       <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile). Butonul ✕ scoate din listă un rând care nu e casă (ex. produse de curățenie facturate).</p>
@@ -367,7 +391,7 @@
       </div>
       <div class="table-wrap">
         <table class="t">
-          <thead><tr><th>Luna</th><th class="w-120 num">Venit</th><th class="w-120 num">vs luna trecută</th><th class="w-120 num hide-m">vs anul trecut</th><th class="w-100 num">Intervenții</th><th class="w-90 num hide-m">Ore</th><th class="w-100 num hide-m">Case active</th></tr></thead>
+          <thead><tr><th>Luna</th><th class="w-120 num">Venit</th><th class="w-120 num">vs luna trecută</th><th class="w-120 num hide-m">vs anul trecut</th><th class="w-110 num hide-m">Cheltuieli</th><th class="w-110 num">Profit</th><th class="w-100 num">Intervenții</th><th class="w-90 num hide-m">Ore</th><th class="w-100 num hide-m">Case active</th></tr></thead>
           <tbody id="month-body"></tbody>
         </table>
       </div>
@@ -403,6 +427,35 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span>Marchează încasate toate facturile până la</span><select id="inc-pana" style="width:auto"></select><span>inclusiv</span><button class="btn btn-dark btn-sm" id="inc-pana-btn">Marchează</button></div>
       </details>
       <p class="hint" style="margin-top:8px">Căsuța = facturile clientului pentru luna lucrărilor (luna menajelor de pe factură). Scadența se citește din factură; dacă lipsește, se consideră 30 de zile de la emitere. Clienții grupați apar pe un singur rând. Facturile duplicate sau cu eroare nu apar.</p>
+    </section>
+
+    <!-- CHELTUIELI -->
+    <section class="panel" id="panel-cheltuieli" role="tabpanel">
+      <div class="toolbar" style="margin-top:14px;justify-content:space-between">
+        <div class="headline" id="x-head" style="margin:0;flex:1 1 400px"></div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">An <select id="x-an" style="width:auto"></select></label>
+      </div>
+      <form class="xform" id="x-form" autocomplete="off">
+        <label>Data<input type="date" id="x-data" required></label>
+        <label style="flex:1 1 170px">Categorie<select id="x-cat" required></select></label>
+        <label>Sumă (€)<input type="text" id="x-suma" inputmode="decimal" placeholder="0" style="width:100px" required></label>
+        <label style="flex:2 1 180px">Notă (opțional)<input type="text" id="x-nota" placeholder="ex. extras BNP, plinul Renault"></label>
+        <label class="chk"><input type="checkbox" id="x-lunar"> se repetă lunar</label>
+        <button class="btn btn-dark" type="submit">+ Adaugă cheltuiala</button>
+      </form>
+      <div style="overflow-x:auto" id="x-wrap"><table class="pm" id="x-table"></table></div>
+      <p class="hint" style="margin-top:6px">Click pe o căsuță → cheltuielile din luna aceea. <i>≈ în gri</i> = motorina estimată din traseele zilnice; când treci bonuri reale de motorină pe o lună, profitul folosește bonurile. Categoriile „personale” (ex. transferuri acasă) nu scad din profitul firmei.</p>
+      <div class="two-col">
+        <div><h3 class="card-title" style="margin-bottom:4px">Unde se duc banii</h3><div class="hint">cheltuielile anului pe categorii</div><div class="catbars" id="x-bars"></div></div>
+        <div><h3 class="card-title" style="margin-bottom:4px">Motorina estimată</h3><div class="hint" id="x-fuel-txt"></div>
+          <div class="xform" style="margin-top:8px"><label>Consum (l/100 km)<input id="x-consum" inputmode="decimal" style="width:90px"></label><label>Preț motorină (€/l)<input id="x-pret" inputmode="decimal" style="width:90px"></label><button class="btn btn-sm btn-dark" type="button" id="x-fuel-save">Salvează</button></div></div>
+      </div>
+      <details class="fold" style="margin-top:14px">
+        <summary><span class="card-title">Categorii de cheltuieli</span></summary>
+        <div class="hint" style="margin-bottom:6px">Câte una pe rând. Adaugă „(personal)” la final pentru banii care nu sunt cheltuieli ale firmei (nu scad din profit, apar separat).</div>
+        <textarea id="x-cats" style="width:100%;min-height:150px;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font:inherit;font-size:13px"></textarea>
+        <div style="margin-top:8px"><button class="btn btn-dark btn-sm" type="button" id="x-cats-save">Salvează categoriile</button></div>
+      </details>
     </section>
 
     <!-- ZONE -->
@@ -567,6 +620,7 @@ async function fetchAnalytics() {
     lastDataKey = key;
     renderAnalytics();
     if (!P || payKey !== key) fetchPayments();
+    if (tab === 'cheltuieli') fetchExpenses();
   } finally { anLoading = false; }
 }
 
@@ -623,6 +677,12 @@ function renderAnalytics() {
   const m = A.metrics, plabel = A.period.label;
   $('m-venit').textContent = eur(m.venit);
   $('m-venit-sub').textContent = plabel + (m.venit_excluse ? ` · fără ${eur(m.venit_excluse)} produse` : '');
+  const pr = A.profit || {};
+  $('m-profit').textContent = pr.are_cheltuieli ? eur(m.profit) : '—';
+  $('m-profit-sub').textContent = pr.are_cheltuieli
+    ? (pr.acoperire ? `⚠ cheltuieli trecute doar de la ${ym(pr.acoperire)}; înainte profitul e supraestimat` : `marjă ${m.marja != null ? num(m.marja) + '%' : '—'} · cheltuieli ${eur(m.cheltuieli)}` + (pr.personal ? ` · după transferuri: ${eur(pr.ramas)}` : ''))
+    : 'Adaugă cheltuielile ca să vezi profitul →';
+  $('m-profit-box').classList.toggle('neg', !!pr.are_cheltuieli && m.profit < 0);
   $('m-int').textContent = m.interventii.toLocaleString('fr-FR');
   $('m-int-sub').textContent = `în medie ${eur(m.medie)} / intervenție`;
   $('m-props').textContent = m.proprietati;
@@ -646,6 +706,7 @@ const SORTS = {
   frecventa_luna: p => [p.frecventa_luna ?? 0, p.total], medie: p => [p.medie, p.total],
   zile_de_la_ultima: p => [p.zile_de_la_ultima ?? -1, p.total],
   distanta_km: p => [p.distanta_km ?? -1, p.total],
+  profit_est: p => [p.profit_est ?? -1e9, p.total],
 };
 function renderPropsHeadline() {
   const ps = A.props || [], tot = ps.reduce((a, p) => a + p.total, 0);
@@ -663,14 +724,14 @@ function renderProps() {
   document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
   document.querySelectorAll('#p-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === propFilter));
   const body = $('prop-body');
-  if (!A || !A.props.length) { body.innerHTML = '<tr><td colspan="8" class="empty">Nicio intervenție în perioada aleasă</td></tr>'; return; }
+  if (!A || !A.props.length) { body.innerHTML = '<tr><td colspan="9" class="empty">Nicio intervenție în perioada aleasă</td></tr>'; return; }
   const key = SORTS[sortBy] || SORTS.total;
   const sorted = A.props.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
   const q = norm($('p-search').value.trim());
   const rows = sorted.map((p, i) => ({p, rank: i + 1})).filter(({p}) =>
     (propFilter !== 'inactive' || p.inactiva) &&
     (!q || norm(p.name).includes(q) || norm(p.client).includes(q) || (p.variante || []).some(v => norm(v).includes(q))));
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="8" class="empty">Nicio proprietate pentru filtrul ales</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="9" class="empty">Nicio proprietate pentru filtrul ales</td></tr>'; return; }
   const hl = k => sortBy === k ? ' hl' : '';
   body.innerHTML = rows.map(({p, rank}) => {
     const types = Object.entries(p.tipuri || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
@@ -688,6 +749,7 @@ function renderProps() {
       <td class="num money${hl('total')}">${eur(p.total)}</td>
       <td class="num hide-m${hl('medie')}">${eur2(p.medie)}</td>
       <td class="num hide-m${hl('distanta_km')}">${p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'}</td>
+      <td class="num hide-m${hl('profit_est')}">${p.profit_est != null ? `<span class="${p.profit_est >= 0 ? 'pos' : 'negv'}" style="font-weight:700">${eur(p.profit_est)}</span><span class="sub-num">${p.distanta_km == null ? 'fără drum (lipsesc coordonatele)' : p.marja_est != null ? num(p.marja_est) + '% marjă' : ''}</span>` : '—'}</td>
       <td class="hide-m${hl('zile_de_la_ultima')}">${last}</td>
     </tr>`;
   }).join('');
@@ -820,8 +882,9 @@ function renderMonthly() {
   $('month-body').innerHTML = shown.length ? shown.slice().reverse().map(x => `<tr${x.luna === sel ? ' style="background:#EFF6FF"' : ''}>
     <td>${esc(x.eticheta)}${x.in_curs ? ' <span class="tag gray">în curs</span>' : ''}</td><td class="num money">${eur(x.venit)}</td>
     <td class="num"${x.in_curs ? ' style="opacity:.45" title="Lună în curs: comparația nu e încă relevantă"' : ''}>${pct(x.vs_luna_trecuta)}</td>
-    <td class="num hide-m"${x.in_curs ? ' style="opacity:.45"' : ''}>${pct(x.vs_an_trecut)}</td><td class="num">${x.interventii}</td><td class="num hide-m">${x.ore ? num(x.ore) : '—'}</td><td class="num hide-m">${x.case_active}</td></tr>`).join('')
-    : '<tr><td colspan="7" class="empty">Nicio intervenție cu dată în perioada aleasă</td></tr>';
+    <td class="num hide-m"${x.in_curs ? ' style="opacity:.45"' : ''}>${pct(x.vs_an_trecut)}</td>
+    <td class="num hide-m">${x.cheltuieli ? eur(x.cheltuieli) : '—'}</td><td class="num"><b class="${(x.profit ?? 0) >= 0 ? 'pos' : 'negv'}">${x.profit != null ? eur(x.profit) : '—'}</b></td><td class="num">${x.interventii}</td><td class="num hide-m">${x.ore ? num(x.ore) : '—'}</td><td class="num hide-m">${x.case_active}</td></tr>`).join('')
+    : '<tr><td colspan="9" class="empty">Nicio intervenție cu dată în perioada aleasă</td></tr>';
 }
 let pendingCharts = false;
 function drawMonthlyCharts() {
@@ -962,7 +1025,7 @@ function renderPrices() {
       <td class="num"><b>${num(p.pret)} ${p.unitate}</b></td><td class="num">${num(p.pret_anterior)} ${p.unitate}</td>
       <td class="num hide-m"><span class="${p.diferenta >= 0 ? 'delta-up' : 'delta-down'}">${p.diferenta > 0 ? '+' : ''}${num(p.diferenta)}</span></td>
       <td>${p.ok ? `<button class="undo-btn" data-unok="${esc(p.id)}">reactivează</button>` : `<button class="ok-btn" data-ok="${esc(p.id)}" title="Am verificat, prețul e corect">✓ E corect</button>`}</td></tr>`;
-  }).join('') : `<tr><td colspan="8" class="empty">${priceFilter === 'abatere' ? '✓ Nicio abatere de preț de verificat în perioada aleasă' : 'Nimic de afișat'}</td></tr>`;
+  }).join('') : `<tr><td colspan="9" class="empty">${priceFilter === 'abatere' ? '✓ Nicio abatere de preț de verificat în perioada aleasă' : 'Nimic de afișat'}</td></tr>`;
 }
 $('pr-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { priceFilter = b.dataset.f; renderPrices(); } });
 let lastPriceRows = [];
@@ -1155,6 +1218,116 @@ $('inc-pana-btn').addEventListener('click', async () => {
 });
 $('inc-an').addEventListener('change', e => { payYear = e.target.value; store.set('payYear', payYear); payOpen = null; fetchPayments(); });
 
+// ------------------------------------------------------------ cheltuieli & profit
+let X = null, xYear = store.get('xYear', ''), xOpen = null;
+async function fetchExpenses() {
+  try {
+    X = await (await fetch('/api/cheltuieli' + (xYear ? '?an=' + encodeURIComponent(xYear) : ''))).json();
+    renderExpenses();
+  } catch (e) { console.error(e); }
+}
+const ym = mk => new Date(mk + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
+function renderExpenses() {
+  if (!X) return;
+  const T = X.total;
+  $('x-head').innerHTML = X.lunar.length
+    ? `În ${esc(X.an)}: venit <span class="money">${eur(T.venit)}</span>, cheltuieli <b>${eur(T.cheltuieli)}</b>, profit <b class="${T.profit >= 0 ? 'pos' : 'negv'}">${eur(T.profit)}</b>`
+      + (T.venit ? ` (marjă <b>${num(T.profit / T.venit * 100)}%</b>)` : '') + '.' + (T.personal ? ` După transferurile personale rămân <b>${eur(T.ramas)}</b>.` : '')
+    : 'Nicio lună cu date în anul ales.';
+  const sel = $('x-an'); sel.innerHTML = X.ani.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join(''); sel.value = X.an;
+  const cs = $('x-cat'), keep = cs.value;
+  cs.innerHTML = X.categorii.map(c => `<option value="${esc(c.categorie)}">${esc(c.categorie)}${c.tip === 'personal' ? ' (personal)' : ''}</option>`).join('');
+  if (keep && X.categorii.some(c => c.categorie === keep)) cs.value = keep;
+  if (!$('x-data').value) $('x-data').value = X.azi || new Date().toISOString().slice(0, 10);
+  const ci = $('x-consum'), pi = $('x-pret');
+  if (document.activeElement !== ci) ci.value = X.consum ?? ''; if (document.activeElement !== pi) pi.value = X.pret_motorina ?? '';
+  const ct = $('x-cats'); if (document.activeElement !== ct) ct.value = X.categorii.filter(c => c.tip !== 'auto').map(c => c.categorie + (c.tip === 'personal' ? ' (personal)' : '')).join('\n');
+  // matricea
+  const L = X.luni, cols = L.length + 2;
+  let h = `<thead><tr><th class="c">Categorie</th>${L.map(m => `<th>${esc(m.label)}</th>`).join('')}<th style="text-align:right">Total an</th></tr></thead><tbody>`;
+  X.categorii.forEach((c, i) => {
+    let rowTot = c.total;
+    h += `<tr><td class="c"><b>${esc(c.categorie)}</b>${c.tip === 'personal' ? ' <span class="tag" style="background:#EDE9FE;color:#5B21B6">personal</span>' : ''}</td>`;
+    L.forEach(m => {
+      const cell = c.celule[m.key], est = c.motorina && c.estimat ? c.estimat[m.key] : 0;
+      const isSel = xOpen && xOpen.c === c.categorie && xOpen.m === m.key ? ' sel' : '';
+      let cls = 'xcell', txt;
+      if (cell) { txt = eur(cell.total); if (c.tip === 'personal') cls += ' pers'; }
+      else if (est > 0) { txt = '≈ ' + eur(est); cls += ' est'; }
+      else { txt = '+'; cls += ' none'; }
+      h += `<td><button type="button" class="${cls}${isSel}" data-xc="${i}" data-xm="${esc(m.key)}" title="${esc(c.categorie)} · ${esc(ym(m.key))}">${txt}</button></td>`;
+    });
+    if (c.motorina && !rowTot) rowTot = Object.values(c.estimat || {}).reduce((a, b) => a + b, 0);
+    h += `<td class="r">${rowTot ? (c.motorina && !c.total ? '≈ ' : '') + eur(rowTot) : '—'}</td></tr>`;
+    if (xOpen && xOpen.c === c.categorie) h += expenseDetail(c, xOpen.m, cols);
+  });
+  const by = Object.fromEntries(X.lunar.map(r => [r.luna, r]));
+  const sumRow = (label, k, cls, tot) => `<tr class="sum"><td class="c">${label}</td>${L.map(m => { const v = (by[m.key] || {})[k] || 0; return `<td class="${typeof cls === 'function' ? cls(v) : cls}">${v ? eur(v) : '—'}</td>`; }).join('')}<td class="r ${typeof cls === 'function' ? cls(tot) : cls}">${eur(tot)}</td></tr>`;
+  h += sumRow('Total cheltuieli firmă', 'cheltuieli', '', T.cheltuieli);
+  h += sumRow('Venit', 'venit', 'pos', T.venit);
+  h += sumRow('Profit', 'profit', v => v >= 0 ? 'pos' : 'negv', T.profit);
+  if (T.personal) { h += sumRow('Transferuri personale', 'personal', '', T.personal); h += sumRow('Rămas', 'ramas', v => v >= 0 ? 'pos' : 'negv', T.ramas); }
+  $('x-table').innerHTML = h + '</tbody>';
+  const d = document.querySelector('#x-table .pdet'); if (d) d.style.width = ($('x-wrap').clientWidth - 8) + 'px';
+  // unde se duc banii
+  const items = X.categorii.map(c => ({n: c.categorie + (c.motorina && !c.total ? ' (estimată)' : ''), v: c.total || (c.motorina ? Object.values(c.estimat || {}).reduce((a, b) => a + b, 0) : 0), p: c.tip === 'personal'})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const all = items.reduce((a, x) => a + x.v, 0) || 1, mx = Math.max(...items.map(x => x.v), 1);
+  $('x-bars').innerHTML = items.length ? items.map(x => `<div class="catbar"><span>${esc(x.n)}</span><div class="share-bar"><div class="share-fill" style="width:${x.v / mx * 100}%;${x.p ? 'background:#8B5CF6' : ''}"></div></div><span class="num">${eur(x.v)}</span><span class="num hint">${num(x.v / all * 100)}%</span></div>`).join('')
+    : '<div class="hint">Nicio cheltuială încă.</div>';
+  const fuelRow = X.lunar.reduce((a, r) => a + r.motorina_estimata, 0);
+  $('x-fuel-txt').innerHTML = fuelRow
+    ? `≈ <b>${eur(fuelRow)}</b> în ${esc(X.an)}, din traseele zilnice: baza → casele zilei, de la una la cea mai apropiată → baza. E o estimare: cu mai multe echipe pe drum în aceeași zi, consumul real e mai mare.`
+    : 'Apare după ce configurezi distanțele (Reguli → Distanțe).';
+}
+function expenseDetail(c, mk, cols) {
+  const cell = c.celule[mk], est = c.motorina && c.estimat ? c.estimat[mk] : 0;
+  const rows = (cell ? cell.intrari : []).map(e => `<div class="pinv"><span class="hint" style="min-width:86px">${fmtDate(e.aparitie)}</span>
+      <span class="num" style="min-width:80px;text-align:right;font-weight:700">${eur2(e.suma)}</span>
+      <span style="flex:1 1 160px;min-width:0;overflow-wrap:anywhere">${esc(e.nota || '')}${e.serie ? ' <span class="tag info">lunar</span>' : ''}</span>
+      ${e.serie ? `<button class="btn btn-sm" data-xstop="${esc(e.id)}" data-xm="${esc(mk)}" title="Nu mai apare din luna aceasta">Oprește de luna asta</button><button class="link-btn" data-xdel="${esc(e.id)}">șterge toată seria</button>`
+                : `<button class="link-btn" data-xdel="${esc(e.id)}">șterge</button>`}</div>`).join('');
+  return `<tr class="pdrow"><td colspan="${cols}"><div class="pdet">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+      <div><b>${esc(c.categorie)} · ${esc(ym(mk))}</b> <span class="hint">· ${cell ? eur2(cell.total) : 'nimic trecut'}${est ? ` · estimare din trasee: ${eur(est)}` : ''}</span></div>
+      <button class="btn btn-sm btn-dark" data-xaddhere="1">+ Adaugă în luna asta</button>
+    </div>${rows || '<div class="hint" style="padding:8px 0">Nicio cheltuială trecută în luna asta.</div>'}</div></td></tr>`;
+}
+$('x-table').addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t || !X) return;
+  if (t.dataset.xc !== undefined) {
+    const c = X.categorii[+t.dataset.xc], m = t.dataset.xm;
+    xOpen = xOpen && xOpen.c === c.categorie && xOpen.m === m ? null : {c: c.categorie, m};
+    renderExpenses(); return;
+  }
+  if (t.dataset.xaddhere) {
+    const today = new Date().toISOString().slice(0, 10);
+    $('x-cat').value = xOpen.c; $('x-data').value = today.slice(0, 7) === xOpen.m ? today : xOpen.m + '-01';
+    $('x-form').scrollIntoView({behavior: 'smooth', block: 'center'}); $('x-suma').focus({preventScroll: true}); return;
+  }
+  if (t.dataset.xdel || t.dataset.xstop) {
+    const j = await post('/api/cheltuieli/sterge', t.dataset.xstop ? {id: t.dataset.xstop, mod: 'opreste', luna: t.dataset.xm} : {id: t.dataset.xdel, mod: 'tot'});
+    if (!j) return;
+    await afterExpenseChange();
+    showToast(t.dataset.xstop ? 'Cheltuiala lunară oprită de luna aceasta' : 'Cheltuială ștearsă', async () => { await post('/api/cheltuieli/restaureaza', {vechi: j.vechi}); afterExpenseChange(); });
+  }
+});
+async function afterExpenseChange() { await fetchExpenses(); lastDataKey = null; fetchState(); }
+$('x-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const body = {data: $('x-data').value, categorie: $('x-cat').value, suma: $('x-suma').value, nota: $('x-nota').value, lunar: $('x-lunar').checked};
+  const j = await post('/api/cheltuieli', body);
+  if (!j) return;
+  $('x-suma').value = ''; $('x-nota').value = ''; $('x-lunar').checked = false;
+  xOpen = {c: j.entry.categorie, m: j.entry.data.slice(0, 7)};
+  if (j.entry.data.slice(0, 4) !== (X && X.an)) { xYear = j.entry.data.slice(0, 4); store.set('xYear', xYear); }
+  await afterExpenseChange();
+  showToast(`${j.entry.categorie}: ${eur2(j.entry.suma)} adăugat${j.entry.lunar ? ' (lunar)' : ''}`, async () => { await post('/api/cheltuieli/sterge', {id: j.entry.id, mod: 'tot'}); afterExpenseChange(); });
+  $('x-suma').focus();
+});
+$('x-an').addEventListener('change', e => { xYear = e.target.value; store.set('xYear', xYear); xOpen = null; fetchExpenses(); });
+$('x-fuel-save').addEventListener('click', async () => { if (await post('/api/cheltuieli/setari', {consum: $('x-consum').value, pret_motorina: $('x-pret').value})) { afterExpenseChange(); showToast('Consum și preț salvate', null); } });
+$('x-cats-save').addEventListener('click', async () => { if (await post('/api/cheltuieli/setari', {categorii: $('x-cats').value})) { afterExpenseChange(); showToast('Categorii salvate', null); } });
+
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
   tab = t; store.set('tab', t);
@@ -1164,6 +1337,7 @@ function showTab(t) {
   if (t === 'calendar' && A) drawCalendar();
   if (t === 'zone' && A) drawZoneChart();
   if (t === 'incasari') fetchPayments();
+  if (t === 'cheltuieli') fetchExpenses();
 }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
