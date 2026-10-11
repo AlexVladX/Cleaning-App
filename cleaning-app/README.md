@@ -77,7 +77,7 @@ python invoice_parser.py Facture_NET-26-001.pdf Facture_NET-26-010.pdf
 
 ## Indicatori (dashboard pe tab-uri)
 
-Toți indicatorii se calculează din facturi și respectă **filtrul de perioadă** de sus: toată perioada, un an, sezonul (iun–sep) sau o lună.
+Toți indicatorii se calculează din facturi și respectă **filtrul de perioadă** de sus: toată perioada, un an, sezonul (apr–oct), sezonul fierbinte (iul–aug) sau o lună.
 
 | Tab | Ce arată |
 |---|---|

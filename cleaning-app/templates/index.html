@@ -228,6 +228,7 @@
     <div class="metric"><div class="metric-label">Venit</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
     <div class="metric"><div class="metric-label">Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
     <div class="metric"><div class="metric-label">Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
+    <div class="metric click" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label">Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
     <div class="metric click" id="m-prices-box" onclick="showTab('preturi')"><div class="metric-label">Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
     <div class="metric click" id="m-warn-box" onclick="showTab('facturi')"><div class="metric-label">Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
   </div>
@@ -494,7 +495,11 @@ function renderAnalytics() {
   $('m-int').textContent = m.interventii.toLocaleString('fr-FR');
   $('m-int-sub').textContent = `în medie ${eur(m.medie)} / intervenție`;
   $('m-props').textContent = m.proprietati;
-  $('m-props-sub').textContent = m.inactive ? `${m.inactive} inactive acum` : 'nicio casă inactivă';
+  $('m-props-sub').textContent = `din care ${m.inactive} inactive`;
+  $('m-inactive').textContent = m.inactive;
+  $('m-inactive-sub').textContent = m.inactive ? `aduceau ${eur(m.venit_inactive)} în perioadă` : 'toate casele sunt active';
+  $('m-inactive-box').classList.toggle('alert', !!m.inactive);
+  const ib = document.querySelector('#p-filter button[data-f=inactive]'); if (ib) ib.textContent = `Inactive (${m.inactive})`;
   $('m-prices').textContent = m.abateri;
   $('m-prices-box').classList.toggle('alert', !!m.abateri);
   $('n-props').textContent = A.props.length || '';
@@ -548,6 +553,12 @@ $('sort-bar').addEventListener('click', e => { const b = e.target.closest('butto
 document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
 $('p-search').addEventListener('input', renderProps);
 $('p-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { propFilter = b.dataset.f; renderProps(); } });
+
+function showInactive() {
+  propFilter = 'inactive'; sortBy = 'total'; store.set('sortBy2', sortBy);
+  showTab('proprietati'); renderProps();
+  document.getElementById('panel-proprietati').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
 
 // ---- clienti
 function renderClients() {

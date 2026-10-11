@@ -929,6 +929,7 @@ def compute_analytics(period_key="all"):
             "luni": len(months),
             "abateri": sum(1 for r in prices if r["fel"] == "abatere" and not r["ok"]),
             "inactive": sum(1 for p in props if p.get("inactiva")),
+            "venit_inactive": round(sum(p["total"] for p in props if p.get("inactiva")), 2),
             "fara_data": sum(1 for iv in ivs if not iv.get("data_iso")),
         },
         "props": props,

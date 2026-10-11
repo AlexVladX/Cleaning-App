@@ -44,8 +44,10 @@ def period_options(ivs):
     years = sorted({m[:4] for m in months}, reverse=True)
     for y in years:
         opts.append({"key": f"y{y}", "label": f"Anul {y}", "start": f"{y}-01-01", "end": f"{y}-12-31"})
-        if any(m[:4] == y and m[5:7] in ("06", "07", "08", "09") for m in months):
-            opts.append({"key": f"s{y}", "label": f"Sezon {y} (iun–sep)", "start": f"{y}-06-01", "end": f"{y}-09-30"})
+        if any(m[:4] == y and "04" <= m[5:7] <= "10" for m in months):
+            opts.append({"key": f"s{y}", "label": f"Sezon {y} (apr–oct)", "start": f"{y}-04-01", "end": f"{y}-10-31"})
+        if any(m[:4] == y and m[5:7] in ("07", "08") for m in months):
+            opts.append({"key": f"h{y}", "label": f"Sezon fierbinte {y} (iul–aug)", "start": f"{y}-07-01", "end": f"{y}-08-31"})
     for mk in reversed(months):
         y, m = int(mk[:4]), int(mk[5:7])
         last_day = (date(y + (m == 12), m % 12 + 1, 1) - date(y, m, 1)).days
