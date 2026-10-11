@@ -25,6 +25,7 @@ import google_auth_httplib2
 import httplib2
 import openpyxl
 import analytics
+import geo
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from invoice_parser import (
@@ -69,6 +70,14 @@ settings = {
     "ignorate": [],  # sugestii de unire respinse ("Nu e dubla")
     "verificate": {},  # factura -> amprenta avertismentelor marcate "Am verificat"
     "preturi_ok": [],  # semnalari de pret marcate "E corect"
+    # --- etapa 2: distante (salvate in backup, NU in cod)
+    "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
+    "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
+    "coords": [],          # ultima citire: doar [{nume, lat, lng}]
+    "coord_alias": {},     # cheie proprietate (facturi) -> nume din Sheet, legare manuala
+    "distante": {},        # "lat,lng" -> [km, minute, sursa]
+    "distante_baza": "",   # baza pentru care sunt calculate distantele
+    "geo_sync": "",        # cand s-au citit ultima data coordonatele
 }
 
 # Cuvinte generice ignorate cand comparam numele proprietatilor ("Villa Blue" = "Blue")
@@ -334,6 +343,8 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
               "numar", "client", "data_emitere", "total", "metoda", "processed_at",
               "randuri", "antet", "av_factura")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
+PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "baza", "coord_sheet", "coords",
+                "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
 def current_rules():
@@ -375,7 +386,7 @@ def recompute_all():
 def apply_saved_settings(saved):
     if not isinstance(saved, dict):
         return
-    for k in RULE_KEYS + ("alias", "ignorate", "verificate", "preturi_ok"):
+    for k in RULE_KEYS + PERSIST_KEYS:
         if k in saved:
             settings[k] = saved[k]
 
@@ -452,7 +463,7 @@ def save_cache(force=False):
         cache["dirty"] = False
     payload = json.dumps({"parser_version": PARSER_VERSION,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias", "ignorate", "verificate", "preturi_ok")},
+                          "setari": {k: settings[k] for k in RULE_KEYS + PERSIST_KEYS},
                           "files": files}, ensure_ascii=False, default=str)
     try:
         get_drive_service().files().update(
@@ -771,6 +782,10 @@ def scan_folder(retry_errors=False):
             process_queue_background(todo)
         if todo or removed:
             recompute_all()  # avertismentele "acelasi numar" devin simetrice intre facturi
+        try:
+            sync_geo()
+        except Exception as e:  # distantele nu au voie sa strice scanarea facturilor
+            add_log(f"⚠ Distante: {e}")
         save_cache()
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
@@ -867,6 +882,130 @@ SORT_KEYS = {
 }
 
 
+# ---------------------------------------------------------------- distante (etapa 2)
+def sheet_id_from(text):
+    """Accepta ID-ul sau linkul complet al Sheet-ului."""
+    m = re.search(r"/d/([A-Za-z0-9_-]{20,})", text or "")
+    return m.group(1) if m else (text or "").strip()
+
+
+def read_coords_sheet(sheet_id):
+    """CSV-ul Sheet-ului: intai prin service account; daca nu are acces, prin linkul public (daca exista)."""
+    try:
+        data = get_drive_service().files().export_media(fileId=sheet_id, mimeType="text/csv").execute()
+        return data.decode("utf-8-sig"), "service account"
+    except Exception as e:  # noqa: BLE001
+        first_err = e
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=30) as r:
+            body = r.read().decode("utf-8-sig")
+        if body.lstrip().startswith("<"):
+            raise ValueError("Sheet-ul nu e accesibil")
+        return body, "link public"
+    except Exception:
+        raise RuntimeError(f"Nu pot citi Sheet-ul cu coordonate. Partajati-l (Share, Viewer) cu "
+                           f"service account-ul. Detalii: {first_err}")
+
+
+def sync_geo(force_routes=False):
+    """Citeste coordonatele si calculeaza traseele lipsa. Pastreaza DOAR nume/lat/lng."""
+    sid = sheet_id_from(settings.get("coord_sheet"))
+    base = geo.parse_latlng(settings.get("baza"))
+    if not sid or not base:
+        return
+    set_stage("citesc coordonatele caselor")
+    text, how = read_coords_sheet(sid)
+    coords, err = geo.parse_coords_csv(text)
+    del text  # CSV-ul complet (cu eventuale coduri) nu e pastrat nicaieri
+    if err:
+        raise RuntimeError(err)
+    settings["coords"] = coords
+    settings["geo_sync"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+    base_k = geo.coord_key(*base)
+    if settings.get("distante_baza") != base_k or force_routes:
+        settings["distante"], settings["distante_baza"] = {}, base_k
+    dist = settings["distante"]
+    todo = []
+    for c in coords:
+        k = geo.coord_key(c["lat"], c["lng"])
+        if k not in dist or dist[k][2] == "estimat":   # estimarile se reincearca pe drum
+            todo.append((k, (c["lat"], c["lng"])))
+    todo = list(dict(todo).items())
+    if todo:
+        set_stage(f"calculez traseele pe drum pentru {len(todo)} case")
+        try:
+            routes = geo.osrm_routes(base, [p for _, p in todo])
+            for (k, p), rt in zip(todo, routes):
+                dist[k] = [*rt, "drum"] if rt else [*geo.estimate_route(base, p), "estimat"]
+            add_log(f"Distante: {len(todo)} trasee noi calculate pe drum")
+        except Exception as e:  # noqa: BLE001
+            for k, p in todo:
+                dist[k] = [*geo.estimate_route(base, p), "estimat"]
+            add_log(f"⚠ Serviciul de rute nu a raspuns ({e}) — distante estimate din linie dreapta x{geo.ROAD_FACTOR}")
+    add_log(f"Coordonate citite ({how}): {len(coords)} case")
+    cache["dirty"] = True
+
+
+def geo_for_props(props, all_names=None):
+    """Ataseaza distanta/zona fiecarei proprietati; intoarce si lista caselor fara coordonate."""
+    sheet = {}
+    for c in settings.get("coords") or []:
+        sheet.setdefault(prop_key(c["nume"]), c)
+    by_name = {c["nume"]: c for c in settings.get("coords") or []}
+    dist, manual = settings.get("distante") or {}, settings.get("coord_alias") or {}
+    missing = []
+    for p in props:
+        c = by_name.get(manual.get(p["key"])) if p["key"] in manual else sheet.get(p["key"])
+        d = dist.get(geo.coord_key(c["lat"], c["lng"])) if c else None
+        if d:
+            p.update({"distanta_km": d[0], "timp_min": d[1], "dist_sursa": d[2],
+                      "zona": geo.zone_of(d[0]), "coord_nume": c["nume"]})
+        else:
+            p.update({"distanta_km": None, "timp_min": None, "zona": None})
+            if not c:
+                missing.append(p)
+    return missing
+
+
+def zones_table(props):
+    rows = {}
+    order = [z[1] for z in geo.ZONES] + ["fără coordonate"]
+    total = sum(p["total"] for p in props) or 0
+    for p in props:
+        z = p.get("zona") or "fără coordonate"
+        r = rows.setdefault(z, {"zona": z, "case": 0, "interventii": 0, "venit": 0.0, "km": 0.0, "min": 0.0})
+        r["case"] += 1
+        r["interventii"] += p["interventii"]
+        r["venit"] += p["total"]
+        if p.get("distanta_km") is not None:
+            r["km"] += 2 * p["distanta_km"] * p["interventii"]     # dus-intors la fiecare menaj
+            r["min"] += 2 * (p.get("timp_min") or 0) * p["interventii"]
+    out = []
+    for z in order:
+        if z in rows:
+            r = rows[z]
+            out.append({**r, "venit": round(r["venit"], 2), "km": round(r["km"]),
+                        "ore_drum": round(r["min"] / 60, 1),
+                        "procent": round(r["venit"] / total * 100, 1) if total else 0,
+                        "eur_km": round(r["venit"] / r["km"], 2) if r["km"] else None,
+                        "medie": round(r["venit"] / r["interventii"], 2) if r["interventii"] else 0})
+    return out
+
+
+def costly_houses(props, min_km=15, limit=12):
+    """Case departe de baza care aduc putin raportat la drum: € pe km parcurs (dus-intors)."""
+    rows = []
+    for p in props:
+        km = p.get("distanta_km")
+        if km and km >= min_km and p["interventii"]:
+            rows.append({"name": p["name"], "client": p["client"], "km": km, "timp_min": p.get("timp_min"),
+                         "medie": p["medie"], "interventii": p["interventii"],
+                         "eur_km": round(p["medie"] / (2 * km), 2)})
+    rows.sort(key=lambda r: r["eur_km"])
+    return rows[:limit]
+
+
 # ---------------------------------------------------------------- indicatori (etapa 1)
 _an_cache = {}   # (data_key, perioada, zi) -> (lista de interventii, rezultat); cateva intrari
 _an_lock = threading.Lock()
@@ -877,7 +1016,9 @@ def data_key():
     ivs = state["interventii"]
     alias = hash(tuple(sorted(settings["alias"].items())))
     ok = hash(tuple(sorted(settings.get("preturi_ok") or [])))
-    return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}"
+    g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
+              tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
+    return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
 
 
 def compute_analytics(period_key="all"):
@@ -905,6 +1046,8 @@ def compute_analytics(period_key="all"):
     props = aggregate_props(ivs)
     for p in props:
         p.update(activity.get(p["key"], {}))
+    missing = geo_for_props(props)
+    sheet_names = sorted({c["nume"] for c in settings.get("coords") or []}, key=str.casefold)
 
     clients, top3 = analytics.clients_table(ivs, norm_text)
     # o singura luna aleasa -> graficul arata ultimele 12 luni pana la ea (o bara singura nu spune nimic)
@@ -938,6 +1081,18 @@ def compute_analytics(period_key="all"):
         "luna_selectata": months[-1] if period.get("key", "").startswith("m") and months else None,
         "calendar": analytics.calendar_data(ivs, prop_display),
         "prices": prices,
+        "zones": zones_table(props),
+        "costly": costly_houses(props),
+        "geo": {
+            "configurat": bool(settings.get("coord_sheet")),
+            "baza": settings.get("baza"),
+            "case_cu_distanta": sum(1 for p in props if p.get("distanta_km") is not None),
+            "estimate": sum(1 for p in props if p.get("dist_sursa") == "estimat"),
+            "fara_coordonate": [{"key": p["key"], "name": p["name"], "interventii": p["interventii"],
+                                 "total": p["total"]} for p in sorted(missing, key=lambda x: -x["total"])],
+            "nume_sheet": sheet_names,
+            "ultima_citire": settings.get("geo_sync"),
+        },
     }
     with _an_lock:
         # pastram referinta la lista: cat timp e in cache, id-ul ei nu poate fi refolosit
@@ -977,18 +1132,20 @@ def build_excel(sort="interventii", period_key="all"):
     sheet(ws1, ["Rang", "Proprietate", "Client", "Interventii", "Standard", "Intermédiaire",
                 "Ouverture", "Ore (la ora)", "€/ora", "Venit (EUR)", "Medie / interventie",
                 "Interventii / luna", "Ultima interventie", "Zile de la ultima", "Inactiva",
+                "Distanta (km)", "Timp drum (min)", "Zona",
                 "Performanta", "Apare in facturi ca"],
-          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 13, 36])
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36])
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
         ws1.append([i, p["name"], p["client"], p["interventii"], t.get("standard") or None,
                     t.get("intermediaire") or None, t.get("ouverture") or None, p["ore"] or None,
                     p["pret_ora"], p["total"], p["medie"], p.get("frecventa_luna"), ultima,
-                    p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "", p["perf"],
+                    p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "",
+                    p.get("distanta_km"), p.get("timp_min"), p.get("zona") or "", p["perf"],
                     ", ".join(p["variante"]) if len(p["variante"]) > 1 else ""])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 18):
+        for col in range(1, 21):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
@@ -1026,6 +1183,16 @@ def build_excel(sort="interventii", period_key="all"):
             ws3.cell(r, col).border = thin
         if f.get("status") in ("warning", "error", "duplicate"):
             ws3.cell(r, 7).fill = PatternFill("solid", fgColor="FEF3C7" if f["status"] != "error" else "FEE2E2")
+
+    wsz = wb.create_sheet("Zone")
+    sheet(wsz, ["Zona", "Case", "Interventii", "Venit (EUR)", "% din venit", "Km parcursi (dus-intors)",
+                "Ore de drum", "€ / km", "Medie / interventie"], [16, 8, 11, 13, 12, 22, 12, 9, 18])
+    for z in an.get("zones") or []:
+        wsz.append([z["zona"], z["case"], z["interventii"], z["venit"], z["procent"] / 100, z["km"] or None,
+                    z["ore_drum"] or None, z["eur_km"], z["medie"]])
+        wsz.cell(wsz.max_row, 5).number_format = "0.0%"
+        for col in range(1, 10):
+            wsz.cell(wsz.max_row, col).border = thin
 
     ws4 = wb.create_sheet("Clienti")
     sheet(ws4, ["Client", "Venit (EUR)", "% din venit", "Case", "Interventii", "Medie / interventie",
@@ -1214,7 +1381,61 @@ def _settings_payload():
                                for p in props), key=lambda p: p["name"].casefold()),
         "sugestii": merge_suggestions(props),
         "clienti": sorted({iv.get("client") for iv in interventii if iv.get("client")}),
+        "baza": settings.get("baza"),
+        "coord_sheet": settings.get("coord_sheet"),
+        "geo_sync": settings.get("geo_sync"),
+        "n_coords": len(settings.get("coords") or []),
     }
+
+
+def run_geo_async(force=False):
+    """Recalculeaza distantele in fundal (daca ruleaza o scanare, se fac oricum la finalul ei)."""
+    def job():
+        if not scan_lock.acquire(blocking=False):
+            add_log("Distantele se recalculeaza la finalul scanarii in curs.")
+            return
+        try:
+            sync_geo(force_routes=force)
+            save_cache()
+        except Exception as e:  # noqa: BLE001
+            add_log(f"⚠ Distante: {e}")
+        finally:
+            set_stage(None)
+            scan_lock.release()
+    threading.Thread(target=job, daemon=True).start()
+
+
+@app.route("/api/geo", methods=["POST"])
+def api_geo():
+    """Baza si Sheet-ul cu coordonate (salvate in backup, nu in cod)."""
+    data = request.json or {}
+    if "baza" in data:
+        if not geo.parse_latlng(data["baza"]):
+            return jsonify({"ok": False, "error": "Coordonatele bazei nu sunt valide (ex. 41.5955, 9.2746)"}), 400
+        settings["baza"] = data["baza"].strip()
+    if "coord_sheet" in data:
+        settings["coord_sheet"] = sheet_id_from(data["coord_sheet"])
+    cache["dirty"] = True
+    add_log("Setari distante salvate — recalculez")
+    run_geo_async(force=bool(data.get("force")))
+    return jsonify(_settings_payload())
+
+
+@app.route("/api/geo/link", methods=["POST"])
+def api_geo_link():
+    """Leaga manual o casa din facturi de un nume din Sheet (nume gol = anuleaza)."""
+    data = request.json or {}
+    key, nume = data.get("key"), (data.get("nume") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "Lipseste casa"}), 400
+    if nume:
+        settings.setdefault("coord_alias", {})[key] = nume
+    else:
+        (settings.get("coord_alias") or {}).pop(key, None)
+    settings["geo_v"] = settings.get("geo_v", 0) + 1   # schimba cheia datelor -> recalcul
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/settings", methods=["GET", "POST"])

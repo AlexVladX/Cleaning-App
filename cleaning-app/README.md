@@ -35,6 +35,7 @@ Aplicație Python care citește automat facturile PDF SimNettoyage din Google Dr
 | `LLM_MODEL` | nu | implicit `openai/gpt-oss-120b` |
 | `LLM_BASE_URL` / `LLM_API_KEY` | nu | alt furnizor compatibil OpenAI (ex. Gemini) |
 | `FORFAIT_MIN_PRICE` | nu | pragul forfait / oră (implicit 40) |
+| `BASE_COORDS` | nu | coordonatele bazei, implicit (se pot schimba din aplicație) |
 
 ---
 
@@ -85,12 +86,28 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Clienți** | venit, % din venit (concentrare: cât aduc primii 3), case, intervenții, € / intervenție |
 | **Evoluție** | grafice lunare (venit, intervenții) și tabel cu comparația față de luna și anul trecut; luna curentă e marcată „în curs” |
 | **Calendar** | harta zilelor lucrate, media menajelor pe zi a săptămânii, cele mai aglomerate zile |
+| **Zone** | distanța pe drum de la bază la fiecare casă, venit pe zone (sub 10 / 10–20 / 20–35 / peste 35 km), € încasați pe km de drum, casele scumpe la drum, casele fără coordonate |
 | **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
 - O casă e **inactivă** când n-a mai avut menaj de mult mai mult timp decât intervalul ei obișnuit (de 3 ori intervalul tipic, cel puțin 45 de zile).
 - Verificarea prețurilor compară facturile aceleiași case, pentru același client și același tip de menaj.
-- **Export Excel** folosește perioada și sortarea alese și are foile: Clasament, Detalii intervenții, Facturi, Clienți, Evoluție lunară, Verificare prețuri.
+- **Export Excel** folosește perioada și sortarea alese și are foile: Clasament (cu distanță, timp și zonă), Detalii intervenții, Facturi, Zone, Clienți, Evoluție lunară, Verificare prețuri.
+
+## Distanțe și zone
+
+Coordonatele caselor vin din Google Sheet-ul tău. Aplicația păstrează **doar** coloanele `nume`, `lat` și `lng`. Orice altă coloană (ex. `cod`) e ignorată imediat și nu se salvează nicăieri.
+
+Configurare, o singură dată:
+1. Share pe Sheet către email-ul service account-ului, cu permisiunea **Viewer**. Fără share, aplicația încearcă linkul public.
+2. În aplicație: **Reguli de calcul → Distanțe**. Completează coordonatele bazei și linkul Sheet-ului, apoi apasă **Salvează și calculează distanțele**.
+
+Cum funcționează:
+- Traseele pe drum (km și minute) vin gratuit de la serviciul public OSRM, într-o singură cerere pentru până la 90 de case. Rezultatele se salvează în backup, deci se recalculează doar pentru casele noi sau mutate.
+- Dacă serviciul nu răspunde, distanța se estimează din linia dreaptă × 1,35 și e marcată „estimat”. La următoarea citire se reîncearcă traseul real.
+- Sheet-ul se recitește la fiecare scanare. O casă din facturi cu alt nume decât în Sheet se leagă o singură dată din tab-ul **Zone**.
+- **€ pe km** = media încasată pe intervenție / (2 × distanța), adică la un drum dus-întors.
+- Linkul Sheet-ului se salvează în backup, nu în cod.
 
 ## Backup în Google Drive (recomandat)
 
@@ -116,6 +133,7 @@ cleaning-app/
 ├── app.py              # Flask, Google Drive, agregări, export Excel
 ├── invoice_parser.py   # parserul facturilor SimNettoyage
 ├── analytics.py        # indicatorii: perioade, clienți, evoluție, calendar, prețuri
+├── geo.py              # coordonate din Sheet, trasee OSRM, zone
 ├── templates/index.html
 ├── requirements.txt
 ├── Procfile            # pentru Railway/Heroku (Render folosește render.yaml)

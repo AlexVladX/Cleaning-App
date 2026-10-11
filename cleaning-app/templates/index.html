@@ -239,6 +239,7 @@
       <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
       <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
       <button class="tab" role="tab" data-tab="calendar">Calendar</button>
+      <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
       <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
       <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
     </nav>
@@ -253,7 +254,7 @@
         <div class="toolbar"><span class="hint">Sortează:</span>
           <div class="seg" id="sort-bar">
             <button data-sort="total">Încasări</button><button data-sort="interventii">Intervenții</button>
-            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
+            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="distanta_km">Distanță</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
           </div>
         </div>
       </div>
@@ -265,9 +266,10 @@
             <th class="w-90 num sortable hide-m" data-sort="frecventa_luna" title="Intervenții pe lună în perioada aleasă">Pe lună</th>
             <th class="w-110 num sortable" data-sort="total">Încasări</th>
             <th class="w-100 num sortable hide-m" data-sort="medie">€ / int.</th>
+            <th class="w-100 num sortable hide-m" data-sort="distanta_km" title="Pe drum, de la bază">Distanță</th>
             <th class="w-140 sortable hide-m" data-sort="zile_de_la_ultima">Ultima intervenție</th>
           </tr></thead>
-          <tbody id="prop-body"><tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr></tbody>
+          <tbody id="prop-body"><tr><td colspan="8" class="empty">Datele vor apărea după analiză</td></tr></tbody>
         </table>
       </div>
       <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile).</p>
@@ -317,6 +319,28 @@
       </div>
     </section>
 
+    <!-- ZONE -->
+    <section class="panel" id="panel-zone" role="tabpanel">
+      <div id="zone-setup" class="headline" style="margin-top:14px;display:none">
+        Distanțele nu sunt configurate încă. Deschide <b>Reguli de calcul și proprietăți → Distanțe</b>, lipește linkul Sheet-ului cu coordonate și salvează.
+      </div>
+      <div id="zone-body">
+        <div style="margin-top:14px" class="headline" id="z-headline"></div>
+        <div class="chart-grid">
+          <div class="chart" id="ch-zone"><h3>Venit pe km de drum, pe zone</h3><div class="sub">€ încasați pentru fiecare km parcurs (dus-întors la fiecare menaj)</div><svg></svg></div>
+          <div class="table-wrap" style="align-self:start">
+            <table class="t"><thead><tr><th>Zonă</th><th class="w-80 num">Case</th><th class="w-110 num">Venit</th><th class="w-90 num hide-m">% venit</th><th class="w-90 num">€ / km</th><th class="w-90 num hide-m">Ore drum</th></tr></thead><tbody id="zone-table"></tbody></table>
+          </div>
+        </div>
+        <h3 style="font-size:13px;font-weight:600;margin:4px 0 2px">Case scumpe la drum</h3>
+        <p class="hint" style="margin-bottom:8px">Case la peste 15 km care aduc cei mai puțini € pe km parcurs: candidate pentru un tarif mai mare sau pentru gruparea în aceeași zi.</p>
+        <div class="table-wrap" style="max-height:360px">
+          <table class="t"><thead><tr><th>Proprietate</th><th class="w-100 num">Distanță</th><th class="w-110 num">€ / int.</th><th class="w-100 num hide-m">Intervenții</th><th class="w-90 num">€ / km</th></tr></thead><tbody id="costly-table"></tbody></table>
+        </div>
+        <div id="nocoord-box" style="margin-top:16px"></div>
+      </div>
+    </section>
+
     <!-- PRETURI -->
     <section class="panel" id="panel-preturi" role="tabpanel">
       <div class="card-head" style="margin-top:14px">
@@ -357,7 +381,14 @@
         <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
           <div class="merge-row"><select id="m-din" aria-label="Proprietatea care se unește"></select><span>→</span><select id="m-in" aria-label="Proprietatea în care se unește"></select><button class="btn" onclick="mergeProps()">Unește</button></div>
           <div class="merge-list" id="m-list"></div></div>
-        <div style="grid-column:1/-1"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
+        <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><label style="font-size:13px">Distanțe</label>
+          <div class="hint">Coordonatele se citesc din Sheet-ul tău (doar coloanele nume, lat, lng; restul e ignorat). Partajează Sheet-ul cu service account-ul (Viewer).</div></div>
+        <div><label for="g-baza">Coordonatele bazei</label><div class="hint">Din Google Maps: click dreapta pe locație → click pe coordonate.</div><input id="g-baza" placeholder="41.5955, 9.2746"></div>
+        <div><label for="g-sheet">Sheet-ul cu coordonatele caselor</label><div class="hint">Linkul sau ID-ul Sheet-ului.</div><input id="g-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+        <div style="grid-column:1/-1"><button class="btn btn-dark" onclick="saveGeo(false)">Salvează și calculează distanțele</button>
+          <button class="btn" onclick="saveGeo(true)" title="Refă toate traseele de la zero">Recalculează toate traseele</button>
+          <span class="saved" id="g-saved"></span><div class="hint" id="g-status" style="margin-top:6px"></div></div>
+        <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
       </div>
     </details>
   </div>
@@ -379,6 +410,7 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const eur = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 0}) + ' €';
 const eur2 = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' €';
 const num = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 1});
+const d1 = v => Number(v ?? 0).toLocaleString('fr-FR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
 const compact = v => v >= 1e6 ? (v/1e6).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + 'M' : v >= 1000 ? (v/1000).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + 'k' : v.toLocaleString('fr-FR', {maximumFractionDigits: 1});
 const fmtDate = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('ro-RO', {day: '2-digit', month: '2-digit', year: 'numeric'}) : '—';
 const fmtDateLong = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ro-RO', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
@@ -505,7 +537,7 @@ function renderAnalytics() {
   $('n-props').textContent = A.props.length || '';
   $('n-clients').textContent = A.clients.length || '';
   const np = $('n-prices'); np.textContent = m.abateri || ''; np.classList.toggle('alert', !!m.abateri);
-  renderProps(); renderClients(); renderMonthly(); renderCalendar(); renderPrices();
+  renderProps(); renderClients(); renderMonthly(); renderCalendar(); renderPrices(); renderZones();
 }
 
 // ---- proprietati
@@ -514,20 +546,21 @@ const SORTS = {
   total: p => [p.total, p.interventii], interventii: p => [p.interventii, p.total],
   frecventa_luna: p => [p.frecventa_luna ?? 0, p.total], medie: p => [p.medie, p.total],
   zile_de_la_ultima: p => [p.zile_de_la_ultima ?? -1, p.total],
+  distanta_km: p => [p.distanta_km ?? -1, p.total],
 };
 function renderProps() {
   document.querySelectorAll('#sort-bar button').forEach(b => b.classList.toggle('on', b.dataset.sort === sortBy));
   document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
   document.querySelectorAll('#p-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === propFilter));
   const body = $('prop-body');
-  if (!A || !A.props.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio intervenție în perioada aleasă</td></tr>'; return; }
+  if (!A || !A.props.length) { body.innerHTML = '<tr><td colspan="8" class="empty">Nicio intervenție în perioada aleasă</td></tr>'; return; }
   const key = SORTS[sortBy] || SORTS.total;
   const sorted = A.props.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
   const q = norm($('p-search').value.trim());
   const rows = sorted.map((p, i) => ({p, rank: i + 1})).filter(({p}) =>
     (propFilter !== 'inactive' || p.inactiva) &&
     (!q || norm(p.name).includes(q) || norm(p.client).includes(q) || (p.variante || []).some(v => norm(v).includes(q))));
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio proprietate pentru filtrul ales</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="8" class="empty">Nicio proprietate pentru filtrul ales</td></tr>'; return; }
   const hl = k => sortBy === k ? ' hl' : '';
   body.innerHTML = rows.map(({p, rank}) => {
     const types = Object.entries(p.tipuri || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
@@ -544,6 +577,7 @@ function renderProps() {
       <td class="num hide-m${hl('frecventa_luna')}">${p.frecventa_luna != null ? num(p.frecventa_luna) : '—'}</td>
       <td class="num${hl('total')}">${eur(p.total)}</td>
       <td class="num hide-m${hl('medie')}">${eur2(p.medie)}</td>
+      <td class="num hide-m${hl('distanta_km')}">${p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'}</td>
       <td class="hide-m${hl('zile_de_la_ultima')}">${last}</td>
     </tr>`;
   }).join('');
@@ -694,6 +728,48 @@ function drawCalendar() {
     {fmt: num, height: 180, label: 'Menaje pe zi după ziua săptămânii'});
 }
 
+// ---- zone
+let pendingZone = false;
+function renderZones() {
+  const g = A.geo || {}, ok = g.configurat && g.case_cu_distanta;
+  $('zone-setup').style.display = ok ? 'none' : 'block';
+  $('zone-body').style.display = ok ? 'block' : 'none';
+  const nz = $('n-zone'); nz.textContent = (g.fara_coordonate || []).length || ''; nz.classList.toggle('alert', false);
+  if (!ok) return;
+  const zs = A.zones.filter(z => z.zona !== 'fără coordonate'), far = zs.filter(z => z.zona === 'peste 35 km' || z.zona === '20–35 km');
+  const farPct = far.reduce((a, z) => a + z.procent, 0), best = zs.slice().sort((a, b) => (b.eur_km || 0) - (a.eur_km || 0))[0];
+  $('z-headline').innerHTML = `<b>${g.case_cu_distanta}</b> case cu distanță calculată` + (g.estimate ? ` (${g.estimate} estimate)` : '')
+    + ` · casele de peste 20 km aduc <b>${num(farPct)}%</b> din venit` + (best ? ` · cel mai rentabil drum: <b>${esc(best.zona)}</b> (${d1(best.eur_km)} €/km)` : '');
+  const max = Math.max(...A.zones.map(z => z.procent), 1);
+  $('zone-table').innerHTML = A.zones.map(z => `<tr><td>${esc(z.zona)}</td><td class="num">${z.case}</td><td class="num">${eur(z.venit)}</td>
+    <td class="num hide-m">${num(z.procent)}%</td><td class="num"><b>${z.eur_km != null ? d1(z.eur_km) : '—'}</b></td><td class="num hide-m">${z.ore_drum ? num(z.ore_drum) : '—'}</td></tr>`).join('');
+  $('costly-table').innerHTML = (A.costly || []).map(c => `<tr><td><div class="pname">${esc(c.name)}</div><div class="psub">${esc(c.client || '')}</div></td>
+    <td class="num">${num(c.km)} km<span class="sub-num">${c.timp_min ?? '—'} min</span></td><td class="num">${eur2(c.medie)}</td><td class="num hide-m">${c.interventii}</td><td class="num"><b>${d1(c.eur_km)}</b></td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">Nicio casă la peste 15 km în perioada aleasă</td></tr>';
+  const miss = g.fara_coordonate || [];
+  const opts = '<option value="">alege din Sheet…</option>' + (g.nume_sheet || []).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  $('nocoord-box').innerHTML = miss.length ? `<h3 style="font-size:13px;font-weight:600;margin-bottom:2px">Case fără coordonate (${miss.length})</h3>
+    <p class="hint" style="margin-bottom:8px">Numele din facturi nu se găsește în Sheet. Leagă-le o singură dată de rândul corect din Sheet (sau adaugă-le în Sheet).</p>
+    <div class="table-wrap" style="max-height:320px"><table class="t"><thead><tr><th>Proprietate (facturi)</th><th class="w-110 num hide-m">Venit</th><th style="width:45%">Rândul din Sheet</th></tr></thead><tbody>`
+    + miss.map(m => `<tr><td><div class="pname">${esc(m.name)}</div></td><td class="num hide-m">${eur(m.total)}</td>
+      <td><select class="search" style="width:100%" data-link="${esc(m.key)}">${opts}</select></td></tr>`).join('') + '</tbody></table></div>' : '';
+  if (!$('panel-zone').classList.contains('on')) { pendingZone = true; return; }
+  drawZoneChart();
+}
+function drawZoneChart() {
+  pendingZone = false;
+  const zs = (A.zones || []).filter(z => z.eur_km != null);
+  if (zs.length) barChart($('ch-zone'), zs.map(z => ({label: z.zona, value: z.eur_km, title: z.zona,
+    rows: [[d1(z.eur_km) + ' €', 'pe km de drum'], [eur(z.venit), 'venit'], [z.km.toLocaleString('fr-FR') + ' km', 'parcurși (dus-întors)'], [String(z.case), 'case']]})),
+    {fmt: v => num(v) + ' €', height: 210, label: 'Venit pe km de drum, pe zone'});
+}
+document.addEventListener('change', async e => {
+  const sel = e.target.closest('select[data-link]');
+  if (!sel || !sel.value) return;
+  await post('/api/geo/link', {key: sel.dataset.link, nume: sel.value});
+  lastDataKey = null; fetchAnalytics();
+});
+
 // ---- verificare preturi
 const FEL = {'abatere': ['Abatere', 'bad'], 'de confirmat': ['De confirmat', 'mid'], 'schimbare': ['Schimbare tarif', 'info']};
 function renderPrices() {
@@ -798,10 +874,11 @@ function showTab(t) {
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'panel-' + t));
   if (t === 'evolutie' && A) drawMonthlyCharts();
   if (t === 'calendar' && A) drawCalendar();
+  if (t === 'zone' && A) drawZoneChart();
 }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!A) return; if (tab === 'evolutie') drawMonthlyCharts(); if (tab === 'calendar') drawCalendar(); }, 150); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!A) return; if (tab === 'evolutie') drawMonthlyCharts(); if (tab === 'calendar') drawCalendar(); if (tab === 'zone') drawZoneChart(); }, 150); });
 
 // ------------------------------------------------------------ actiuni
 async function scan() { await fetch('/api/scan', {method: 'POST'}); setTimeout(fetchState, 500); }
@@ -829,9 +906,16 @@ async function loadSettings(data) {
      <button class="btn btn-sm btn-dark" onclick="acceptSugg(${i})">Unește în „${esc(x.in_nume)}”</button><button class="btn btn-sm" onclick="ignoreSugg(${i})">Nu e dublură</button></div>`).join('')
     : '<div class="hint">Nicio pereche suspectă.</div>';
   $('settings-title').textContent = 'Reguli de calcul și proprietăți' + (sg.length ? ` · ${sg.length} posibile dubluri` : '');
+  const gb = $('g-baza'); if (document.activeElement !== gb) gb.value = s.baza || '';
+  const gs = $('g-sheet'); if (document.activeElement !== gs) gs.value = s.coord_sheet || '';
+  $('g-status').textContent = s.coord_sheet ? (s.n_coords ? `${s.n_coords} case citite din Sheet · ultima citire ${s.geo_sync || '—'}` : 'Sheet configurat, încă necitit') : 'Sheet necunoscut încă.';
   $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
 }
 $('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
+async function saveGeo(force) {
+  const j = await post('/api/geo', {baza: $('g-baza').value, coord_sheet: $('g-sheet').value, force});
+  if (j) { loadSettings(j); $('g-saved').textContent = '✓ Salvat · calculez distanțele (urmărește jurnalul)…'; setTimeout(() => { $('g-saved').textContent = ''; loadSettings(); }, 6000); }
+}
 async function saveSettings() {
   const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, prag_forfait: $('s-prag').value});
   if (j) { loadSettings(j); lastDataKey = null; fetchState(); fetchAnalytics(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
