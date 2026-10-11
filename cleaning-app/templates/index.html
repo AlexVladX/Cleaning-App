@@ -62,8 +62,20 @@
   .prop-count{font-size:12px;color:#6B7280;min-width:30px;text-align:right}
   .perf{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500}
   .ph{background:#D1FAE5;color:#065F46}.pm{background:#FEF3C7;color:#92400E}.pl{background:#FEE2E2;color:#991B1B}
-  .log{font-size:11px;font-family:monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:120px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB}
+  .log{font-size:11px;font-family:monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:220px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB}
   .empty{text-align:center;padding:2rem;color:#9CA3AF;font-size:13px}
+  .progress-card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none}
+  .progress-card.on{display:block}
+  .progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .progress-title{font-weight:600;font-size:14px}
+  .progress-sub{font-size:12px;color:#6B7280}
+  .progress-bg{height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden}
+  .progress-fill{height:100%;background:#059669;border-radius:4px;width:0;transition:width .6s ease}
+  .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
+  @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
+  .progress-current{font-size:12px;color:#374151;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-item.fresh{background:#ECFDF5;animation:fresh 2.5s ease-out}
+  @keyframes fresh{0%{background:#A7F3D0}100%{background:#ECFDF5}}
   .last-scan{font-size:11px;color:#9CA3AF;margin-top:6px}
 </style>
 </head>
@@ -85,6 +97,15 @@
     <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
     <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
     <button class="btn" onclick="resetAll()" style="margin-left:auto">&#x1F5D1; Reset</button>
+  </div>
+
+  <div class="progress-card" id="progress">
+    <div class="progress-top">
+      <span class="progress-title" id="p-title">Scanare în curs</span>
+      <span class="progress-sub" id="p-sub"></span>
+    </div>
+    <div class="progress-bg"><div class="progress-fill" id="p-fill"></div></div>
+    <div class="progress-current" id="p-current"></div>
   </div>
 
   <div class="metric-grid">
@@ -147,15 +168,27 @@ function renderState(s) {
     stxt.textContent = 'Monitorizare oprită';
   }
   const sc = s.scan || {};
+  const pc = document.getElementById('progress'), pf = document.getElementById('p-fill');
+  pc.classList.toggle('on', !!sc.active);
   if (sc.active) {
     dot.className = 'dot live';
     if (sc.phase === 'listare' || !sc.total) {
       stxt.textContent = 'Scanare: citesc lista din Drive...';
+      document.getElementById('p-title').textContent = 'Citesc lista de facturi din Drive…';
+      document.getElementById('p-sub').textContent = sc.found ? `${sc.found} PDF-uri găsite până acum` : '';
+      document.getElementById('p-current').textContent = '';
+      pf.classList.add('indet'); pf.style.width = '';
     } else {
-      const eta = sc.eta == null ? '' : sc.eta >= 60 ? ` · ~${Math.ceil(sc.eta/60)} min rămase` : ` · ~${sc.eta}s rămase`;
+      const left = sc.total - sc.done;
+      const eta = sc.eta == null || !left ? '' : sc.eta >= 60 ? ` · ~${Math.ceil(sc.eta/60)} min rămase` : ` · ~${sc.eta}s rămase`;
       stxt.textContent = `Scanare ${sc.done}/${sc.total}${eta}`;
+      document.getElementById('p-title').textContent = `Citite ${sc.done} din ${sc.total} facturi`;
+      document.getElementById('p-sub').textContent = `mai sunt ${left}${eta}`;
+      document.getElementById('p-current').textContent = sc.current && left ? `Acum: ${sc.current}` : '';
+      pf.classList.remove('indet'); pf.style.width = `${Math.round(sc.done / sc.total * 100)}%`;
     }
   }
+  schedule(sc.active ? 2000 : 5000);
   monitoring = s.monitoring;
   document.getElementById('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
   document.getElementById('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
@@ -173,9 +206,10 @@ function renderState(s) {
   if (!s.files || !s.files.length) {
     fl.innerHTML = '<div class="empty">Niciun fișier detectat</div>';
   } else {
-    fl.innerHTML = s.files.slice().reverse().map(f => {
+    fl.innerHTML = s.files.map(f => {
+      const fresh = f.processed_at && s.now - f.processed_at < 8 ? ' fresh' : '';
       const cls = esc(f.status);
-      const n = f.interventii?.length ?? 0;
+      const n = f.n_interventii ?? 0;
       const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>'
         : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
         : cls === 'done' ? `<span class="badge badge-done">${n} intervenții</span>`
@@ -185,7 +219,7 @@ function renderState(s) {
       const meta = [f.numar, f.client, f.total != null ? f.total.toLocaleString('fr-FR') + '€' : null,
                     f.metoda === 'ai' ? 'citită cu AI' : null].filter(Boolean).map(esc).join(' · ');
       const warns = (f.error ? [f.error] : (f.avertismente || [])).map(w => `<span class="file-warn">⚠ ${esc(w)}</span>`).join('');
-      return `<div class="file-item ${cls}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
+      return `<div class="file-item ${cls}${fresh}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
         + (meta ? `<span class="file-meta">${meta}</span>` : '') + warns + `</div>${badge}</div>`;
     }).join('');
   }
@@ -216,13 +250,15 @@ function renderState(s) {
   // Log
   const lb = document.getElementById('log-box');
   if (s.log && s.log.length) {
+    const atBottom = lb.scrollHeight - lb.scrollTop - lb.clientHeight < 30;
     lb.innerHTML = s.log.slice(-50).map(esc).join('<br>');
-    lb.scrollTop = lb.scrollHeight;
+    if (atBottom) lb.scrollTop = lb.scrollHeight;  // nu sarim jos daca utilizatorul citeste mai sus
   }
 }
 
 async function scan() {
   await fetch('/api/scan', {method:'POST'});
+  setTimeout(fetchState, 500);
 }
 
 async function startMonitor() {
@@ -249,8 +285,16 @@ async function resetAll() {
   }
 }
 
+// actualizare: la 2s in timpul scanarii, la 5s in rest
+let timer = null, every = 5000;
+function schedule(ms) {
+  if (ms === every && timer) return;
+  every = ms;
+  clearInterval(timer);
+  timer = setInterval(fetchState, ms);
+}
 fetchState();
-setInterval(fetchState, 5000);
+schedule(5000);
 </script>
 </body>
 </html>

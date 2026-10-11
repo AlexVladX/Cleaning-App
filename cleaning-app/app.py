@@ -112,8 +112,8 @@ def list_pdf_files(folder_id):
     service = get_drive_service()
     all_files = []
 
-    def search_folder(fid):
-        page_token = None
+    def search_folder(fid, label):
+        page_token, here, subfolders = None, 0, []
         while True:  # paginare: altfel se pierd fisierele peste primele 100
             results = service.files().list(
                 q=f"'{fid}' in parents and trashed=false",
@@ -126,13 +126,21 @@ def list_pdf_files(folder_id):
             for f in results.get("files", []):
                 if f["mimeType"] == "application/pdf":
                     all_files.append(f)
+                    here += 1
                 elif f["mimeType"] == "application/vnd.google-apps.folder":
-                    search_folder(f["id"])
+                    subfolders.append(f)
             page_token = results.get("nextPageToken")
             if not page_token:
                 break
+        with state_lock:
+            state["scan"]["found"] = len(all_files)
+        if here:
+            add_log(f"📁 {label}: {here} PDF · {len(all_files)} gasite pana acum")
+        for sf in subfolders:
+            search_folder(sf["id"], f"{label}/{sf['name']}" if label != "." else sf["name"])
 
-    search_folder(folder_id)
+    add_log("Citesc lista de facturi din Drive...")
+    search_folder(folder_id, ".")
     return all_files
 
 
@@ -155,7 +163,7 @@ def file_signature(f):
 
 # ---------------------------------------------------------------- backup in Drive
 CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "interventii",
-              "numar", "client", "data_emitere", "total", "metoda", "_dup_key")
+              "numar", "client", "data_emitere", "total", "metoda", "_dup_key", "processed_at")
 
 
 def find_cache_file():
@@ -334,9 +342,12 @@ def _dup_key(result):
     return ((a.get("numar") or "").upper(), (a.get("client") or "").casefold(), t.get("total"))
 
 
-def process_file(file_info):
+def process_file(file_info, idx=None, total=None):
     file_id, name = file_info["id"], file_info["name"]
+    pre = f"[{idx}/{total}] " if idx else ""
+    rest = f" · mai sunt {total - idx}" if idx and total - idx > 0 else (" · ultima" if idx else "")
     with state_lock:
+        state["scan"]["current"] = name
         entry = state["files"].setdefault(file_id, {})
         entry.update({
             "id": file_id, "name": name, "status": "processing",
@@ -391,11 +402,11 @@ def process_file(file_info):
                 ] + interventii
 
         if dup:
-            add_log(f"= {name}: duplicat al {dup['name']}, ignorat")
+            add_log(f"{pre}= {name}: duplicat al {dup['name']}, ignorat{rest}")
         else:
-            add_log(f"✓ {name}: {a.get('numar')} · {a.get('client')} · "
+            add_log(f"{pre}✓ {name}: {a.get('numar')} · {a.get('client')} · "
                     f"{len(interventii)} interventii · {t.get('total')} €"
-                    + (f" · {len(warnings)} avertismente" if warnings else ""))
+                    + (f" · {len(warnings)} avertismente" if warnings else "") + rest)
             for w in warnings:
                 add_log(f"  ⚠ {w}")
     except Exception as e:
@@ -404,7 +415,9 @@ def process_file(file_info):
             state["files"][file_id]["error"] = str(e)
             state["files"][file_id]["interventii"] = []
             state["interventii"] = [iv for iv in state["interventii"] if iv.get("_file_id") != file_id]
-        add_log(f"✗ Eroare la {name}: {e}")
+        add_log(f"{pre}✗ Eroare la {name}: {e}{rest}")
+    with state_lock:
+        state["files"][file_id]["processed_at"] = time.time()
     cache["dirty"] = True
     return used_ai
 
@@ -412,15 +425,18 @@ def process_file(file_info):
 def process_queue_background(new_files):
     n = len(new_files)
     t0 = time.time()
-    add_log(f"Procesez {n} fisiere...")
+    add_log(f"Incep citirea a {n} facturi...")
+    with state_lock:
+        state["scan"].update({"done": 0, "total": n, "eta": None})
     for i, f in enumerate(new_files):
-        used_ai = process_file(f)
+        used_ai = process_file(f, i + 1, n)
         elapsed = time.time() - t0
+        eta = round(elapsed / (i + 1) * (n - i - 1))
         with state_lock:
-            state["scan"].update({"done": i + 1, "total": n,
-                                  "eta": round(elapsed / (i + 1) * (n - i - 1))})
+            state["scan"].update({"done": i + 1, "total": n, "eta": eta})
         if (i + 1) % 10 == 0 and i + 1 < n:
-            add_log(f"Progres: {i + 1}/{n} · {elapsed / (i + 1):.1f}s per factura")
+            add_log(f"— Progres {i + 1}/{n} · mai sunt {n - i - 1} · "
+                    f"{elapsed / (i + 1):.1f}s per factura · ~{max(1, round(eta / 60))} min ramase")
         if (i + 1) % CACHE_SAVE_EVERY == 0 and i + 1 < n:
             save_cache()  # daca serverul adoarme in mijlocul scanarii, nu pierdem progresul
         if used_ai and i < n - 1:
@@ -440,7 +456,8 @@ def scan_folder(retry_errors=False):
         add_log("Scanare deja in curs.")
         return
     with state_lock:
-        state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0, "eta": None}
+        state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0,
+                         "eta": None, "found": 0, "current": None}
     try:
         if not cache["loaded"]:
             load_cache()
@@ -638,8 +655,20 @@ def build_excel():
 
 
 # ---------------------------------------------------------------- rute
-def _public_file(f):
-    return {k: v for k, v in f.items() if not k.startswith("_")}
+def _public_file(f, light=False):
+    """light=True: fara lista de interventii (dashboard-ul o cere la fiecare cateva secunde)."""
+    out = {k: v for k, v in f.items() if not k.startswith("_") and not (light and k == "interventii")}
+    if light:
+        out["n_interventii"] = len(f.get("interventii") or [])
+    return out
+
+
+_STATUS_ORDER = {"processing": 0, "done": 1, "warning": 1, "duplicate": 1, "error": 1, "new": 2}
+
+
+def _file_sort_key(f):
+    # in lucru sus, apoi cele citite (cele mai recente primele), apoi cele care asteapta
+    return (_STATUS_ORDER.get(f.get("status"), 3), -(f.get("processed_at") or 0), f.get("name") or "")
 
 
 @app.route("/")
@@ -651,9 +680,11 @@ def index():
 def api_state():
     with state_lock:
         interventii = list(state["interventii"])
-        files = [_public_file(f) for f in state["files"].values()]
+        files = sorted((_public_file(f, light=True) for f in state["files"].values()),
+                       key=_file_sort_key)
         s = {
             "files": files,
+            "now": time.time(),
             "last_scan": state["last_scan"],
             "monitoring": state["monitoring"],
             "log": state["log"][-50:],
