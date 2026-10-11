@@ -229,7 +229,7 @@ def price_checks(ivs_all, period, prop_key, prop_display):
     in_period = (lambda d: True) if not s else (lambda d: bool(d) and s <= d <= e_)
 
     out = []
-    for (key, tip, mode, _client), invs in groups.items():
+    for (key, tip, mode, client_k), invs in groups.items():
         seq = sorted(invs.values(), key=lambda x: (x["data"] or "9999", x["factura"] or ""))
         if len(seq) < 2:
             continue
@@ -256,6 +256,8 @@ def price_checks(ivs_all, period, prop_key, prop_display):
                 "facturare": mode, "factura": x["factura"], "fisier": x["fisier"], "client": x["client"],
                 "data": x["data"], "pret": p, "pret_anterior": prev,
                 "diferenta": round(p - prev, 2), "unitate": "€/h" if mode == "heure" else "€",
+                # id stabil: aceeasi semnalare are acelasi id la fiecare calcul (pentru "E corect")
+                "id": f"{key}|{tip}|{mode}|{client_k}|{x['factura'] or ''}|{p:g}|{prev:g}",
             })
     order = {"abatere": 0, "de confirmat": 1, "schimbare": 2}
     # abaterile primele; in fiecare categorie, cele mai recente primele

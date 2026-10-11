@@ -18,7 +18,7 @@ import os
 import re
 import unicodedata
 from functools import lru_cache
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pdfplumber
 
@@ -121,6 +121,50 @@ def parse_service_date(s, invoice_date=None):
             if invoice_date - timedelta(days=120) <= c <= invoice_date + timedelta(days=1):
                 return c
     return candidates[0]
+
+
+# o interventie e facturata dupa ce a avut loc: cel mult cateva zile dupa data facturii
+# si de regula in lunile dinainte. In afara ferestrei -> anul de pe factura e o greseala.
+WINDOW_BEFORE = timedelta(days=200)
+WINDOW_AFTER = timedelta(days=7)
+
+
+def sane_invoice_date(inv_date, today=None):
+    """Data facturii nu poate fi in viitor: daca e (an tastat gresit), ii corectam anul."""
+    today = today or date.today()
+    if not inv_date or inv_date <= today + timedelta(days=31):
+        return inv_date, False
+    for y in (today.year, today.year - 1):
+        try:
+            c = inv_date.replace(year=y)
+        except ValueError:      # 29 februarie
+            c = inv_date.replace(year=y, day=28)
+        if c <= today + timedelta(days=1):
+            return c, True
+    return inv_date, False
+
+
+def parse_service_date_checked(s, anchor):
+    """
+    Ca parse_service_date, dar corecteaza anul gresit (ex. 08/15/28 pe o factura din 2026).
+    anchor = data facturii (deja verificata). Intoarce (data, a_fost_corectata).
+    """
+    d = parse_service_date(s, anchor)
+    if d is None or anchor is None:
+        return d, False
+    if anchor - WINDOW_BEFORE <= d <= anchor + WINDOW_AFTER:
+        return d, False
+    # aceeasi zi si luna, in anul facturii sau anul dinainte: alegem varianta din fereastra
+    best = None
+    for y in (anchor.year, anchor.year - 1):
+        try:
+            c = d.replace(year=y)
+        except ValueError:
+            continue
+        if anchor - WINDOW_BEFORE <= c <= anchor + WINDOW_AFTER:
+            if best is None or abs((anchor - c).days) < abs((anchor - best).days):
+                best = c
+    return (best, True) if best else (d, False)
 
 
 def _lines(words, tol=3.0):
@@ -442,6 +486,11 @@ def compute_interventions(rows, header, rules=None):
     inv_date = header.get("data_emitere")
     if isinstance(inv_date, str):
         inv_date = parse_ddmmyyyy(inv_date)
+    inv_date, inv_fixed = sane_invoice_date(inv_date)
+    if inv_fixed:
+        warnings.append(f"Data facturii are anul greșit — considerată {inv_date.strftime('%d/%m/%Y')}")
+    # fara data facturii, reperul e ziua de azi (nicio interventie nu poate fi in viitor)
+    anchor = inv_date or date.today()
 
     for r in rows:
         nom = r.get("nom") or "Necunoscut"
@@ -460,9 +509,13 @@ def compute_interventions(rows, header, rules=None):
 
         dates = []
         for d in r.get("dates_raw") or []:
-            pd = parse_service_date(d, inv_date)
+            pd, fixed = parse_service_date_checked(d, anchor)
             if pd:
                 dates.append(pd)
+                if fixed:
+                    warnings.append(f"{nom}: an greșit pe factură ('{d}') — considerat {pd.strftime('%d/%m/%Y')}")
+                elif not (anchor - WINDOW_BEFORE <= pd <= anchor + WINDOW_AFTER):
+                    warnings.append(f"{nom}: dată neobișnuită '{d}' ({pd.strftime('%d/%m/%Y')}) față de data facturii — verificați")
             else:
                 warnings.append(f"{nom}: data invalida '{d}'")
 

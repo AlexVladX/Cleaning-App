@@ -67,6 +67,8 @@ settings = {
         "CLIENTI_LA_ORA", "Aquila Vacances;Esther").split(";") if c.strip()],
     "alias": {},   # cheie proprietate -> cheie proprietate canonica (unire manuala)
     "ignorate": [],  # sugestii de unire respinse ("Nu e dubla")
+    "verificate": {},  # factura -> amprenta avertismentelor marcate "Am verificat"
+    "preturi_ok": [],  # semnalari de pret marcate "E corect"
 }
 
 # Cuvinte generice ignorate cand comparam numele proprietatilor ("Villa Blue" = "Blue")
@@ -373,7 +375,7 @@ def recompute_all():
 def apply_saved_settings(saved):
     if not isinstance(saved, dict):
         return
-    for k in RULE_KEYS + ("alias", "ignorate"):
+    for k in RULE_KEYS + ("alias", "ignorate", "verificate", "preturi_ok"):
         if k in saved:
             settings[k] = saved[k]
 
@@ -450,7 +452,7 @@ def save_cache(force=False):
         cache["dirty"] = False
     payload = json.dumps({"parser_version": PARSER_VERSION,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias", "ignorate")},
+                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias", "ignorate", "verificate", "preturi_ok")},
                           "files": files}, ensure_ascii=False, default=str)
     try:
         get_drive_service().files().update(
@@ -874,7 +876,8 @@ def data_key():
     """Se schimba de fiecare data cand se schimba interventiile sau unirile de proprietati."""
     ivs = state["interventii"]
     alias = hash(tuple(sorted(settings["alias"].items())))
-    return f"{id(ivs)}-{len(ivs)}-{alias}"
+    ok = hash(tuple(sorted(settings.get("preturi_ok") or [])))
+    return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}"
 
 
 def compute_analytics(period_key="all"):
@@ -912,6 +915,9 @@ def compute_analytics(period_key="all"):
     else:
         chart_months = months
     prices = analytics.price_checks(ivs_all, period, prop_key, prop_display)
+    ok_set = set(settings.get("preturi_ok") or [])
+    for r in prices:
+        r["ok"] = r["id"] in ok_set
 
     venit = round(sum(float(iv.get("suma") or 0) for iv in ivs), 2)
     val = {
@@ -921,7 +927,7 @@ def compute_analytics(period_key="all"):
             "ore": round(sum(float(iv.get("ore") or 0) for iv in ivs if iv.get("tip_facturare") == "heure"), 2),
             "medie": round(venit / len(ivs), 2) if ivs else 0,
             "luni": len(months),
-            "abateri": sum(1 for r in prices if r["fel"] == "abatere"),
+            "abateri": sum(1 for r in prices if r["fel"] == "abatere" and not r["ok"]),
             "inactive": sum(1 for p in props if p.get("inactiva")),
             "fara_data": sum(1 for iv in ivs if not iv.get("data_iso")),
         },
@@ -1050,7 +1056,7 @@ def build_excel(sort="interventii", period_key="all"):
                 "Pret obisnuit", "Diferenta", "Unitate", "Fisier"], [13, 24, 24, 14, 12, 13, 13, 13, 11, 8, 30])
     fel = {"abatere": "Abatere", "de confirmat": "De confirmat", "schimbare": "Schimbare tarif"}
     for p in an["prices"]:
-        ws6.append([fel[p["fel"]], p["proprietate"], p["client"], tip_label(p["tip"]),
+        ws6.append([fel[p["fel"]] + (" (verificat)" if p.get("ok") else ""), p["proprietate"], p["client"], tip_label(p["tip"]),
                     datetime.fromisoformat(p["data"]) if p["data"] else None, p["factura"], p["pret"],
                     p["pret_anterior"], p["diferenta"], p["unitate"], p["fisier"]])
         r = ws6.max_row
@@ -1076,6 +1082,7 @@ def _public_file(f, light=False):
     out = {k: v for k, v in f.items() if not k.startswith("_") and not (light and k in heavy)}
     if light:
         out["n_interventii"] = len(f.get("interventii") or [])
+        out["verificat"] = is_verified(f)
     return out
 
 
@@ -1109,7 +1116,7 @@ def api_state():
     s["metrics"] = {
         "files": len(files),
         "analyzed": sum(1 for f in files if f["status"] in ("done", "warning", "duplicate")),
-        "warnings": sum(1 for f in files if f["status"] in ("warning", "error")),
+        "warnings": sum(1 for f in files if f["status"] in ("warning", "error") and not f.get("verificat")),
         "interventii": len(interventii),
         "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2),
     }
@@ -1246,6 +1253,50 @@ def api_merge():
     add_log(f"Proprietati unite: '{data.get('din')}' → '{data.get('in')}'")
     _save_async()
     return jsonify(_settings_payload())
+
+
+def warn_signature(f):
+    """Amprenta problemelor unei facturi: daca apar probleme noi, 'verificat' nu se mai aplica."""
+    import hashlib
+    txt = (f.get("error") or "") + "|" + "|".join(f.get("avertismente") or [])
+    return hashlib.md5(txt.encode("utf-8")).hexdigest()[:12]
+
+
+def is_verified(f):
+    return (f.get("status") in ("warning", "error")
+            and (settings.get("verificate") or {}).get(f.get("id")) == warn_signature(f))
+
+
+@app.route("/api/verify-files", methods=["POST"])
+def api_verify_files():
+    """'Am verificat' pe facturi (sau anulare cu undo=true)."""
+    data = request.json or {}
+    ids, undo = data.get("ids") or [], bool(data.get("undo"))
+    ver = settings.setdefault("verificate", {})
+    with state_lock:
+        for fid in ids:
+            f = state["files"].get(fid)
+            if not f:
+                continue
+            if undo:
+                ver.pop(fid, None)
+            elif f.get("status") in ("warning", "error"):
+                ver[fid] = warn_signature(f)
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True, "n": len(ids)})
+
+
+@app.route("/api/prices-ok", methods=["POST"])
+def api_prices_ok():
+    """'E corect' pe semnalari de pret (sau anulare cu undo=true)."""
+    data = request.json or {}
+    ids, undo = set(data.get("ids") or []), bool(data.get("undo"))
+    cur = set(settings.get("preturi_ok") or [])
+    settings["preturi_ok"] = sorted(cur - ids if undo else cur | ids)
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True, "n": len(ids)})
 
 
 @app.route("/api/ignore-suggestion", methods=["POST"])
