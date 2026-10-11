@@ -6,18 +6,23 @@
 <title>Analizator Facturi Curățenie</title>
 <style>
   :root{
-    --ink:#111827; --ink-2:#374151; --muted:#6B7280; --faint:#9CA3AF;
-    --line:#E5E7EB; --line-2:#F3F4F6; --bg:#F9FAFB; --card:#fff;
-    --series:#2a78d6; --series-dim:#b7d3f6;
-    --h0:#EEF2F7; --h1:#cde2fb; --h2:#9ec5f4; --h3:#6da7ec; --h4:#3987e5; --h5:#256abf; --h6:#184f95;
+    --ink:#132A2B; --ink-2:#36504F; --muted:#5F7372; --faint:#94A3A2;
+    --line:#E0E8E6; --line-2:#F0F5F4; --bg:#F3F7F6; --card:#fff;
+    --brand:#0F766E; --brand-2:#115E59; --brand-bg:#E6F4F1; --brand-deep:#0B3534;
+    --money:#047857; --money-bg:#D1FAE5; --mark:#C7F0DF;
+    --series:#0F8A7E; --series-dim:#A7DCD5;
+    --h0:#EDF3F2; --h1:#C9EBE4; --h2:#97D8CD; --h3:#5FC1B2; --h4:#2BA394; --h5:#13857A; --h6:#0B5F58;
     --bad:#d03b3b; --bad-bg:#FEE2E2; --bad-ink:#991B1B;
     --warn-bg:#FEF3C7; --warn-ink:#92400E; --ok-bg:#D1FAE5; --ok-ink:#065F46;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{max-width:100%}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
-  .topbar{background:var(--ink);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-  .topbar h1{font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar{background:var(--brand-deep);color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:3px solid #2BA394}
+  .topbar h1{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:10px;letter-spacing:.01em}
+  .logo{width:30px;height:30px;border-radius:8px;background:#2BA394;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .topbar .sub-brand{font-weight:400;color:#9FD9CF;font-size:13px}
+  .topbar .status-txt{color:#B9D6D2}
   .topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
   .dot{width:8px;height:8px;border-radius:50%;background:#6B7280;flex:none}
   .dot.live{background:#10B981;animation:pulse 2s infinite}
@@ -29,7 +34,7 @@
   .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .btn:hover{background:var(--line-2)}
-  .btn-dark{background:var(--ink);color:#fff;border-color:var(--ink)}.btn-dark:hover{background:#1F2937}
+  .btn-dark{background:var(--brand);color:#fff;border-color:var(--brand)}.btn-dark:hover{background:var(--brand-2)}
   .btn-green{background:#059669;color:#fff;border-color:#059669}
   .btn-red{background:#DC2626;color:#fff;border-color:#DC2626}
   .btn-sm{padding:3px 9px;font-size:12px}
@@ -37,16 +42,27 @@
   .period label{font-size:12px;color:var(--muted)}
   .period select{border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
 
-  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-  .metric{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
-  .metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric-value{font-size:24px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric-sub{font-size:11px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric.alert{border-color:#FCA5A5}.metric.alert .metric-value{color:var(--bad-ink)}
-  .metric.click{cursor:pointer}.metric.click:hover{border-color:#D1D5DB}
+  .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;border-top:4px solid var(--acc,var(--line));position:relative}
+  .metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px;font-weight:600}
+  .metric-label .ic{width:24px;height:24px;border-radius:7px;background:var(--acc-bg,var(--line-2));color:var(--acc,var(--muted));display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .metric-value{font-size:26px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .metric-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric.hero{grid-column:span 2;background:linear-gradient(0deg,#fff,#fff);border-top-width:4px}
+  .metric.hero .metric-value{font-size:36px;color:var(--money)}
+  @media(max-width:900px){.metric.hero{grid-column:span 2}}
+  .metric.money .metric-value{color:var(--money)}
+  .metric.alert{border-color:#FCA5A5;--acc:#DC2626;--acc-bg:#FEE2E2;background:#FFFBFB}.metric.alert .metric-value{color:var(--bad-ink)}
+  .metric.click{cursor:pointer;transition:box-shadow .15s,transform .15s}.metric.click:hover{box-shadow:0 4px 14px rgba(15,118,110,.12);transform:translateY(-1px)}
+  .metric.click::after{content:'→';position:absolute;right:12px;top:12px;color:var(--faint);font-size:13px}
+  .m-green{--acc:#059669;--acc-bg:#D1FAE5}.m-teal{--acc:#0F766E;--acc-bg:#CCFBF1}.m-blue{--acc:#2563EB;--acc-bg:#DBEAFE}
+  .m-amber{--acc:#D97706;--acc-bg:#FEF3C7}.m-violet{--acc:#7C3AED;--acc-bg:#EDE9FE}.m-rose{--acc:#E11D48;--acc-bg:#FFE4E6}
+  .money{color:var(--money) !important;font-weight:700}
+  .hl-mark{background:linear-gradient(transparent 58%,var(--mark) 58%);padding:0 2px;border-radius:2px}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
-  .card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0;box-shadow:0 1px 2px rgba(19,42,43,.04)}
+  .card-title{font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   .count{font-weight:500;color:var(--faint);text-transform:none;letter-spacing:0}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -55,17 +71,18 @@
   .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink-2);border-right:1px solid var(--line)}
   .seg button:last-child{border-right:none}
   .seg button:hover{background:var(--line-2)}
-  .seg button.on{background:var(--ink);color:#fff}
+  .seg button.on{background:var(--brand);color:#fff}
   .hint{font-size:12px;color:var(--muted)}
-  .headline{font-size:13px;color:var(--ink-2);margin-bottom:12px}
-  .headline b{color:var(--ink)}
+  .headline{font-size:14px;color:var(--ink-2);margin-bottom:12px;line-height:1.6;background:var(--brand-bg);border-radius:10px;padding:10px 14px}
+  .headline:empty{display:none}
+  .headline b{color:var(--ink);background:linear-gradient(transparent 58%,var(--mark) 58%);padding:0 2px}
 
   /* tab-uri */
   .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tab{border:none;background:none;padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
-  .tab:hover{color:var(--ink)}
-  .tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+  .tab:hover{color:var(--brand)}
+  .tab.on{color:var(--brand);border-bottom:3px solid var(--brand);font-weight:700}
   .tab .n{font-size:11px;padding:0 6px;border-radius:999px;background:var(--line-2);color:var(--ink-2);font-weight:500}
   .tab .n.alert{background:var(--bad-bg);color:var(--bad-ink)}
   .panel{display:none}.panel.on{display:block}
@@ -73,17 +90,19 @@
   /* tabele */
   .table-wrap{max-height:70vh;overflow:auto;border:1px solid var(--line-2);border-radius:8px}
   table.t{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
-  table.t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.t th{position:sticky;top:0;z-index:1;background:#F6FAF9;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   table.t th.sortable{cursor:pointer;user-select:none}
   table.t th.sortable:hover,table.t th.active{color:var(--ink)}
   table.t th.active::after{content:' ↓'}
   table.t td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}
-  table.t tr:hover td{background:#FAFAFA}
+  table.t tr:hover td{background:#F4FAF8}
   .num{text-align:right !important;font-variant-numeric:tabular-nums;white-space:nowrap}
   td.hl{font-weight:700}
   .w-rank{width:44px;color:var(--faint)}
+  .rk{display:inline-flex;width:24px;height:24px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+  .rk-1{background:#FDE68A;color:#78350F}.rk-2{background:#E5E7EB;color:#374151}.rk-3{background:#FED7AA;color:#7C2D12}
   .w-80{width:80px}.w-90{width:90px}.w-100{width:100px}.w-110{width:110px}.w-120{width:120px}.w-140{width:140px}.w-160{width:160px}
-  .pname{font-weight:500;overflow-wrap:anywhere}
+  .pname{font-weight:600;overflow-wrap:anywhere}
   .pm{border-collapse:separate;border-spacing:4px;font-size:13px;min-width:100%}
   .pm th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:6px 8px;text-align:center;white-space:nowrap}
   .pm th.c,.pm td.c{text-align:left}
@@ -139,7 +158,9 @@
   .share{display:flex;align-items:center;gap:8px}
   .share-bar{flex:1;height:8px;background:var(--line-2);border-radius:4px;overflow:hidden;min-width:40px}
   .share-fill{height:100%;background:var(--series);border-radius:0 4px 4px 0}
-  .delta-up{color:#047857}.delta-down{color:var(--bad-ink)}
+  .delta-up{color:#047857;font-weight:600}.delta-down{color:var(--bad-ink);font-weight:600}
+  .delta-up::before{content:'▲ ';font-size:9px}.delta-down::before{content:'▼ ';font-size:9px}
+  @media(max-width:760px){.topbar .sub-brand{display:none}}
   .empty{text-align:center;padding:2rem;color:var(--faint);font-size:13px}
 
   /* grafice */
@@ -203,7 +224,7 @@
   .progress-title{font-weight:600}
   .progress-sub{font-size:12px;color:var(--muted)}
   .progress-bg{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
-  .progress-fill{height:100%;background:#059669;border-radius:4px;width:0;transition:width .6s ease}
+  .progress-fill{height:100%;background:var(--brand);border-radius:4px;width:0;transition:width .6s ease}
   .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
   @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
   .progress-current{font-size:12px;color:var(--ink-2);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -245,7 +266,7 @@
 <body>
 
 <div class="topbar">
-  <h1>&#x1F9F9; Analizator Facturi Curățenie</h1>
+  <h1><span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 9"/><path d="M6 13h10l2 8H4z"/><path d="M9 17v4M13 17v4"/></svg></span>SimNettoyage <span class="sub-brand">· Analizator facturi</span></h1>
   <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span></div>
 </div>
 
@@ -266,12 +287,13 @@
   </div>
 
   <div class="metric-grid">
-    <div class="metric"><div class="metric-label">Venit</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
-    <div class="metric"><div class="metric-label">Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
-    <div class="metric"><div class="metric-label">Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
-    <div class="metric click" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label">Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
-    <div class="metric click" id="m-prices-box" onclick="showTab('preturi')"><div class="metric-label">Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
-    <div class="metric click" id="m-warn-box" onclick="showTab('facturi')"><div class="metric-label">Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
+    <div class="metric hero m-green"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></span>Venit facturat (menaje)</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
+    <div class="metric click m-amber" id="m-due-box" onclick="showTab('incasari')" title="Deschide tab-ul Încasări"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg></span>De încasat</div><div class="metric-value" id="m-due">—</div><div class="metric-sub" id="m-due-sub"></div></div>
+    <div class="metric m-blue"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
+    <div class="metric m-teal"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
+    <div class="metric click m-violet" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
+    <div class="metric click m-rose" id="m-prices-box" onclick="showTab('preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
+    <div class="metric click m-amber" id="m-warn-box" onclick="showTab('facturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
   </div>
 
   <div class="card" style="padding-top:4px">
@@ -288,7 +310,8 @@
 
     <!-- PROPRIETATI -->
     <section class="panel" id="panel-proprietati" role="tabpanel">
-      <div class="card-head" style="margin-top:14px">
+      <div class="headline" id="p-headline" style="margin-top:14px"></div>
+      <div class="card-head">
         <div class="toolbar">
           <input class="search" id="p-search" type="search" placeholder="Caută proprietate sau client…" aria-label="Caută proprietate">
           <div class="seg" id="p-filter"><button data-f="all" class="on">Toate</button><button data-f="inactive">Inactive</button></div>
@@ -624,7 +647,18 @@ const SORTS = {
   zile_de_la_ultima: p => [p.zile_de_la_ultima ?? -1, p.total],
   distanta_km: p => [p.distanta_km ?? -1, p.total],
 };
+function renderPropsHeadline() {
+  const ps = A.props || [], tot = ps.reduce((a, p) => a + p.total, 0);
+  if (!ps.length || !tot) { $('p-headline').innerHTML = ''; return; }
+  const byT = ps.slice().sort((a, b) => b.total - a.total), top3 = byT.slice(0, 3).reduce((a, p) => a + p.total, 0);
+  const best = ps.filter(p => p.interventii >= 3).sort((a, b) => b.medie - a.medie)[0];
+  $('p-headline').innerHTML = `Casa cu cele mai mari încasări: <b>${esc(byT[0].name)}</b> cu <span class="money">${eur(byT[0].total)}</span>. `
+    + `Primele 3 case aduc <b>${num(top3 / tot * 100)}%</b> din venit.`
+    + (best ? ` Cel mai bun preț pe menaj: <b>${esc(best.name)}</b> (${eur2(best.medie)} / intervenție).` : '')
+    + (A.metrics.inactive ? ` <b style="color:var(--bad-ink)">${A.metrics.inactive} ${A.metrics.inactive === 1 ? 'casă inactivă' : 'case inactive'}</b>.` : '');
+}
 function renderProps() {
+  renderPropsHeadline();
   document.querySelectorAll('#sort-bar button').forEach(b => b.classList.toggle('on', b.dataset.sort === sortBy));
   document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
   document.querySelectorAll('#p-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === propFilter));
@@ -644,14 +678,14 @@ function renderProps() {
     const others = (p.variante || []).filter(x => x !== p.name);
     const last = p.ultima ? `${fmtDate(p.ultima)}<span class="sub-num">${p.zile_de_la_ultima} zile${p.interval_tipic ? ` · de obicei la ${p.interval_tipic} z.` : ''}</span>` : '—';
     return `<tr>
-      <td class="w-rank">${rank}</td>
+      <td class="w-rank"><span class="rk${rank <= 3 && sortBy === 'total' ? ' rk-' + rank : ''}">${rank}</span></td>
       <td><div class="pname">${esc(p.name)} ${p.inactiva ? '<span class="tag bad" title="Fără menaj de mult mai mult timp decât de obicei">inactivă</span>' : ''}<button class="x-btn" data-excl="${esc(p.key)}" data-name="${esc(p.name)}" title="Scoate din listă (nu e o casă, ex. produse)" aria-label="Scoate ${esc(p.name)} din listă">✕</button></div>
         <div class="psub" title="${esc(p.client || '')}">${esc(p.client || '')}</div>
         ${others.length ? `<div class="palias">apare și ca: ${others.map(esc).join(', ')}</div>` : ''}
         <div class="ptypes">${types}${p.ore > 0 ? `<span class="tt tt-alt">${num(p.ore)} h${p.pret_ora ? ' · ' + num(p.pret_ora) + ' €/h' : ''}</span>` : ''}</div></td>
       <td class="num${hl('interventii')}">${p.interventii}</td>
       <td class="num hide-m${hl('frecventa_luna')}">${p.frecventa_luna != null ? num(p.frecventa_luna) : '—'}</td>
-      <td class="num${hl('total')}">${eur(p.total)}</td>
+      <td class="num money${hl('total')}">${eur(p.total)}</td>
       <td class="num hide-m${hl('medie')}">${eur2(p.medie)}</td>
       <td class="num hide-m${hl('distanta_km')}">${p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'}</td>
       <td class="hide-m${hl('zile_de_la_ultima')}">${last}</td>
@@ -733,7 +767,7 @@ function renderClients() {
   $('client-body').innerHTML = c.length ? c.map(x => `<tr>
     <td><div class="pname">${esc(x.client)}${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
       ${(x.membri || []).length ? `<div class="palias" title="${esc(x.membri.join(', '))}">${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}: ${x.membri.slice(0, 6).map(esc).join(', ')}${x.membri.length > 6 ? ` și încă ${x.membri.length - 6}` : ''}</div>` : ''}</td>
-    <td class="num">${eur(x.venit)}</td>
+    <td class="num money">${eur(x.venit)}</td>
     <td class="hide-m"><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>
     <td class="num">${x.case}</td><td class="num hide-m">${x.interventii}</td><td class="num hide-m">${eur2(x.medie)}</td>
     <td class="hide-m">${fmtDate(x.ultima)}</td></tr>`).join('')
@@ -784,7 +818,7 @@ function renderMonthly() {
   if (!$('panel-evolutie').classList.contains('on')) { pendingCharts = true; } else drawMonthlyCharts();
   const shown = ms.filter(x => x.interventii > 0);
   $('month-body').innerHTML = shown.length ? shown.slice().reverse().map(x => `<tr${x.luna === sel ? ' style="background:#EFF6FF"' : ''}>
-    <td>${esc(x.eticheta)}${x.in_curs ? ' <span class="tag gray">în curs</span>' : ''}</td><td class="num">${eur(x.venit)}</td>
+    <td>${esc(x.eticheta)}${x.in_curs ? ' <span class="tag gray">în curs</span>' : ''}</td><td class="num money">${eur(x.venit)}</td>
     <td class="num"${x.in_curs ? ' style="opacity:.45" title="Lună în curs: comparația nu e încă relevantă"' : ''}>${pct(x.vs_luna_trecuta)}</td>
     <td class="num hide-m"${x.in_curs ? ' style="opacity:.45"' : ''}>${pct(x.vs_an_trecut)}</td><td class="num">${x.interventii}</td><td class="num hide-m">${x.ore ? num(x.ore) : '—'}</td><td class="num hide-m">${x.case_active}</td></tr>`).join('')
     : '<tr><td colspan="7" class="empty">Nicio intervenție cu dată în perioada aleasă</td></tr>';
@@ -871,7 +905,7 @@ function renderZones() {
   $('z-headline').innerHTML = `<b>${g.case_cu_distanta}</b> case cu distanță calculată` + (g.estimate ? ` (${g.estimate} estimate)` : '')
     + ` · casele de peste 20 km aduc <b>${num(farPct)}%</b> din venit` + (best ? ` · cel mai rentabil drum: <b>${esc(best.zona)}</b> (${d1(best.eur_km)} €/km)` : '');
   const max = Math.max(...A.zones.map(z => z.procent), 1);
-  $('zone-table').innerHTML = A.zones.map(z => `<tr><td>${esc(z.zona)}</td><td class="num">${z.case}</td><td class="num">${eur(z.venit)}</td>
+  $('zone-table').innerHTML = A.zones.map(z => `<tr><td>${esc(z.zona)}</td><td class="num">${z.case}</td><td class="num money">${eur(z.venit)}</td>
     <td class="num hide-m">${num(z.procent)}%</td><td class="num"><b>${z.eur_km != null ? d1(z.eur_km) : '—'}</b></td><td class="num hide-m">${z.ore_drum ? num(z.ore_drum) : '—'}</td></tr>`).join('');
   $('costly-table').innerHTML = (A.costly || []).map(c => `<tr><td><div class="pname">${esc(c.name)}</div><div class="psub">${esc(c.client || '')}</div></td>
     <td class="num">${num(c.km)} km<span class="sub-num">${c.timp_min ?? '—'} min</span></td><td class="num">${eur2(c.medie)}</td><td class="num hide-m">${c.interventii}</td><td class="num"><b>${d1(c.eur_km)}</b></td></tr>`).join('')
@@ -1051,6 +1085,9 @@ function payDetailHtml(c, mkey, cols) {
 function renderPayments() {
   if (!P) return;
   const sm = P.sumar, nb = $('n-inc');
+  $('m-due').textContent = eur(sm.de_incasat);
+  $('m-due-sub').textContent = sm.restant > 0 ? `${eur(sm.restant)} restanți (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură' : 'facturi'})` : 'nimic restant';
+  $('m-due-box').classList.toggle('alert', sm.restant > 0);
   nb.textContent = sm.restant > 0 ? eur(sm.restant) : ''; nb.classList.toggle('alert', sm.restant > 0);
   $('inc-head').innerHTML = sm.de_incasat > 0
     ? `Ai de încasat <b>${eur(sm.de_incasat)}</b>` + (sm.restant > 0 ? `, din care <b style="color:var(--bad-ink)">${eur(sm.restant)} restanți</b> (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură trecută' : 'facturi trecute'} de scadență).` : ', nimic restant.')
