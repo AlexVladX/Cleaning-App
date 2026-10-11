@@ -64,6 +64,7 @@ settings = {
     "clienti_la_ora": [c.strip() for c in os.environ.get(
         "CLIENTI_LA_ORA", "Aquila Vacances;Esther").split(";") if c.strip()],
     "alias": {},   # cheie proprietate -> cheie proprietate canonica (unire manuala)
+    "ignorate": [],  # sugestii de unire respinse ("Nu e dubla")
 }
 
 # Cuvinte generice ignorate cand comparam numele proprietatilor ("Villa Blue" = "Blue")
@@ -325,7 +326,7 @@ def file_signature(f):
 
 # ---------------------------------------------------------------- backup in Drive
 CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "interventii",
-              "numar", "client", "data_emitere", "total", "metoda", "_dup_key", "processed_at",
+              "numar", "client", "data_emitere", "total", "metoda", "processed_at",
               "randuri", "antet", "av_factura")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 
@@ -341,20 +342,24 @@ def recompute_all():
     """
     rules = current_rules()
     with state_lock:
-        active = [f for f in state["files"].values()
-                  if f.get("status") in ("done", "warning") and f.get("randuri")]
-        by_nr = {}
+        # reevaluam si duplicatele (dupa continut), in ordinea in care au fost citite facturile
+        active = sorted((f for f in state["files"].values()
+                         if f.get("status") in ("done", "warning", "duplicate") and f.get("randuri")),
+                        key=lambda f: (f.get("processed_at") or 0, f.get("name") or ""))
+        seen = {}
         for f in active:
-            if f.get("numar"):
-                by_nr.setdefault(f["numar"], []).append(f)
-        for f in active:
+            k = entry_dup_key(f)
+            if k in seen:
+                f["status"] = "duplicate"
+                f["avertismente"] = [f"Duplicat al fisierului {seen[k]['name']} (acelasi continut) — ignorat"]
+                f["interventii"] = []
+                continue
+            seen[k] = f
             ivs, calc_w = compute_interventions(f["randuri"], f.get("antet") or {}, rules)
             for iv in ivs:
                 iv["_source"], iv["_file_id"] = f["name"], f["id"]
-            same = [o for o in by_nr.get(f.get("numar"), []) if o is not f]
-            nr_w = [f"Numarul {f['numar']} e folosit si de {o['name']} (client {o.get('client')})" for o in same]
             f["interventii"] = ivs
-            f["avertismente"] = calc_w + list(f.get("av_factura") or []) + nr_w
+            f["avertismente"] = calc_w + list(f.get("av_factura") or [])
             f["status"] = "warning" if f["avertismente"] else "done"
         state["interventii"] = [iv for f in state["files"].values()
                                 if f.get("status") in ("done", "warning")
@@ -365,7 +370,7 @@ def recompute_all():
 def apply_saved_settings(saved):
     if not isinstance(saved, dict):
         return
-    for k in RULE_KEYS + ("alias",):
+    for k in RULE_KEYS + ("alias", "ignorate"):
         if k in saved:
             settings[k] = saved[k]
 
@@ -422,8 +427,6 @@ def load_cache():
     files = data.get("files") or {}
     with state_lock:
         for fid_, entry in files.items():
-            if entry.get("_dup_key") is not None:
-                entry["_dup_key"] = tuple(entry["_dup_key"])
             entry.setdefault("interventii", [])
             state["files"][fid_] = entry
         state["interventii"] = [iv for f in state["files"].values()
@@ -444,7 +447,7 @@ def save_cache(force=False):
         cache["dirty"] = False
     payload = json.dumps({"parser_version": PARSER_VERSION,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias",)},
+                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias", "ignorate")},
                           "files": files}, ensure_ascii=False, default=str)
     try:
         get_drive_service().files().update(
@@ -553,9 +556,25 @@ def parse_with_ai(pdf_bytes):
 
 
 # ---------------------------------------------------------------- procesare
-def _dup_key(result):
-    a, t = result["antet"], result["totaluri"]
-    return ((a.get("numar") or "").upper(), (a.get("client") or "").casefold(), t.get("total"))
+def content_key(client, total, randuri, numar=None):
+    """
+    Doua facturi sunt duplicate doar daca au ACELASI CONTINUT: client, total si aceleasi
+    randuri (casa, date, suma). Numarul facturii nu conteaza (poate fi refolosit).
+    """
+    c = norm_text(client)
+    try:
+        tot = round(float(total or 0), 2)
+    except (TypeError, ValueError):
+        tot = 0.0
+    if randuri:
+        rows = tuple(sorted((norm_text(r.get("nom")), tuple(sorted(r.get("dates_raw") or [])),
+                             round(float(r.get("total") or 0), 2)) for r in randuri))
+        return ("continut", c, tot, rows)
+    return ("numar", (numar or "").upper(), c, tot)  # fara randuri (rar): rezerva veche
+
+
+def entry_dup_key(f):
+    return content_key(f.get("client"), f.get("total"), f.get("randuri"), f.get("numar"))
 
 
 def process_file(file_info, idx=None, total=None):
@@ -595,26 +614,24 @@ def process_file(file_info, idx=None, total=None):
         with state_lock:
             others = [f for fid, f in state["files"].items()
                       if fid != file_id and f.get("status") in ("done", "warning")]
-            dup = next((f for f in others if f.get("_dup_key") == _dup_key(result)), None)
-            same_nr = [f for f in others if a.get("numar") and f.get("numar") == a.get("numar")]
+            key = content_key(a.get("client"), t.get("total"), result["randuri"], a.get("numar"))
+            dup = next((f for f in others if entry_dup_key(f) == key), None)
 
             entry = state["files"][file_id]
             entry.update({
                 "numar": a.get("numar"), "client": a.get("client"),
                 "data_emitere": a.get("data_emitere"), "total": t.get("total"),
-                "metoda": result["metoda"], "_dup_key": _dup_key(result),
+                "metoda": result["metoda"],
                 # date brute pastrate in backup -> regulile se pot schimba fara recitirea PDF-ului
                 "randuri": result["randuri"], "antet": a,
                 "av_factura": result.get("avertismente_factura", []),
             })
             if dup:
                 entry["status"] = "duplicate"
-                entry["avertismente"] = [f"Duplicat al fisierului {dup['name']} — ignorat"]
+                entry["avertismente"] = [f"Duplicat al fisierului {dup['name']} (acelasi continut) — ignorat"]
                 entry["interventii"] = []
                 state["interventii"] = [iv for iv in state["interventii"] if iv.get("_file_id") != file_id]
             else:
-                for f in same_nr:
-                    warnings.append(f"Numarul {a['numar']} e folosit si de {f['name']} (client {f.get('client')})")
                 entry["status"] = "warning" if warnings else "done"
                 entry["avertismente"] = warnings
                 entry["interventii"] = interventii
@@ -834,11 +851,19 @@ def tip_label(t):
     return TIP_LABEL.get(t, (t or "").capitalize())
 
 
-def build_excel():
+SORT_KEYS = {
+    "interventii": lambda p: (p["interventii"], p["total"]),
+    "total": lambda p: (p["total"], p["interventii"]),
+    "ore": lambda p: (p["ore"], p["total"]),
+    "medie": lambda p: (p["medie"], p["total"]),
+}
+
+
+def build_excel(sort="interventii"):
     with state_lock:
         interventii = list(state["interventii"])
         files = [dict(f) for f in state["files"].values()]
-    props = aggregate_props(interventii)
+    props = sorted(aggregate_props(interventii), key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
 
     wb = openpyxl.Workbook()
     header_fill = PatternFill("solid", fgColor="1F2937")
@@ -988,7 +1013,7 @@ def api_monitor():
 
 @app.route("/api/export")
 def api_export():
-    buf = build_excel()
+    buf = build_excel(request.args.get("sort", "interventii"))
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1002,19 +1027,50 @@ def _save_async():
     threading.Thread(target=save_cache, daemon=True).start()
 
 
+def merge_suggestions(props, limit=20):
+    """Perechi de proprietati cu nume foarte asemanatoare (ex. 'Reppaser' / 'Reppasage')."""
+    import difflib
+    ignored = set(settings.get("ignorate") or [])
+    items = [(p["key"], p["key"].replace(" ", ""), p) for p in props]
+    out = []
+    for i in range(len(items)):
+        k1, a, p1 = items[i]
+        for j in range(i + 1, len(items)):
+            k2, b, p2 = items[j]
+            if len(a) < 4 or len(b) < 4 or "|".join(sorted((k1, k2))) in ignored:
+                continue
+            if re.sub(r"\d", "", a) == re.sub(r"\d", "", b):
+                continue  # difera doar prin cifre: 'UGF 56' / 'UGF 57' = case diferite
+            sm = difflib.SequenceMatcher(None, a, b)
+            if sm.real_quick_ratio() < 0.8 or sm.quick_ratio() < 0.8:
+                continue  # filtre rapide, ca sa nu incarcam procesorul
+            r = sm.ratio()
+            if r >= 0.8:
+                # unim in proprietatea cu mai multe interventii
+                big, small = (p1, p2) if p1["interventii"] >= p2["interventii"] else (p2, p1)
+                out.append({"din": small["key"], "din_nume": small["name"], "din_n": small["interventii"],
+                            "in": big["key"], "in_nume": big["name"], "in_n": big["interventii"],
+                            "scor": round(r, 2)})
+    return sorted(out, key=lambda s: -s["scor"])[:limit]
+
+
 def _settings_payload():
     with state_lock:
         interventii = list(state["interventii"])
     props = aggregate_props(interventii)
     alias = settings["alias"]
     names = {p["key"]: p["name"] for p in props}
+    # numele original (din facturi) al fiecarei variante, pentru lista de uniri
+    variant_name = {base_prop_key(v): v for p in props for v in p["variante"]}
     return {
         "clienti_la_ora": settings["clienti_la_ora"],
         "tipuri_la_ora": settings["tipuri_la_ora"],
         "prag_forfait": settings["prag_forfait"],
-        "unite": [{"din": k, "in": v, "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
+        "unite": [{"din": k, "din_nume": variant_name.get(k, k), "in": v,
+                   "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
         "proprietati": sorted(({"key": p["key"], "name": p["name"], "variante": p["variante"]}
                                for p in props), key=lambda p: p["name"].casefold()),
+        "sugestii": merge_suggestions(props),
         "clienti": sorted({iv.get("client") for iv in interventii if iv.get("client")}),
     }
 
@@ -1055,6 +1111,19 @@ def api_merge():
     cache["dirty"] = True
     add_log(f"Proprietati unite: '{data.get('din')}' → '{data.get('in')}'")
     _save_async()
+    return jsonify(_settings_payload())
+
+
+@app.route("/api/ignore-suggestion", methods=["POST"])
+def api_ignore_suggestion():
+    """'Nu e dubla' — sugestia nu mai apare."""
+    data = request.json or {}
+    pair = "|".join(sorted((data.get("din") or "", data.get("in") or "")))
+    settings.setdefault("ignorate", [])
+    if pair not in settings["ignorate"]:
+        settings["ignorate"].append(pair)
+        cache["dirty"] = True
+        _save_async()
     return jsonify(_settings_payload())
 
 
