@@ -27,6 +27,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from invoice_parser import (
     parse_invoice, compute_interventions, layout_text, parse_ddmmyyyy, ParseError,
+    norm_text, canonical_type, DEFAULT_RULES, TIP_LABEL,
 )
 
 app = Flask(__name__)
@@ -51,10 +52,41 @@ APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 CACHE_FILE_ID = os.environ.get("CACHE_FILE_ID", "").strip()
 CACHE_FILE_NAME = os.environ.get("CACHE_FILE_NAME", "cache-facturi.json").strip()
 CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
-# Schimbati valoarea cand se modifica parserul/regulile de calcul -> se recitesc toate facturile
-PARSER_VERSION = "2026-10-11"
+# Schimbati valoarea cand se modifica PARSERUL (citirea PDF) -> se recitesc toate facturile.
+# Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
+PARSER_VERSION = "2026-10-11b"
 
 cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False}
+
+# Reguli de calcul + unificari de proprietati. Se editeaza din dashboard si se salveaza in backup.
+settings = {
+    **DEFAULT_RULES,
+    "clienti_la_ora": [c.strip() for c in os.environ.get(
+        "CLIENTI_LA_ORA", "Aquila Vacances;Esther").split(";") if c.strip()],
+    "alias": {},   # cheie proprietate -> cheie proprietate canonica (unire manuala)
+}
+
+# Cuvinte generice ignorate cand comparam numele proprietatilor ("Villa Blue" = "Blue")
+GENERIC_PROP_WORDS = {"villa", "maison", "appartement", "appart", "appt", "apt", "app",
+                      "chalet", "residence", "gite", "house", "casa", "studio", "logement",
+                      "menage", "la", "le", "les", "l"}
+
+
+def base_prop_key(name):
+    """Cheia automata (fara unirile manuale): 'Villa Blue' -> 'blue'."""
+    words = norm_text(name).split()
+    while len(words) > 1 and words[0] in GENERIC_PROP_WORDS:
+        words = words[1:]
+    return " ".join(words) or norm_text(name)
+
+
+def prop_key(name):
+    key = base_prop_key(name)
+    seen = set()
+    while key in settings["alias"] and key not in seen:  # urmam unirile manuale
+        seen.add(key)
+        key = settings["alias"][key]
+    return key
 
 state = {
     "files": {},
@@ -115,7 +147,10 @@ def require_password():
 # ---------------------------------------------------------------- retea
 # Pe unele servere (ex. Render gratuit) conexiunile IPv6 spre Google nu raspund si
 # raman agatate in loc sa esueze rapid. Folosim doar IPv4 (Google are IPv4 peste tot).
-_orig_getaddrinfo = socket.getaddrinfo
+# originalul e pastrat pe modulul socket, ca o reincarcare a app.py sa nu-l "infasoare" de doua ori
+if not hasattr(socket, "_getaddrinfo_original"):
+    socket._getaddrinfo_original = socket.getaddrinfo
+_orig_getaddrinfo = socket._getaddrinfo_original
 FORCE_IPV4 = os.environ.get("FORCE_IPV4", "1") == "1"
 
 
@@ -290,7 +325,49 @@ def file_signature(f):
 
 # ---------------------------------------------------------------- backup in Drive
 CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "interventii",
-              "numar", "client", "data_emitere", "total", "metoda", "_dup_key", "processed_at")
+              "numar", "client", "data_emitere", "total", "metoda", "_dup_key", "processed_at",
+              "randuri", "antet", "av_factura")
+RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
+
+
+def current_rules():
+    return {k: settings[k] for k in RULE_KEYS}
+
+
+def recompute_all():
+    """
+    Recalculeaza interventiile tuturor facturilor din randurile salvate, cu regulile curente.
+    Nu descarca si nu reciteste niciun PDF — dureaza o fractiune de secunda.
+    """
+    rules = current_rules()
+    with state_lock:
+        active = [f for f in state["files"].values()
+                  if f.get("status") in ("done", "warning") and f.get("randuri")]
+        by_nr = {}
+        for f in active:
+            if f.get("numar"):
+                by_nr.setdefault(f["numar"], []).append(f)
+        for f in active:
+            ivs, calc_w = compute_interventions(f["randuri"], f.get("antet") or {}, rules)
+            for iv in ivs:
+                iv["_source"], iv["_file_id"] = f["name"], f["id"]
+            same = [o for o in by_nr.get(f.get("numar"), []) if o is not f]
+            nr_w = [f"Numarul {f['numar']} e folosit si de {o['name']} (client {o.get('client')})" for o in same]
+            f["interventii"] = ivs
+            f["avertismente"] = calc_w + list(f.get("av_factura") or []) + nr_w
+            f["status"] = "warning" if f["avertismente"] else "done"
+        state["interventii"] = [iv for f in state["files"].values()
+                                if f.get("status") in ("done", "warning")
+                                for iv in f.get("interventii") or []]
+    cache["dirty"] = True
+
+
+def apply_saved_settings(saved):
+    if not isinstance(saved, dict):
+        return
+    for k in RULE_KEYS + ("alias",):
+        if k in saved:
+            settings[k] = saved[k]
 
 
 def find_cache_file():
@@ -336,6 +413,7 @@ def load_cache():
         add_log(f"⚠ Backup ilizibil ({e}) — il refac de la zero")
         cache["dirty"] = True
         return
+    apply_saved_settings(data.get("setari"))  # setarile raman valabile si cand se schimba parserul
     if data.get("parser_version") != PARSER_VERSION:
         if data.get("files"):
             add_log("Parserul s-a actualizat — recitesc toate facturile o singura data")
@@ -351,6 +429,8 @@ def load_cache():
         state["interventii"] = [iv for f in state["files"].values()
                                 if f.get("status") in ("done", "warning")
                                 for iv in f.get("interventii") or []]
+    recompute_all()
+    cache["dirty"] = False
     add_log(f"Backup incarcat: {len(files)} facturi (salvat {data.get('saved_at', '?')})")
 
 
@@ -364,6 +444,7 @@ def save_cache(force=False):
         cache["dirty"] = False
     payload = json.dumps({"parser_version": PARSER_VERSION,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                          "setari": {k: settings[k] for k in RULE_KEYS + ("alias",)},
                           "files": files}, ensure_ascii=False, default=str)
     try:
         get_drive_service().files().update(
@@ -456,8 +537,9 @@ def parse_with_ai(pdf_bytes):
                      "dates_raw": [str(d) for d in (r.get("dates") or [])],
                      "qty": num(r.get("qty")), "pu": num(r.get("pu")), "total": num(r.get("total"))})
     rows = [r for r in rows if r["nom"] or r["total"]]
-    interventii, warnings = compute_interventions(rows, header)
+    interventii, warnings = compute_interventions(rows, header, current_rules())
     total = round(sum(r["total"] or 0 for r in rows), 2)
+    ai_note = ["Citita cu AI (sablon necunoscut) — verificati manual"]
     return {
         "metoda": "ai",
         "antet": {**header, "data_emitere": header["data_emitere"].strftime("%d/%m/%Y")
@@ -465,7 +547,8 @@ def parse_with_ai(pdf_bytes):
         "randuri": rows,
         "totaluri": {"subtotal": total, "ajustari": 0.0, "total": total},
         "interventii": interventii,
-        "avertismente": ["Citita cu AI (sablon necunoscut) — verificati manual"] + warnings,
+        "avertismente": ai_note + warnings,
+        "avertismente_factura": ai_note,
     }
 
 
@@ -494,7 +577,7 @@ def process_file(file_info, idx=None, total=None):
         pdf_bytes = download_pdf(file_id)
         set_stage(f"citesc {name}")
         try:
-            result = parse_invoice(pdf_bytes)
+            result = parse_invoice(pdf_bytes, current_rules())
         except ParseError as pe:
             if not LLM_API_KEY:
                 raise ValueError(f"{pe} (nicio cheie AI pentru rezerva)")
@@ -520,6 +603,9 @@ def process_file(file_info, idx=None, total=None):
                 "numar": a.get("numar"), "client": a.get("client"),
                 "data_emitere": a.get("data_emitere"), "total": t.get("total"),
                 "metoda": result["metoda"], "_dup_key": _dup_key(result),
+                # date brute pastrate in backup -> regulile se pot schimba fara recitirea PDF-ului
+                "randuri": result["randuri"], "antet": a,
+                "av_factura": result.get("avertismente_factura", []),
             })
             if dup:
                 entry["status"] = "duplicate"
@@ -658,6 +744,8 @@ def scan_folder(retry_errors=False):
         add_log(f"{len(files)} PDF-uri in Drive · {unchanged} deja citite · {len(todo)} de procesat")
         if todo:
             process_queue_background(todo)
+        if todo or removed:
+            recompute_all()  # avertismentele "acelasi numar" devin simetrice intre facturi
         save_cache()
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
@@ -698,18 +786,28 @@ def start_background():
 
 # ---------------------------------------------------------------- agregari
 def aggregate_props(interventii):
+    """
+    Clasament pe proprietati. Variantele de nume ("Villa Blue", "Blue") sunt grupate automat
+    (prop_key) si prin unirile manuale din setari.
+    """
     props = {}
     for iv in interventii:
-        name = (iv.get("proprietate") or "Necunoscut").strip()
-        key = re.sub(r"\s+", " ", name).casefold()
-        p = props.setdefault(key, {"name": name, "interventii": 0, "forfait": 0, "ore": 0.0,
-                                   "total": 0.0, "clients": set(), "ultima": ""})
+        raw = re.sub(r"\s+", " ", (iv.get("proprietate") or "Necunoscut").strip())
+        key = prop_key(raw)
+        p = props.setdefault(key, {"key": key, "interventii": 0, "forfait": 0, "ore": 0.0,
+                                   "total": 0.0, "venit_ora": 0.0, "clients": set(), "ultima": "",
+                                   "variante": {}, "tipuri": {}})
         p["interventii"] += 1
+        p["variante"][raw] = p["variante"].get(raw, 0) + 1
+        tip = iv.get("tip_menaj") or canonical_type(iv.get("tip_serviciu"))
+        p["tipuri"][tip] = p["tipuri"].get(tip, 0) + 1
+        suma = float(iv.get("suma") or 0)
         if iv.get("tip_facturare") == "heure":
             p["ore"] += float(iv.get("ore") or iv.get("qty") or 0)
+            p["venit_ora"] += suma
         else:
             p["forfait"] += 1
-        p["total"] += float(iv.get("suma") or 0)
+        p["total"] += suma
         if iv.get("client"):
             p["clients"].add(iv["client"])
         if (iv.get("data_iso") or "") > p["ultima"]:
@@ -717,14 +815,23 @@ def aggregate_props(interventii):
     out = list(props.values())
     max_c = max((p["interventii"] for p in out), default=1) or 1
     for p in out:
+        # numele afisat: o varianta a proprietatii in care s-a unit (daca e cazul),
+        # apoi cea mai des intalnita, apoi cea mai lunga
+        p["name"] = max(p["variante"], key=lambda v: (base_prop_key(v) == p["key"], p["variante"][v], len(v)))
+        p["variante"] = sorted(p["variante"])
         p["client"] = ", ".join(sorted(p.pop("clients")))
         p["ore"] = round(p["ore"], 2)
         p["total"] = round(p["total"], 2)
         p["medie"] = round(p["total"] / p["interventii"], 2) if p["interventii"] else 0
+        p["pret_ora"] = round(p.pop("venit_ora") / p["ore"], 2) if p["ore"] else None
         p["pct"] = round(p["interventii"] / max_c * 100)
         p["perf"] = ("Performant" if p["interventii"] >= max_c * 0.7
                      else "Mediu" if p["interventii"] >= max_c * 0.4 else "Rar")
     return sorted(out, key=lambda p: (p["interventii"], p["total"]), reverse=True)
+
+
+def tip_label(t):
+    return TIP_LABEL.get(t, (t or "").capitalize())
 
 
 def build_excel():
@@ -751,32 +858,41 @@ def build_excel():
 
     ws1 = wb.active
     ws1.title = "Clasament proprietati"
-    sheet(ws1, ["Rang", "Proprietate", "Client", "Interventii", "din care forfait", "Ore (la ora)",
-                "Venit total (EUR)", "Medie / interventie", "Ultima interventie", "Performanta"],
-          [6, 28, 26, 12, 14, 12, 16, 18, 16, 13])
+    sheet(ws1, ["Rang", "Proprietate", "Client", "Interventii", "Standard", "Intermédiaire",
+                "Ouverture", "Ore (la ora)", "€/ora", "Venit total (EUR)", "Medie / interventie",
+                "Ultima interventie", "Performanta", "Apare in facturi ca"],
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 15, 17, 16, 13, 36])
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p["ultima"] else ""
-        ws1.append([i, p["name"], p["client"], p["interventii"], p["forfait"], p["ore"] or None,
-                    p["total"], p["medie"], ultima, p["perf"]])
+        t = p["tipuri"]
+        ws1.append([i, p["name"], p["client"], p["interventii"], t.get("standard") or None,
+                    t.get("intermediaire") or None, t.get("ouverture") or None, p["ore"] or None,
+                    p["pret_ora"], p["total"], p["medie"], ultima, p["perf"],
+                    ", ".join(p["variante"]) if len(p["variante"]) > 1 else ""])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 11):
+        for col in range(1, 15):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
                 c.fill = PatternFill("solid", fgColor=fill)
 
     ws2 = wb.create_sheet("Detalii interventii")
-    sheet(ws2, ["Proprietate", "Client", "Data", "Tip serviciu", "Facturare", "Ore",
-                "Pret unitar", "Suma (EUR)", "Factura", "Fisier"],
-          [26, 26, 12, 14, 11, 8, 11, 12, 13, 30])
+    sheet(ws2, ["Proprietate", "Proprietate (grupata)", "Client", "Data", "Tip menaj", "Facturare",
+                "De ce la ora", "Ore", "Pret unitar", "Suma (EUR)", "Factura", "Fisier"],
+          [24, 22, 24, 12, 14, 10, 13, 7, 11, 11, 13, 28])
+    names = {p["key"]: p["name"] for p in props}
+    motiv = {"client": "client la ora", "tip": "tip menaj", "pret": "pret < prag"}
     for iv in sorted(interventii, key=lambda x: (x.get("data_iso") or "", x.get("proprietate") or "")):
         d = datetime.fromisoformat(iv["data_iso"]) if iv.get("data_iso") else None
-        ws2.append([iv.get("proprietate"), iv.get("client"), d, iv.get("tip_serviciu"),
-                    iv.get("tip_facturare"), iv.get("ore"), iv.get("pret_unitar"),
-                    round(float(iv.get("suma") or 0), 2), iv.get("factura"), iv.get("_source")])
+        ws2.append([iv.get("proprietate"), names.get(prop_key(iv.get("proprietate") or "")),
+                    iv.get("client"), d,
+                    tip_label(iv.get("tip_menaj") or canonical_type(iv.get("tip_serviciu"))),
+                    iv.get("tip_facturare"), motiv.get(iv.get("motiv_ora"), ""), iv.get("ore"),
+                    iv.get("pret_unitar"), round(float(iv.get("suma") or 0), 2), iv.get("factura"),
+                    iv.get("_source")])
         r = ws2.max_row
-        ws2.cell(r, 3).number_format = "DD/MM/YYYY"
-        for col in range(1, 11):
+        ws2.cell(r, 4).number_format = "DD/MM/YYYY"
+        for col in range(1, 13):
             ws2.cell(r, col).border = thin
 
     ws3 = wb.create_sheet("Facturi")
@@ -802,7 +918,8 @@ def build_excel():
 # ---------------------------------------------------------------- rute
 def _public_file(f, light=False):
     """light=True: fara lista de interventii (dashboard-ul o cere la fiecare cateva secunde)."""
-    out = {k: v for k, v in f.items() if not k.startswith("_") and not (light and k == "interventii")}
+    heavy = ("interventii", "randuri", "antet", "av_factura")
+    out = {k: v for k, v in f.items() if not k.startswith("_") and not (light and k in heavy)}
     if light:
         out["n_interventii"] = len(f.get("interventii") or [])
     return out
@@ -878,6 +995,77 @@ def api_export():
         as_attachment=True,
         download_name=f"analiza-curatenie-{datetime.now():%Y-%m-%d}.xlsx",
     )
+
+
+# ---------------------------------------------------------------- setari & unire proprietati
+def _save_async():
+    threading.Thread(target=save_cache, daemon=True).start()
+
+
+def _settings_payload():
+    with state_lock:
+        interventii = list(state["interventii"])
+    props = aggregate_props(interventii)
+    alias = settings["alias"]
+    names = {p["key"]: p["name"] for p in props}
+    return {
+        "clienti_la_ora": settings["clienti_la_ora"],
+        "tipuri_la_ora": settings["tipuri_la_ora"],
+        "prag_forfait": settings["prag_forfait"],
+        "unite": [{"din": k, "in": v, "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
+        "proprietati": sorted(({"key": p["key"], "name": p["name"], "variante": p["variante"]}
+                               for p in props), key=lambda p: p["name"].casefold()),
+        "clienti": sorted({iv.get("client") for iv in interventii if iv.get("client")}),
+    }
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    if request.method == "POST":
+        data = request.json or {}
+
+        def clean_list(v):
+            items = v.splitlines() if isinstance(v, str) else (v or [])
+            return [s.strip() for s in items if s and s.strip()]
+        if "clienti_la_ora" in data:
+            settings["clienti_la_ora"] = clean_list(data["clienti_la_ora"])
+        if "tipuri_la_ora" in data:
+            settings["tipuri_la_ora"] = clean_list(data["tipuri_la_ora"])
+        if "prag_forfait" in data:
+            try:
+                settings["prag_forfait"] = max(0.0, float(str(data["prag_forfait"]).replace(",", ".")))
+            except ValueError:
+                return jsonify({"ok": False, "error": "Prag invalid"}), 400
+        recompute_all()
+        add_log(f"Reguli actualizate: clienti la ora = {', '.join(settings['clienti_la_ora']) or '—'} · "
+                f"tipuri la ora = {', '.join(settings['tipuri_la_ora']) or '—'} · "
+                f"prag forfait = {settings['prag_forfait']:g} € — recalculat fara recitirea facturilor")
+        _save_async()
+    return jsonify(_settings_payload())
+
+
+@app.route("/api/merge", methods=["POST"])
+def api_merge():
+    """Uneste proprietatea `din` in proprietatea `in` (ex. 'Blue' in 'Villa Blue')."""
+    data = request.json or {}
+    src, dst = prop_key(data.get("din") or ""), prop_key(data.get("in") or "")
+    if not src or not dst or src == dst:
+        return jsonify({"ok": False, "error": "Alegeti doua proprietati diferite"}), 400
+    settings["alias"][src] = dst
+    cache["dirty"] = True
+    add_log(f"Proprietati unite: '{data.get('din')}' → '{data.get('in')}'")
+    _save_async()
+    return jsonify(_settings_payload())
+
+
+@app.route("/api/unmerge", methods=["POST"])
+def api_unmerge():
+    key = (request.json or {}).get("din")
+    if settings["alias"].pop(key, None) is not None:
+        cache["dirty"] = True
+        add_log(f"Unire anulata: '{key}'")
+        _save_async()
+    return jsonify(_settings_payload())
 
 
 @app.route("/healthz")

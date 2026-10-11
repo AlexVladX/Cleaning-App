@@ -16,6 +16,7 @@ Calculul interventiilor se face in cod (nu de AI), cu aceleasi reguli ca inainte
 """
 import os
 import re
+import unicodedata
 from datetime import datetime, timedelta
 
 import pdfplumber
@@ -152,6 +153,15 @@ def _parse_header(pages_words, full_text):
     if m:
         info["data_emitere"] = parse_ddmmyyyy(m.group(1))
 
+    def value_below(words, label, x_right, y_limit):
+        """Cuvintele de pe primul rand de sub o eticheta, in coloana ei."""
+        cand = [w for w in words if label["bottom"] < w["top"] < min(label["bottom"] + 22, y_limit)
+                and label["x0"] - 6 <= w["x0"] < x_right]
+        if not cand:
+            return []
+        top = min(w["top"] for w in cand)
+        return sorted((w for w in cand if abs(w["top"] - top) <= 3), key=lambda w: w["x0"])
+
     for words in pages_words:
         fp = _find_seq(words, "Facture", "pour")
         if not fp:
@@ -159,32 +169,37 @@ def _parse_header(pages_words, full_text):
         fnum = _find_seq(words, "Facture", "#")
         fdue = _find_seq(words, "Date", "d'échéance")
         desc = _find_seq(words, "Description")
-        x_num = fnum["x0"] - 2 if fnum else fp["x0"] + 165
-        x_due = fdue["x0"] - 2 if fdue else x_num + 105
-        y_end = desc["top"] - 2 if desc else fp["top"] + 90
+        y_end = desc["top"] - 2 if desc else fp["top"] + 110
+
+        # coloana clientului se termina unde incepe urmatoarea eticheta de pe randul
+        # "Facture pour" (ex. "Payable à" sau "Facture #"), oricare ar fi aspectul antetului
+        same_line = [w for w in words if abs(w["top"] - fp["top"]) <= 3 and w["x0"] > fp["x1"] + 20]
+        x_client = min((w["x0"] for w in same_line), default=(fnum["x0"] if fnum else fp["x0"] + 165)) - 2
 
         block = [w for w in words if fp["bottom"] + 1 < w["top"] < y_end]
-        left = [w for w in block if w["x0"] < x_num]
-        lines = _lines(left)
+        lines = _lines([w for w in block if w["x0"] < x_client])
         if lines:
             info["client"] = " ".join(_clean(w["text"]) for w in lines[0])
             info["client_adresa"] = ", ".join(
                 " ".join(_clean(w["text"]) for w in l) for l in lines[1:]
             ) or None
 
-        first_line_top = min((w["top"] for w in block), default=None)
-        if first_line_top is not None:
-            row = [w for w in block if abs(w["top"] - first_line_top) <= 3]
-            num = [w for w in row if x_num <= w["x0"] < x_due]
-            due = [w for w in row if w["x0"] >= x_due]
-            if num:
-                info["numar"] = " ".join(_clean(w["text"]) for w in num)
-            if due:
-                info["scadenta"] = parse_ddmmyyyy(due[0]["text"])
+        if fnum:
+            x_right = fdue["x0"] - 2 if fdue and abs(fdue["top"] - fnum["top"]) <= 3 else fnum["x0"] + 100
+            num = value_below(words, fnum, x_right, y_end)
+            txt = " ".join(_clean(w["text"]) for w in num)
+            m = re.search(r"[A-Z]{2,6}-\d{2}-\d{1,5}", txt)
+            if m or (txt and re.search(r"\d", txt)):
+                info["numar"] = m.group(0) if m else txt
+        if fdue:
+            due = value_below(words, fdue, fdue["x0"] + 150, y_end)
+            d = next((w for w in due if DATE_RE.match(_clean(w["text"]))), None)
+            if d:
+                info["scadenta"] = parse_ddmmyyyy(d["text"])
         break
 
     if not info["numar"]:
-        m = re.search(r"\b([A-Z]{2,5}-\d{2}-\d{2,5})\b", full_text)
+        m = re.search(r"\b([A-Z]{2,6}-\d{2}-\d{1,5})\b", full_text)
         if m:
             info["numar"] = m.group(1)
     return info
@@ -295,7 +310,6 @@ def _detail_rows(page):
 
     # coloane: text aliniat la stanga, sume aliniate la dreapta
     x_type = (h_type["x0"] - 20) if h_type else h_nom["x0"] + 85
-    x_date = (h_date["x0"] - 3) if h_date else x_type + 60
     x_qty = h_qty["x0"] - 3
     right_edges = {
         "qty": h_qty["x1"],
@@ -340,8 +354,8 @@ def _detail_rows(page):
                 nums[col].append(w)
             elif w["x0"] < x_type:
                 nom.append(w)
-            elif w["x0"] < x_date:
-                typ.append(w)
+            elif w["x0"] < x_qty:
+                typ.append(w)  # include si cuvintele lungi ("Intermédiaire") care trec in coloana datei
         if not nom and not dates:
             continue                               # rand gol (doar €0.00)
 
@@ -359,12 +373,59 @@ def _detail_rows(page):
     return rows, words, y_start
 
 
+# --------------------------------------------------------------------------- reguli de calcul
+
+DEFAULT_RULES = {
+    "prag_forfait": FORFAIT_MIN_PRICE,      # sub acest pret unitar -> la ora (rezerva)
+    "tipuri_la_ora": ["intermediaire"],     # tipuri de menaj facturate mereu la ora
+    "clienti_la_ora": [],                   # clienti facturati mereu la ora
+}
+
+TIP_LABEL = {"standard": "Standard", "intermediaire": "Intermédiaire", "ouverture": "Ouverture"}
+
+
+def norm_text(s):
+    """'Intermédiaire ' -> 'intermediaire'; fara accente, litere mici, spatii simple."""
+    s = unicodedata.normalize("NFKD", _clean(s or ""))
+    s = "".join(c for c in s if not unicodedata.combining(c)).casefold()
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def canonical_type(t):
+    n = norm_text(t)
+    if not n or "standard" in n:
+        return "standard"
+    if "interm" in n:
+        return "intermediaire"
+    if "ouvert" in n or "opening" in n:
+        return "ouverture"
+    return n
+
+
+def billing_mode(row, client, rules):
+    """('heure'|'forfait', motiv). Ordinea: client la ora > tip la ora > pret sub prag."""
+    rules = {**DEFAULT_RULES, **(rules or {})}
+    c = norm_text(client)
+    for name in rules.get("clienti_la_ora") or []:
+        if norm_text(name) and norm_text(name) in c:
+            return "heure", "client"
+    tip = canonical_type(row.get("type"))
+    if tip in {canonical_type(t) for t in rules.get("tipuri_la_ora") or []}:
+        return "heure", "tip"
+    pu = row.get("pu")
+    if pu is not None and pu < float(rules.get("prag_forfait") or FORFAIT_MIN_PRICE):
+        return "heure", "pret"
+    return "forfait", None
+
+
 # --------------------------------------------------------------------------- interventii
 
-def compute_interventions(rows, header, threshold=FORFAIT_MIN_PRICE):
+def compute_interventions(rows, header, rules=None):
     """Transforma randurile facturii in interventii individuale + avertismente."""
     interventii, warnings = [], []
     inv_date = header.get("data_emitere")
+    if isinstance(inv_date, str):
+        inv_date = parse_ddmmyyyy(inv_date)
 
     for r in rows:
         nom = r.get("nom") or "Necunoscut"
@@ -389,7 +450,8 @@ def compute_interventions(rows, header, threshold=FORFAIT_MIN_PRICE):
             else:
                 warnings.append(f"{nom}: data invalida '{d}'")
 
-        mode = "heure" if (pu is not None and pu < threshold) else "forfait"
+        mode, motiv = billing_mode({**r, "pu": pu}, header.get("client"), rules)
+        tip = canonical_type(r.get("type"))
         n = len(dates)
         if n == 0:
             n = int(round(qty)) if (mode == "forfait" and qty and float(qty).is_integer()) else 1
@@ -408,7 +470,9 @@ def compute_interventions(rows, header, threshold=FORFAIT_MIN_PRICE):
                 "data": d.strftime("%d/%m/%Y") if d else "",
                 "data_iso": d.isoformat() if d else "",
                 "tip_serviciu": r.get("type") or "",
+                "tip_menaj": tip,
                 "tip_facturare": mode,
+                "motiv_ora": motiv,
                 "qty": ore if mode == "heure" else 1,
                 "ore": ore,
                 "pret_unitar": pu,
@@ -429,7 +493,18 @@ def layout_text(pdf_source):
         return "\n\n".join((p.extract_text(layout=True) or "") for p in pdf.pages).strip()
 
 
-def parse_invoice(pdf_source):
+def invoice_warnings(rows, totals):
+    """Avertismente la nivel de factura (nu depind de regulile de calcul)."""
+    warnings = []
+    rows_sum = round(sum(r.get("total") or 0 for r in rows), 2)
+    if totals.get("subtotal") is not None and abs(rows_sum - totals["subtotal"]) > 0.01:
+        warnings.append(f"Suma randurilor {rows_sum:.2f} ≠ Subtotal {totals['subtotal']:.2f}")
+    if totals.get("ajustari"):
+        warnings.append(f"Ajustari de {totals['ajustari']:.2f} € — nu sunt repartizate pe proprietati")
+    return warnings
+
+
+def parse_invoice(pdf_source, rules=None):
     """
     pdf_source: cale sau file-like (BytesIO).
     Intoarce dict cu antet, randuri, totaluri, interventii, avertismente.
@@ -462,13 +537,8 @@ def parse_invoice(pdf_source):
     if not header.get("client"):
         raise ParseError("Clientul ('Facture pour') nu a fost gasit")
 
-    interventii, warnings = compute_interventions(rows, header)
-
-    rows_sum = round(sum(r["total"] or 0 for r in rows), 2)
-    if totals.get("subtotal") is not None and abs(rows_sum - totals["subtotal"]) > 0.01:
-        warnings.append(f"Suma randurilor {rows_sum:.2f} ≠ Subtotal {totals['subtotal']:.2f}")
-    if totals.get("ajustari"):
-        warnings.append(f"Ajustari de {totals['ajustari']:.2f} € — nu sunt repartizate pe proprietati")
+    interventii, calc_warnings = compute_interventions(rows, header, rules)
+    inv_warnings = invoice_warnings(rows, totals)
 
     return {
         "metoda": "parser",
@@ -480,7 +550,8 @@ def parse_invoice(pdf_source):
         "randuri": rows,
         "totaluri": totals,
         "interventii": interventii,
-        "avertismente": warnings,
+        "avertismente": calc_warnings + inv_warnings,
+        "avertismente_factura": inv_warnings,
     }
 
 

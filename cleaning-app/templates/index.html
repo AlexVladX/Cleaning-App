@@ -74,6 +74,27 @@
   .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
   @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
   .progress-current{font-size:12px;color:#374151;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prop-types{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+  .tt{font-size:10px;padding:1px 6px;border-radius:5px;font-weight:500;white-space:nowrap}
+  .tt-standard{background:#E0E7FF;color:#3730A3}.tt-intermediaire{background:#FCE7F3;color:#9D174D}
+  .tt-ouverture{background:#FEF3C7;color:#92400E}.tt-alt{background:#E5E7EB;color:#374151}
+  .prop-alias{font-size:10px;color:#9CA3AF}
+  details.settings{margin-top:16px}
+  details.settings>summary{cursor:pointer;list-style:none;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em}
+  details.settings>summary::before{content:'▸ ';}
+  details.settings[open]>summary::before{content:'▾ ';}
+  .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+  @media(max-width:700px){.set-grid{grid-template-columns:1fr}}
+  .set-grid label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
+  .set-grid .hint{font-size:11px;color:#6B7280;margin-bottom:6px}
+  .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff}
+  .set-grid textarea{min-height:74px;resize:vertical}
+  .merge-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .merge-row select{flex:1;min-width:0}
+  .merge-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .merge-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;background:#F9FAFB;border-radius:6px;padding:5px 8px}
+  .link-btn{border:none;background:none;color:#DC2626;cursor:pointer;font-size:12px}
+  .saved{font-size:12px;color:#059669;margin-left:8px}
   .file-item.fresh{background:#ECFDF5;animation:fresh 2.5s ease-out}
   @keyframes fresh{0%{background:#A7F3D0}100%{background:#ECFDF5}}
   .last-scan{font-size:11px;color:#9CA3AF;margin-top:6px}
@@ -133,6 +154,38 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <details class="settings" id="settings-box" style="margin-top:0">
+      <summary>Reguli de calcul și proprietăți</summary>
+      <div class="set-grid">
+        <div>
+          <label for="s-clienti">Clienți facturați doar la oră</label>
+          <div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div>
+          <textarea id="s-clienti"></textarea>
+        </div>
+        <div>
+          <label for="s-tipuri">Tipuri de menaj facturate la oră</label>
+          <div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div>
+          <textarea id="s-tipuri"></textarea>
+        </div>
+        <div>
+          <label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label>
+          <input id="s-prag" type="number" min="0" step="1">
+          <div style="margin-top:10px"><button class="btn btn-dark" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div>
+        </div>
+        <div>
+          <label>Unește proprietăți (aceeași casă cu nume diferite)</label>
+          <div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
+          <div class="merge-row">
+            <select id="m-din"></select><span>→</span><select id="m-in"></select>
+            <button class="btn" onclick="mergeProps()">Unește</button>
+          </div>
+          <div class="merge-list" id="m-list"></div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="card">
@@ -234,18 +287,25 @@ function renderState(s) {
   if (!s.props || !s.props.length) {
     pl.innerHTML = '<div class="empty">Datele vor apărea după analiză</div>';
   } else {
-    pl.innerHTML = s.props.map((p, i) => `
+    const TL = {standard:'Standard', intermediaire:'Intermédiaire', ouverture:'Ouverture'};
+    pl.innerHTML = s.props.map((p, i) => {
+      const types = Object.entries(p.tipuri || {}).sort((a,b) => b[1]-a[1]).map(([t,n]) =>
+        `<span class="tt ${TL[t] ? 'tt-'+t : 'tt-alt'}">${esc(TL[t] || t)} ${n}</span>`).join('');
+      const others = (p.variante || []).filter(v => v !== p.name);
+      return `
       <div class="prop-row">
         <span class="prop-rank">${i+1}</span>
         <div class="prop-info">
           <span class="prop-name">${esc(p.name)}</span>
           <span class="prop-client">${esc(p.client || '')}</span>
+          ${others.length ? `<span class="prop-alias">apare și ca: ${others.map(esc).join(', ')}</span>` : ''}
+          <span class="prop-types">${types}</span>
         </div>
         <span class="prop-stat" title="Intervenții (forfait: ${p.forfait})">&#x1F3E0; ${p.interventii}x</span>
-        <span class="prop-stat" title="Ore facturate la oră">${p.ore > 0 ? '&#x23F1; ' + p.ore + 'h' : ''}</span>
+        <span class="prop-stat" title="Ore facturate la oră${p.pret_ora ? ' · ' + p.pret_ora + ' €/h' : ''}">${p.ore > 0 ? '&#x23F1; ' + p.ore + 'h' : ''}</span>
         <span class="prop-stat prop-total">${p.total.toLocaleString('fr-FR')}€</span>
         <span class="perf ${p.perf==='Performant'?'ph':p.perf==='Mediu'?'pm':'pl'}">${p.perf}</span>
-      </div>`).join('');
+      </div>`; }).join('');
   }
 
   // Log
@@ -285,6 +345,52 @@ async function resetAll() {
     console.error('Reset error:', e);
   }
 }
+
+// ---- reguli de calcul & unire proprietati
+async function loadSettings(data) {
+  const s = data || await (await fetch('/api/settings')).json();
+  const ta = document.getElementById('s-clienti');
+  if (document.activeElement !== ta) ta.value = (s.clienti_la_ora || []).join('\n');
+  const tt = document.getElementById('s-tipuri');
+  if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
+  const pr = document.getElementById('s-prag');
+  if (document.activeElement !== pr) pr.value = s.prag_forfait;
+  const opts = (s.proprietati || []).map(p =>
+    `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
+  const din = document.getElementById('m-din'), inn = document.getElementById('m-in');
+  const keep = [din.value, inn.value];
+  din.innerHTML = '<option value="">Proprietatea…</option>' + opts;
+  inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
+  din.value = keep[0]; inn.value = keep[1];
+  document.getElementById('m-list').innerHTML = (s.unite || []).map(u =>
+    `<div class="merge-item"><span>${esc(u.din)} → <b>${esc(u.in_nume)}</b></span>
+     <button class="link-btn" onclick="unmerge('${esc(u.din).replace(/'/g, "\\'")}')">anulează</button></div>`).join('');
+}
+async function post(url, body) {
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || 'Eroare'); return null; }
+  return j;
+}
+async function saveSettings() {
+  const j = await post('/api/settings', {
+    clienti_la_ora: document.getElementById('s-clienti').value,
+    tipuri_la_ora: document.getElementById('s-tipuri').value,
+    prag_forfait: document.getElementById('s-prag').value,
+  });
+  if (j) { loadSettings(j); fetchState(); const el = document.getElementById('s-saved'); el.textContent = '✓ Salvat și recalculat'; setTimeout(() => el.textContent = '', 3000); }
+}
+async function mergeProps() {
+  const din = document.getElementById('m-din').value, inn = document.getElementById('m-in').value;
+  if (!din || !inn) return;
+  const j = await post('/api/merge', {din, in: inn});
+  if (j) { document.getElementById('m-din').value = ''; loadSettings(j); fetchState(); }
+}
+async function unmerge(din) {
+  const j = await post('/api/unmerge', {din});
+  if (j) { loadSettings(j); fetchState(); }
+}
+document.getElementById('settings-box').addEventListener('toggle', e => { if (e.target.open) loadSettings(); });
 
 // actualizare: la 2s in timpul scanarii, la 5s in rest
 let timer = null, every = 5000;
