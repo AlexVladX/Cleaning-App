@@ -25,6 +25,7 @@ import google_auth_httplib2
 import httplib2
 import openpyxl
 import analytics
+import costs
 import geo
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
@@ -78,6 +79,12 @@ settings = {
     "grupuri_clienti": [],
     # incasari: id fisier factura -> {"suma": incasat, "data": "YYYY-MM-DD", "nota": ""}
     "incasari": {},
+    # cheltuieli: [{"id", "data": "YYYY-MM-DD", "categorie", "suma", "nota", "lunar": bool, "pana_la": "YYYY-MM"}]
+    "cheltuieli": [],
+    "categorii_cheltuieli": [dict(c) for c in costs.CATEGORII_IMPLICITE],
+    "consum": 8.0,             # litri / 100 km
+    "pret_motorina": 1.95,     # € / litru
+    "dist_matrix": {},         # distante pe drum intre toate casele (pentru motorina estimata)
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -441,7 +448,8 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
               "numar", "client", "data_emitere", "total", "metoda", "processed_at",
               "randuri", "antet", "av_factura", "folder")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
-PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "baza", "coord_sheet", "coords",
+PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
+                "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -1047,7 +1055,31 @@ def sync_geo(force_routes=False):
                 dist[k] = [*geo.estimate_route(base, p), "estimat"]
             add_log(f"⚠ Serviciul de rute nu a raspuns ({e}) — distante estimate din linie dreapta x{geo.ROAD_FACTOR}")
     add_log(f"Coordonate citite ({how}): {len(coords)} case")
+    try:
+        sync_dist_matrix(base, coords)
+    except Exception as e:  # noqa: BLE001 - motorina estimata nu are voie sa strice restul
+        add_log(f"⚠ Matricea de distante: {e}")
     cache["dirty"] = True
+
+
+def sync_dist_matrix(base, coords):
+    """Distantele pe drum intre toate casele (o singura cerere); reface doar daca s-au schimbat punctele."""
+    pts = [geo.coord_key(*base)] + sorted({geo.coord_key(c["lat"], c["lng"]) for c in coords})
+    cur = settings.get("dist_matrix") or {}
+    if cur.get("pts") == pts and cur.get("sursa") == "drum":
+        return
+    points = [tuple(map(float, k.split(","))) for k in pts]
+    set_stage(f"calculez distantele intre {len(pts)} puncte (motorina estimata)")
+    try:
+        km = geo.osrm_matrix(points)
+        sursa = "drum"
+        add_log(f"Distante intre case: matrice {len(pts)}×{len(pts)} calculata pe drum")
+    except Exception as e:  # noqa: BLE001
+        km = [[round(geo.haversine_km(a, b) * geo.ROAD_FACTOR, 1) for b in points] for a in points]
+        sursa = "estimat"
+        add_log(f"⚠ Distante intre case estimate din linie dreapta x{geo.ROAD_FACTOR} ({e})")
+    settings["dist_matrix"] = {"pts": pts, "km": km, "sursa": sursa}
+    settings["geo_v"] = settings.get("geo_v", 0) + 1
 
 
 def geo_for_props(props, all_names=None):
@@ -1121,10 +1153,190 @@ def data_key():
     alias = hash(tuple(sorted(settings["alias"].items())))
     ok = hash((tuple(sorted(settings.get("preturi_ok") or [])), tuple(sorted(settings.get("excluse") or [])),
                tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or [])),
-               json.dumps(settings.get("grupuri_clienti") or [], sort_keys=True), settings.get("folder_v")))
+               json.dumps(settings.get("grupuri_clienti") or [], sort_keys=True), settings.get("folder_v"),
+               settings.get("cost_v"), settings.get("consum"), settings.get("pret_motorina")))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
     return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
+
+
+# ---------------------------------------------------------------- cheltuieli & profit
+_fuel_cache = {}
+
+
+def house_points():
+    """cheie proprietate -> (lat, lng), dupa aceleasi reguli ca distantele de la baza."""
+    coords = settings.get("coords") or []
+    sheet = {}
+    for c in coords:
+        sheet.setdefault(prop_key(c["nume"]), (c["lat"], c["lng"]))
+    by_name = {c["nume"]: (c["lat"], c["lng"]) for c in coords}
+    out = dict(sheet)
+    for k, nume in (settings.get("coord_alias") or {}).items():
+        if nume in by_name:
+            out[k] = by_name[nume]
+    return out
+
+
+def road_dist():
+    m = settings.get("dist_matrix") or {}
+    idx = {k: i for i, k in enumerate(m.get("pts") or [])}
+    km = m.get("km") or []
+    memo = {}
+
+    def dist(a, b):
+        if a == b:
+            return 0.0
+        ka, kb = geo.coord_key(*a), geo.coord_key(*b)
+        i, j = idx.get(ka), idx.get(kb)
+        if i is not None and j is not None and km[i][j] is not None:
+            return km[i][j]
+        if (ka, kb) not in memo:
+            memo[(ka, kb)] = geo.haversine_km(a, b) * geo.ROAD_FACTOR
+        return memo[(ka, kb)]
+    return dist
+
+
+def fuel_routes(ivs):
+    """Km pe zi si pe casa (traseul zilnic baza -> case -> baza), pastrat in memorie pe set de date."""
+    base = geo.parse_latlng(settings.get("baza"))
+    if not base or not settings.get("coords"):
+        return {}, {}, 0
+    key = (id(ivs), len(ivs), settings.get("geo_v"), json.dumps(settings.get("coord_alias") or {}, sort_keys=True),
+           tuple(sorted(settings.get("alias", {}).items())))
+    hit = _fuel_cache.get("k")
+    if hit == key:
+        return _fuel_cache["v"]
+    hp = house_points()
+
+    def house_point(iv):
+        k = prop_key(re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut")
+        return (k, hp[k]) if k in hp else None
+    val = costs.daily_routes(ivs, house_point, base, road_dist())
+    _fuel_cache.update({"k": key, "v": val})
+    return val
+
+
+def fuel_per_km():
+    return (float(settings.get("consum") or 0) / 100) * float(settings.get("pret_motorina") or 0)
+
+
+def cost_months(period, ivs_all):
+    today_m = costs.today_month()
+    if period and period.get("start"):
+        first, last = period["start"][:7], min(period["end"][:7], today_m)
+    else:
+        ms = [iv["data_iso"][:7] for iv in ivs_all if iv.get("data_iso")]
+        ms += [e["data"][:7] for e in settings.get("cheltuieli") or [] if e.get("data")]
+        if not ms:
+            return []
+        first, last = min(ms), today_m
+    return analytics.months_range(first, last) if first <= last else []
+
+
+def _first_cost_month(rows):
+    entries = settings.get("cheltuieli") or []
+    if not entries:
+        return None
+    first = min(e["data"][:7] for e in entries if e.get("data"))
+    with_rev = [r["luna"] for r in rows if r["venit"] > 0]
+    return first if with_rev and with_rev[0] < first else None
+
+
+def profit_block(ivs_period, ivs_all, period, props):
+    """Venit, cheltuieli, profit pe perioada + pe luni + profit estimat pe casa (adaugat in props)."""
+    months = cost_months(period, ivs_all)
+    cats = settings.get("categorii_cheltuieli") or costs.CATEGORII_IMPLICITE
+    occ = [e for e in costs.expand(settings.get("cheltuieli") or [], costs.today_month()) if e["luna"] in set(months)]
+    venit_luna = {}
+    for iv in ivs_period:
+        if iv.get("data_iso"):
+            venit_luna[iv["data_iso"][:7]] = venit_luna.get(iv["data_iso"][:7], 0.0) + float(iv.get("suma") or 0)
+    km_day, km_house_all, fara = fuel_routes(ivs_all)
+    fkm = fuel_per_km()
+    s, e = (period or {}).get("start"), (period or {}).get("end")
+    fuel_est_luna, km_total = {}, 0.0
+    for d, km in km_day.items():
+        if s and not (s <= d <= e):
+            continue
+        fuel_est_luna[d[:7]] = fuel_est_luna.get(d[:7], 0.0) + km * fkm
+        km_total += km
+    rows = costs.month_summary(months, venit_luna, occ, cats, fuel_est_luna)
+    # km pe casa doar in perioada aleasa
+    if s and km_day:
+        hp_map = house_points()
+
+        def house_point(iv):
+            k = prop_key(re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut")
+            return (k, hp_map[k]) if k in hp_map else None
+        _, km_house, _ = costs.daily_routes(ivs_period, house_point, geo.parse_latlng(settings.get("baza")), road_dist())
+    else:
+        km_house = km_house_all
+    tot = lambda k: round(sum(r[k] for r in rows), 2)  # noqa: E731
+    fuel_real, fuel_est = tot("motorina_reala"), round(sum(fuel_est_luna.values()), 2)
+    real_months = [r for r in rows if r["motorina_din"] == "bonuri"]
+    est_on_real = sum(r["motorina_estimata"] for r in real_months)
+    scale = (sum(r["motorina_reala"] for r in real_months) / est_on_real) if est_on_real > 0 else 1.0
+    pm = gen = 0.0
+    pe_cat = {}
+    for o in occ:
+        sm = float(o.get("suma") or 0)
+        pe_cat[o["categorie"]] = pe_cat.get(o["categorie"], 0.0) + sm
+        if costs.cat_type(o["categorie"], cats) == "personal" or costs.is_fuel(o["categorie"]):
+            continue
+        if costs.per_menaj(o["categorie"]):
+            pm += sm
+        else:
+            gen += sm
+    hp = costs.house_profit(props, km_house, fkm, {"per_menaj": pm, "general": gen, "motorina_scalare": scale})
+    for p in props:
+        p.update(hp.get(p["key"], {}))
+    venit, chelt = tot("venit"), tot("cheltuieli")
+    personal = tot("personal")
+    tip = {c["nume"]: c.get("tip", "firma") for c in cats}
+    cat_rows = sorted(({"categorie": k, "suma": round(v, 2), "tip": tip.get(k, "firma")} for k, v in pe_cat.items()),
+                      key=lambda r: -r["suma"])
+    if fuel_real <= 0 and fuel_est > 0:
+        cat_rows.append({"categorie": "Motorină (estimată)", "suma": fuel_est, "tip": "estimat"})
+        cat_rows.sort(key=lambda r: -r["suma"])
+    return {
+        "luni": rows, "venit": venit, "cheltuieli": chelt, "profit": round(venit - chelt, 2),
+        "marja": round((venit - chelt) / venit * 100, 1) if venit else None,
+        "personal": personal, "ramas": round(venit - chelt - personal, 2),
+        "motorina": {"reala": fuel_real, "estimata": fuel_est, "km": round(km_total), "zile_fara_coordonate": fara,
+                     "consum": settings.get("consum"), "pret": settings.get("pret_motorina"),
+                     "sursa_distante": (settings.get("dist_matrix") or {}).get("sursa")},
+        "categorii": cat_rows,
+        "are_cheltuieli": bool(settings.get("cheltuieli")),
+        # perioada incepe inainte de prima cheltuiala trecuta -> profitul acelor luni e supraestimat
+        "acoperire": _first_cost_month(rows),
+    }
+
+
+def monthly_profit(months, ivs_all):
+    cats = settings.get("categorii_cheltuieli") or costs.CATEGORII_IMPLICITE
+    ms = set(months)
+    occ = [e for e in costs.expand(settings.get("cheltuieli") or [], costs.today_month()) if e["luna"] in ms]
+    venit_luna = {}
+    for iv in ivs_all:
+        m = (iv.get("data_iso") or "")[:7]
+        if m in ms:
+            venit_luna[m] = venit_luna.get(m, 0.0) + float(iv.get("suma") or 0)
+    km_day, _, _ = fuel_routes(ivs_all)
+    fkm, fuel = fuel_per_km(), {}
+    for d, km in km_day.items():
+        if d[:7] in ms:
+            fuel[d[:7]] = fuel.get(d[:7], 0.0) + km * fkm
+    return costs.month_summary(months, venit_luna, occ, cats, fuel)
+
+
+def with_monthly_profit(rows, ivs_all):
+    by = {r["luna"]: r for r in monthly_profit([r["luna"] for r in rows], ivs_all)}
+    for r in rows:
+        m = by.get(r["luna"]) or {}
+        r.update({"cheltuieli": m.get("cheltuieli", 0), "profit": m.get("profit"), "marja": m.get("marja"),
+                  "motorina_din": m.get("motorina_din")})
+    return rows
 
 
 def compute_analytics(period_key="all"):
@@ -1176,6 +1388,7 @@ def compute_analytics(period_key="all"):
     for p in props:
         p.update(activity.get(p["key"], {}))
     missing = geo_for_props(props)
+    profit = profit_block(ivs, ivs_all, period, props)
     sheet_names = sorted({c["nume"] for c in settings.get("coords") or []}, key=str.casefold)
 
     clients, top3 = analytics.clients_table(ivs, norm_text)
@@ -1204,11 +1417,13 @@ def compute_analytics(period_key="all"):
             "venit_inactive": round(sum(p["total"] for p in props if p.get("inactiva")), 2),
             "fara_data": sum(1 for iv in ivs if not iv.get("data_iso")),
             "venit_excluse": round(sum(float(iv.get("suma") or 0) for iv in ex), 2),
+            "cheltuieli": profit["cheltuieli"], "profit": profit["profit"], "marja": profit["marja"],
         },
+        "profit": profit,
         "excluse": excluse,
         "props": props,
         "clients": clients, "top3": top3,
-        "monthly": analytics.monthly_series(ivs_all, chart_months, prop_key),
+        "monthly": with_monthly_profit(analytics.monthly_series(ivs_all, chart_months, prop_key), ivs_all),
         "luna_selectata": months[-1] if period.get("key", "").startswith("m") and months else None,
         "calendar": analytics.calendar_data(ivs, prop_display),
         "prices": prices,
@@ -1264,8 +1479,8 @@ def build_excel(sort="interventii", period_key="all"):
                 "Ouverture", "Ore (la ora)", "€/ora", "Venit (EUR)", "Medie / interventie",
                 "Interventii / luna", "Ultima interventie", "Zile de la ultima", "Inactiva",
                 "Distanta (km)", "Timp drum (min)", "Zona",
-                "Performanta", "Apare in facturi ca"],
-          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36])
+                "Performanta", "Apare in facturi ca", "Profit estimat (EUR)", "Marja estimata %"],
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14])
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
@@ -1274,9 +1489,10 @@ def build_excel(sort="interventii", period_key="all"):
                     p["pret_ora"], p["total"], p["medie"], p.get("frecventa_luna"), ultima,
                     p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "",
                     p.get("distanta_km"), p.get("timp_min"), p.get("zona") or "", p["perf"],
-                    ", ".join(p["variante"]) if len(p["variante"]) > 1 else ""])
+                    ", ".join(p["variante"]) if len(p["variante"]) > 1 else "",
+                    p.get("profit_est"), p.get("marja_est")])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 21):
+        for col in range(1, 23):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
@@ -1364,6 +1580,26 @@ def build_excel(sort="interventii", period_key="all"):
             ws6.cell(r, col).border = thin
         if p["fel"] == "abatere":
             ws6.cell(r, 1).fill = PatternFill("solid", fgColor="FEE2E2")
+
+    pr = an.get("profit") or {}
+    if pr.get("luni"):
+        ws7 = wb.create_sheet("Profit lunar")
+        sheet(ws7, ["Luna", "Venit", "Cheltuieli firma", "Profit", "Marja %", "Motorina", "Motorina din",
+                    "Transferuri personale", "Ramas"], [12, 12, 15, 12, 9, 11, 13, 18, 12])
+        for r in pr["luni"]:
+            fuel = r["motorina_reala"] if r["motorina_din"] == "bonuri" else r["motorina_estimata"]
+            ws7.append([r["luna"], r["venit"], r["cheltuieli"], r["profit"], r["marja"], round(fuel, 2),
+                        r["motorina_din"], r["personal"], r["ramas"]])
+            row = ws7.max_row
+            for col in range(1, 10):
+                ws7.cell(row, col).border = thin
+            ws7.cell(row, 4).font = Font(bold=True, color="047857" if r["profit"] >= 0 else "B91C1C")
+        ws8 = wb.create_sheet("Cheltuieli")
+        sheet(ws8, ["Data", "Categorie", "Suma", "Nota", "Lunar"], [12, 26, 11, 40, 8])
+        for e in sorted(costs.expand(settings.get("cheltuieli") or [], costs.today_month()), key=lambda x: x["aparitie"]):
+            ws8.append([datetime.fromisoformat(e["aparitie"]), e["categorie"], e["suma"], e.get("nota") or "",
+                        "da" if e.get("lunar") else ""])
+            ws8.cell(ws8.max_row, 1).number_format = "DD/MM/YYYY"
 
     # perioada exportata, vizibila in titlul primei foi
     ws1.title = f"Clasament {an['period']['label']}"[:31].replace("/", "-")
@@ -1798,6 +2034,144 @@ def api_incasari_set():
     if pana_la:
         add_log(f"Încasări: {len(ids)} facturi până la {pana_la} marcate încasate")
     return jsonify({"ok": True, "ids": ids})
+
+
+# ---------------------------------------------------------------- cheltuieli: matrice categorii x luni
+def expenses_year(an=None):
+    today_m = costs.today_month()
+    entries = settings.get("cheltuieli") or []
+    with state_lock:
+        ivs_raw = state["interventii"]
+    ivs_all = analysis_ivs(ivs_raw)[0]
+    ani = sorted({e["data"][:4] for e in entries if e.get("data")} | {iv["data_iso"][:4] for iv in ivs_all if iv.get("data_iso")}
+                 | {today_m[:4]}, reverse=True)
+    an = an if an in ani else today_m[:4]
+    used = [iv["data_iso"][:7] for iv in ivs_all if (iv.get("data_iso") or "")[:4] == an]
+    used += [m for m in (e["luna"] for e in costs.expand(entries, today_m)) if m[:4] == an]
+    first = min(used) if used else f"{an}-01"
+    months = [m for m in analytics.months_range(first, f"{an}-12") if m <= today_m]
+    rows = monthly_profit(months, ivs_all)
+    occ = [e for e in costs.expand(entries, today_m) if e["luna"][:4] == an]
+    cats = settings.get("categorii_cheltuieli") or costs.CATEGORII_IMPLICITE
+    names = [c["nume"] for c in cats] + sorted({e["categorie"] for e in occ} - {c["nume"] for c in cats})
+    est = {r["luna"]: r["motorina_estimata"] for r in rows}
+    grid = []
+    for name in names:
+        cells = {}
+        for e in occ:
+            if e["categorie"] == name:
+                c = cells.setdefault(e["luna"], {"total": 0.0, "intrari": []})
+                c["total"] = round(c["total"] + float(e.get("suma") or 0), 2)
+                c["intrari"].append({k: e.get(k) for k in ("id", "aparitie", "suma", "nota", "lunar", "serie", "luna")})
+        grid.append({"categorie": name, "tip": costs.cat_type(name, cats), "motorina": costs.is_fuel(name),
+                     "celule": cells, "total": round(sum(c["total"] for c in cells.values()), 2),
+                     "estimat": {m: round(est.get(m, 0), 2) for m in months} if costs.is_fuel(name) else None})
+    return {"an": an, "ani": ani, "luni": [{"key": m, "label": LUNI_SCURT[int(m[5:]) - 1]} for m in months],
+            "categorii": grid, "lunar": rows,
+            "total": {k: round(sum(r[k] for r in rows), 2) for k in ("venit", "cheltuieli", "profit", "personal", "ramas")},
+            "consum": settings.get("consum"), "pret_motorina": settings.get("pret_motorina"), "azi": date.today().isoformat(),
+            "tipuri": {c["nume"]: c.get("tip", "firma") for c in cats}}
+
+
+@app.route("/api/cheltuieli")
+def api_cheltuieli():
+    return jsonify(expenses_year(request.args.get("an")))
+
+
+def _cost_changed():
+    settings["cost_v"] = settings.get("cost_v", 0) + 1
+    cache["dirty"] = True
+    _save_async()
+
+
+@app.route("/api/cheltuieli", methods=["POST"])
+def api_cheltuieli_add():
+    """Adauga o cheltuiala (sau o pune inapoi dupa 'Anuleaza', cu acelasi id)."""
+    import uuid
+    d = request.json or {}
+    try:
+        suma = float(str(d.get("suma") or "").replace(",", ".").replace("€", "").replace(" ", ""))
+    except ValueError:
+        return jsonify({"ok": False, "error": "Suma nu e validă"}), 400
+    data = str(d.get("data") or "")[:10]
+    try:
+        date.fromisoformat(data)
+    except ValueError:
+        return jsonify({"ok": False, "error": "Data nu e validă"}), 400
+    cat = (d.get("categorie") or "").strip()
+    if not cat or suma <= 0:
+        return jsonify({"ok": False, "error": "Alege categoria și scrie o sumă mai mare ca 0"}), 400
+    entries = settings.setdefault("cheltuieli", [])
+    eid = str(d.get("id") or "")[:20] or uuid.uuid4().hex[:10]
+    if any(e["id"] == eid for e in entries):
+        eid = uuid.uuid4().hex[:10]
+    e = {"id": eid, "data": data, "categorie": cat[:60], "suma": round(suma, 2),
+         "nota": (d.get("nota") or "").strip()[:200], "lunar": bool(d.get("lunar"))}
+    if d.get("pana_la"):
+        e["pana_la"] = str(d["pana_la"])[:7]
+    entries.append(e)
+    _cost_changed()
+    return jsonify({"ok": True, "entry": e})
+
+
+@app.route("/api/cheltuieli/sterge", methods=["POST"])
+def api_cheltuieli_del():
+    """mod 'tot' = sterge cheltuiala (sau toata seria lunara); 'opreste' = seria se opreste inainte de luna data."""
+    d = request.json or {}
+    entries = settings.setdefault("cheltuieli", [])
+    e = next((x for x in entries if x["id"] == d.get("id")), None)
+    if not e:
+        return jsonify({"ok": False, "error": "Cheltuiala nu mai există"}), 404
+    old = dict(e)
+    if d.get("mod") == "opreste" and e.get("lunar") and re.fullmatch(r"\d{4}-\d{2}", str(d.get("luna") or "")):
+        stop = costs._add_months(d["luna"], -1)
+        if stop < e["data"][:7]:
+            entries.remove(e)
+        else:
+            e["pana_la"] = stop
+    else:
+        entries.remove(e)
+    _cost_changed()
+    return jsonify({"ok": True, "vechi": old})
+
+
+@app.route("/api/cheltuieli/restaureaza", methods=["POST"])
+def api_cheltuieli_restore():
+    """'Anuleaza' dupa stergere: pune cheltuiala exact cum era."""
+    old = (request.json or {}).get("vechi") or {}
+    entries = settings.setdefault("cheltuieli", [])
+    if not old.get("id"):
+        return jsonify({"ok": False, "error": "Nimic de restaurat"}), 400
+    entries[:] = [x for x in entries if x["id"] != old["id"]] + [{k: old[k] for k in
+                  ("id", "data", "categorie", "suma", "nota", "lunar", "pana_la") if k in old}]
+    _cost_changed()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cheltuieli/setari", methods=["POST"])
+def api_cheltuieli_settings():
+    d = request.json or {}
+    for k in ("consum", "pret_motorina"):
+        if k in d:
+            try:
+                settings[k] = max(0.0, float(str(d[k]).replace(",", ".")))
+            except ValueError:
+                return jsonify({"ok": False, "error": "Consum / preț invalid"}), 400
+    if "categorii" in d:
+        cats = []
+        for line in str(d["categorii"]).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            personal = line.lower().endswith("(personal)")
+            nume = line[: -len("(personal)")].strip() if personal else line
+            if nume and all(c["nume"] != nume for c in cats):
+                cats.append({"nume": nume[:60], "tip": "personal" if personal else "firma"})
+        if not cats:
+            return jsonify({"ok": False, "error": "Lista de categorii e goală"}), 400
+        settings["categorii_cheltuieli"] = cats
+    _cost_changed()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/exclude", methods=["POST"])

@@ -115,3 +115,23 @@ def zone_of(km):
         if limit is None or km < limit:
             return label
     return ZONES[-1][1]
+
+
+MAX_TABLE = 100             # cate puncte accepta serverul public intr-o matrice
+
+
+def osrm_matrix(points, timeout=60):
+    """
+    Distantele pe drum intre TOATE punctele (baza + case), intr-o singura cerere.
+    Intoarce matricea km [i][j] (None unde nu exista traseu). Ridica exceptie daca nu merge.
+    """
+    if len(points) > MAX_TABLE:
+        raise RuntimeError(f"prea multe puncte pentru o matrice ({len(points)} > {MAX_TABLE})")
+    coords = ";".join(f"{lng:.6f},{lat:.6f}" for lat, lng in points)
+    url = f"{OSRM_URL}{coords}?annotations=distance"
+    req = urllib.request.Request(url, headers={"User-Agent": "SimNettoyage-Facturi/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+    if data.get("code") != "Ok":
+        raise RuntimeError(f"serviciul de rute: {data.get('code')} {data.get('message', '')}")
+    return [[round(d / 1000, 1) if d is not None else None for d in row] for row in data["distances"]]
