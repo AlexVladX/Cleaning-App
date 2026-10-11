@@ -73,6 +73,9 @@ settings = {
     "excluse": [],     # proprietati scoase manual din lista (ex. produse de curatenie facturate)
     "cuvinte_produse": ["produit", "fourniture"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
     "pastrate": [],    # proprietati puse inapoi manual: cuvintele de produse nu le mai scot
+    # clienti grupati: [{"nume": "Client X", "potriviri": ["dupont", "martin", ...]}]
+    # o factura intra in grup daca numele clientului SAU folderul din Drive contine o potrivire
+    "grupuri_clienti": [],
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -150,6 +153,45 @@ def split_ivs(ivs):
     for iv in ivs:
         (out if exclusion_reason(iv, cfg) else keep).append(iv)
     return keep, out
+
+
+def client_group_rules():
+    out = []
+    for g in settings.get("grupuri_clienti") or []:
+        words = [norm_text(w) for w in g.get("potriviri") or [] if norm_text(w)]
+        if g.get("nume") and words:
+            out.append((g["nume"], words))
+    return out
+
+
+def group_clients(ivs):
+    """
+    Inlocuieste clientul facturat cu numele grupului (ex. persoane fizice aduse de acelasi
+    colaborator). Clientul de pe factura ramane in 'client_factura'. Intoarce copii.
+    """
+    rules = client_group_rules()
+    if not rules:
+        return ivs
+    with state_lock:
+        folders = {fid: norm_text(f.get("folder") or "") for fid, f in state["files"].items()}
+    out, memo = [], {}
+    for iv in ivs:
+        client = iv.get("client") or ""
+        folder = folders.get(iv.get("_file_id"), "")
+        mk = (client, folder)
+        if mk not in memo:
+            c = norm_text(client)
+            memo[mk] = next((name for name, words in rules
+                             if any(w in c or (folder and w in folder) for w in words)), None)
+        grp = memo[mk]
+        out.append({**iv, "client": grp, "client_factura": client} if grp else iv)
+    return out
+
+
+def analysis_ivs(ivs):
+    """Interventiile folosite in indicatori: fara produse, cu clientii grupati."""
+    keep, ex = split_ivs(ivs)
+    return group_clients(keep), ex
 
 
 state = {
@@ -348,6 +390,7 @@ def list_pdf_files(folder_id):
             ).execute()
             for f in results.get("files", []):
                 if f["mimeType"] == "application/pdf":
+                    f["folder"] = "" if label == "." else label
                     all_files.append(f)
                     here += 1
                 elif f["mimeType"] == "application/vnd.google-apps.folder":
@@ -390,9 +433,9 @@ def file_signature(f):
 # ---------------------------------------------------------------- backup in Drive
 CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "interventii",
               "numar", "client", "data_emitere", "total", "metoda", "processed_at",
-              "randuri", "antet", "av_factura")
+              "randuri", "antet", "av_factura", "folder")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
-PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "baza", "coord_sheet", "coords",
+PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -805,6 +848,11 @@ def scan_folder(retry_errors=False):
                 gone = set(removed)
                 state["interventii"] = [iv for iv in state["interventii"]
                                         if iv.get("_file_id") not in gone]
+            for f in files:   # folderul din Drive (pentru grupurile de clienti); se actualizeaza la mutare
+                e = state["files"].get(f["id"])
+                if e is not None and e.get("folder") != f.get("folder"):
+                    e["folder"] = f.get("folder")
+                    cache["dirty"] = True
             for f in renamed:
                 state["files"][f["id"]]["name"] = f["name"]
                 for iv in state["files"][f["id"]].get("interventii") or []:
@@ -812,7 +860,7 @@ def scan_folder(retry_errors=False):
             for f in todo:
                 prev = state["files"].get(f["id"], {})
                 state["files"][f["id"]] = {
-                    **prev, "id": f["id"], "name": f["name"], "status": "new",
+                    **prev, "id": f["id"], "name": f["name"], "status": "new", "folder": f.get("folder"),
                     "interventii": prev.get("interventii", []), "error": None,
                     "avertismente": prev.get("avertismente", []),
                 }
@@ -1066,7 +1114,8 @@ def data_key():
     ivs = state["interventii"]
     alias = hash(tuple(sorted(settings["alias"].items())))
     ok = hash((tuple(sorted(settings.get("preturi_ok") or [])), tuple(sorted(settings.get("excluse") or [])),
-               tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or []))))
+               tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or [])),
+               json.dumps(settings.get("grupuri_clienti") or [], sort_keys=True), settings.get("folder_v")))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
     return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
@@ -1084,7 +1133,7 @@ def compute_analytics(period_key="all"):
         hit = _an_cache.get(key)
         if hit:
             return hit[1]
-    ivs_all, ex_all = split_ivs(ivs_raw)
+    ivs_all, ex_all = analysis_ivs(ivs_raw)
     period, options = analytics.resolve_period(period_key, ivs_all)
     ivs = analytics.filter_ivs(ivs_all, period)
     ex = analytics.filter_ivs(ex_all, period)
@@ -1184,7 +1233,7 @@ def build_excel(sort="interventii", period_key="all"):
     with state_lock:
         files = [dict(f) for f in state["files"].values()]
     an = compute_analytics(period_key)
-    interventii = analytics.filter_ivs(split_ivs(state["interventii"])[0], an["period"])
+    interventii = analytics.filter_ivs(analysis_ivs(state["interventii"])[0], an["period"])
     props = sorted(an["props"], key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
 
     wb = openpyxl.Workbook()
@@ -1439,6 +1488,17 @@ def merge_suggestions(props, limit=20):
     return sorted(out, key=lambda s: -s["scor"])[:limit]
 
 
+def _groups_preview(interventii):
+    """Pentru fiecare grup: ce clienti de pe facturi au intrat in el (ca sa se vada ce prinde regula)."""
+    prev = {g["nume"]: {} for g in settings.get("grupuri_clienti") or []}
+    for iv in group_clients(interventii):
+        if iv.get("client_factura") is not None and iv.get("client") in prev:
+            d = prev[iv["client"]]
+            d[iv["client_factura"]] = d.get(iv["client_factura"], 0) + 1
+    return [{"nume": n, "membri": sorted(d, key=str.casefold), "interventii": sum(d.values())}
+            for n, d in prev.items()]
+
+
 def _settings_payload():
     with state_lock:
         interventii = split_ivs(list(state["interventii"]))[0]
@@ -1452,6 +1512,8 @@ def _settings_payload():
         "tipuri_la_ora": settings["tipuri_la_ora"],
         "prag_forfait": settings["prag_forfait"],
         "cuvinte_produse": settings.get("cuvinte_produse") or [],
+        "grupuri_clienti": settings.get("grupuri_clienti") or [],
+        "grupuri_preview": _groups_preview(interventii),
         "unite": [{"din": k, "din_nume": variant_name.get(k, k), "in": v,
                    "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
         "proprietati": sorted(({"key": p["key"], "name": p["name"], "variante": p["variante"]}
@@ -1529,6 +1591,18 @@ def api_settings():
             settings["tipuri_la_ora"] = clean_list(data["tipuri_la_ora"])
         if "cuvinte_produse" in data:
             settings["cuvinte_produse"] = clean_list(data["cuvinte_produse"])
+        if "grupuri_clienti" in data:
+            # text: o linie pe grup -> "Nume grup: potrivire1, potrivire2"
+            grupuri = []
+            for line in clean_list(data["grupuri_clienti"]):
+                if ":" not in line:
+                    return jsonify({"ok": False, "error": f"Lipsește „:” în linia „{line}” "
+                                    "(ex. Conciergerie X: Dupont, Martin)"}), 400
+                nume, rest = line.split(":", 1)
+                pot = [w.strip() for w in re.split(r"[,;]", rest) if w.strip()]
+                if nume.strip() and pot:
+                    grupuri.append({"nume": nume.strip(), "potriviri": pot})
+            settings["grupuri_clienti"] = grupuri
         if "prag_forfait" in data:
             try:
                 settings["prag_forfait"] = max(0.0, float(str(data["prag_forfait"]).replace(",", ".")))
@@ -1538,7 +1612,8 @@ def api_settings():
         add_log(f"Reguli actualizate: clienti la ora = {', '.join(settings['clienti_la_ora']) or '—'} · "
                 f"tipuri la ora = {', '.join(settings['tipuri_la_ora']) or '—'} · "
                 f"prag forfait = {settings['prag_forfait']:g} € · produse = "
-                f"{', '.join(settings.get('cuvinte_produse') or []) or '—'} — recalculat fara recitirea facturilor")
+                f"{', '.join(settings.get('cuvinte_produse') or []) or '—'} · grupuri clienti = "
+                f"{len(settings.get('grupuri_clienti') or [])} — recalculat fara recitirea facturilor")
         _save_async()
     return jsonify(_settings_payload())
 

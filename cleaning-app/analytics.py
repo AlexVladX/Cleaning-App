@@ -120,6 +120,8 @@ def clients_table(ivs, norm):
         g = groups.setdefault(k, {"nume_variante": defaultdict(int), "venit": 0.0, "interventii": 0,
                                   "ore": 0.0, "case": set(), "ultima": ""})
         g["nume_variante"][name] += 1
+        if iv.get("client_factura"):
+            g.setdefault("membri", set()).add(iv["client_factura"].strip())
         g["venit"] += float(iv.get("suma") or 0)
         g["interventii"] += 1
         if iv.get("tip_facturare") == "heure":
@@ -138,6 +140,7 @@ def clients_table(ivs, norm):
             "ore": round(g["ore"], 2),
             "case": len(g["case"]),
             "ultima": g["ultima"],
+            "membri": sorted(g.get("membri") or [], key=str.casefold),
         })
     rows.sort(key=lambda r: -r["venit"])
     top3 = round(sum(r["procent"] for r in rows[:3]), 1)
