@@ -176,7 +176,8 @@ function renderState(s) {
       stxt.textContent = 'Scanare: citesc lista din Drive...';
       document.getElementById('p-title').textContent = 'Citesc lista de facturi din Drive…';
       document.getElementById('p-sub').textContent = sc.found ? `${sc.found} PDF-uri găsite până acum` : '';
-      document.getElementById('p-current').textContent = '';
+      const waited = sc.stage_since ? Math.round(s.now - sc.stage_since) : 0;
+      document.getElementById('p-current').textContent = sc.stage ? `Pas: ${sc.stage}${waited >= 5 ? ` (${waited}s)` : ''}` : '';
       pf.classList.add('indet'); pf.style.width = '';
     } else {
       const left = sc.total - sc.done;

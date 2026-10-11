@@ -63,10 +63,34 @@ scan_lock = threading.Lock()
 
 def add_log(msg):
     ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)  # apare si in Render → Logs
     with state_lock:
         state["log"].append(f"[{ts}] {msg}")
         if len(state["log"]) > 200:
             state["log"] = state["log"][-200:]
+
+
+def set_stage(txt):
+    """Pasul curent al scanarii — afisat in dashboard si raportat daca dureaza prea mult."""
+    with state_lock:
+        state["scan"]["stage"] = txt
+        state["scan"]["stage_since"] = time.time()
+
+
+def _watchdog(scan_id):
+    """Daca un pas dureaza > 20s, scrie in jurnal la ce anume asteapta aplicatia."""
+    last = 0.0
+    while True:
+        time.sleep(5)
+        with state_lock:
+            sc = state["scan"]
+            if not sc.get("active") or sc.get("id") != scan_id:
+                return
+            stage, since = sc.get("stage"), sc.get("stage_since") or time.time()
+        waited = time.time() - since
+        if waited >= 20 and time.time() - last >= 20:
+            add_log(f"… inca astept: {stage} ({waited:.0f}s)")
+            last = time.time()
 
 
 # ---------------------------------------------------------------- autentificare
@@ -95,15 +119,27 @@ def get_drive_service():
     if svc is not None:
         return svc
     if not GOOGLE_CREDENTIALS_JSON:
-        raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
+        raise ValueError("GOOGLE_CREDENTIALS_JSON nu e setat in Render → Environment")
+    t0 = time.time()
+    set_stage("citesc cheia Google (GOOGLE_CREDENTIALS_JSON)")
+    try:
+        info = json.loads(GOOGLE_CREDENTIALS_JSON)
+    except ValueError as e:
+        raise ValueError(f"GOOGLE_CREDENTIALS_JSON nu e JSON valid ({e}) — lipiti tot continutul fisierului cheii")
     creds = service_account.Credentials.from_service_account_info(
-        json.loads(GOOGLE_CREDENTIALS_JSON),
+        info,
         # 'drive' (nu doar readonly) ca sa putem actualiza fisierul de backup.
         # Service account-ul vede/modifica tot doar ce i-ati partajat explicit.
         scopes=["https://www.googleapis.com/auth/drive"],
     )
+    # autentificare explicita, separat de prima cerere -> erorile de cheie se vad clar
+    set_stage("autentificare la Google (oauth2.googleapis.com)")
+    creds.refresh(google_auth_httplib2.Request(httplib2.Http(timeout=30)))
+    add_log(f"Autentificat ca {info.get('client_email')} ({time.time() - t0:.1f}s)")
+    set_stage("incarc API-ul Google Drive")
     http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=60))
     svc = build("drive", "v3", http=http, cache_discovery=False)
+    add_log(f"Conectat la Google Drive ({time.time() - t0:.1f}s)")
     _drive_local.service = svc
     return svc
 
@@ -111,9 +147,14 @@ def get_drive_service():
 def list_pdf_files(folder_id):
     service = get_drive_service()
     all_files = []
+    folders = [0]
 
     def search_folder(fid, label):
         page_token, here, subfolders = None, 0, []
+        folders[0] += 1
+        set_stage(f"listez folderul '{label}' (folderul nr. {folders[0]})")
+        if folders[0] % 10 == 0:
+            add_log(f"Foldere parcurse: {folders[0]} · {len(all_files)} PDF gasite")
         while True:  # paginare: altfel se pierd fisierele peste primele 100
             results = service.files().list(
                 q=f"'{fid}' in parents and trashed=false",
@@ -141,6 +182,9 @@ def list_pdf_files(folder_id):
 
     add_log("Citesc lista de facturi din Drive...")
     search_folder(folder_id, ".")
+    if not all_files:
+        add_log(f"⚠ 0 PDF-uri in {folders[0]} foldere. Verificati DRIVE_FOLDER_ID si ca folderul "
+                f"e partajat (Share) cu email-ul service account-ului de mai sus.")
     return all_files
 
 
@@ -170,7 +214,9 @@ def find_cache_file():
     if CACHE_FILE_ID:
         return CACHE_FILE_ID
     name = CACHE_FILE_NAME.replace("'", "\\'")
-    res = get_drive_service().files().list(
+    svc = get_drive_service()
+    set_stage(f"caut fisierul de backup '{CACHE_FILE_NAME}'")
+    res = svc.files().list(
         q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
         fields="files(id, name, capabilities/canEdit)",
         supportsAllDrives=True, includeItemsFromAllDrives=True,
@@ -197,6 +243,7 @@ def load_cache():
         return
     cache.update({"file_id": fid, "enabled": True})
     try:
+        set_stage("descarc backup-ul")
         raw = download_pdf(fid).read().decode("utf-8").strip()
         data = json.loads(raw) if raw else {}
     except Exception as e:
@@ -357,7 +404,9 @@ def process_file(file_info, idx=None, total=None):
         entry.setdefault("interventii", [])
     used_ai = False
     try:
+        set_stage(f"descarc {name}")
         pdf_bytes = download_pdf(file_id)
+        set_stage(f"citesc {name}")
         try:
             result = parse_invoice(pdf_bytes)
         except ParseError as pe:
@@ -453,11 +502,18 @@ def scan_folder(retry_errors=False):
         add_log("DRIVE_FOLDER_ID nu e setat")
         return
     if not scan_lock.acquire(blocking=False):
-        add_log("Scanare deja in curs.")
+        with state_lock:
+            stage, since = state["scan"].get("stage"), state["scan"].get("stage_since") or time.time()
+        add_log(f"Scanare deja in curs — pasul curent: {stage} ({time.time() - since:.0f}s)")
         return
+    scan_id = time.time()
     with state_lock:
         state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0,
-                         "eta": None, "found": 0, "current": None}
+                         "eta": None, "found": 0, "current": None, "id": scan_id,
+                         "stage": "pornire", "stage_since": time.time(),
+                         "thread": threading.get_ident()}
+    threading.Thread(target=_watchdog, args=(scan_id,), daemon=True).start()
+    add_log("Pornesc scanarea...")
     try:
         if not cache["loaded"]:
             load_cache()
@@ -738,6 +794,28 @@ def api_export():
 @app.route("/healthz")
 def healthz():
     return "ok"
+
+
+@app.route("/api/debug")
+def api_debug():
+    """Diagnostic: la ce pas e scanarea si unde anume asteapta codul (stiva firului de executie)."""
+    import sys
+    import traceback
+    with state_lock:
+        sc = {k: v for k, v in state["scan"].items()}
+    out = {
+        "scanare_activa": sc.get("active"),
+        "pas_curent": sc.get("stage"),
+        "secunde_la_acest_pas": round(time.time() - (sc.get("stage_since") or time.time())),
+        "drive_folder_id": FOLDER_ID[:6] + "…" if FOLDER_ID else None,
+        "cheie_google_setata": bool(GOOGLE_CREDENTIALS_JSON),
+        "backup": {"activ": cache["enabled"], "incarcat": cache["loaded"]},
+        "ultimele_mesaje": state["log"][-15:],
+    }
+    frame = sys._current_frames().get(sc.get("thread")) if sc.get("active") else None
+    if frame is not None:
+        out["unde_asteapta"] = [line.strip() for line in traceback.format_stack(frame)[-8:]]
+    return Response(json.dumps(out, ensure_ascii=False, indent=2), mimetype="application/json")
 
 
 @app.route("/api/test")
