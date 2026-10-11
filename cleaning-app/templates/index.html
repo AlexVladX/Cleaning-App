@@ -5,104 +5,134 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analizator Facturi Curățenie</title>
 <style>
+  :root{
+    --ink:#111827; --ink-2:#374151; --muted:#6B7280; --faint:#9CA3AF;
+    --line:#E5E7EB; --line-2:#F3F4F6; --bg:#F9FAFB; --card:#fff;
+    --series:#2a78d6; --series-dim:#b7d3f6;
+    --h0:#EEF2F7; --h1:#cde2fb; --h2:#9ec5f4; --h3:#6da7ec; --h4:#3987e5; --h5:#256abf; --h6:#184f95;
+    --bad:#d03b3b; --bad-bg:#FEE2E2; --bad-ink:#991B1B;
+    --warn-bg:#FEF3C7; --warn-ink:#92400E; --ok-bg:#D1FAE5; --ok-ink:#065F46;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{max-width:100%}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F9FAFB;color:#111827;font-size:14px}
-  .topbar{background:#111827;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-  .topbar h1{font-size:16px;font-weight:500;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  .topbar{background:var(--ink);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .topbar h1{font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
   .dot{width:8px;height:8px;border-radius:50%;background:#6B7280;flex:none}
   .dot.live{background:#10B981;animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  .status-txt{font-size:12px;color:#9CA3AF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .status-txt{font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .main{max-width:1200px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:16px}
   .main>*{min-width:0}
 
-  /* butoane */
-  .controls{display:flex;gap:8px;flex-wrap:wrap}
-  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#111827;display:inline-flex;align-items:center;gap:6px;transition:background .15s;white-space:nowrap}
-  .btn:hover{background:#F3F4F6}
-  .btn-dark{background:#111827;color:#fff;border-color:#111827}.btn-dark:hover{background:#1F2937}
-  .btn-green{background:#059669;color:#fff;border-color:#059669}.btn-green:hover{background:#047857}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .btn:hover{background:var(--line-2)}
+  .btn-dark{background:var(--ink);color:#fff;border-color:var(--ink)}.btn-dark:hover{background:#1F2937}
+  .btn-green{background:#059669;color:#fff;border-color:#059669}
   .btn-red{background:#DC2626;color:#fff;border-color:#DC2626}
   .btn-sm{padding:3px 9px;font-size:12px}
+  .period{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .period label{font-size:12px;color:var(--muted)}
+  .period select{border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
 
-  /* indicatori */
   .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-  .metric{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;min-width:0}
-  .metric-label{font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric-value{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .metric.warn .metric-value{color:#B45309}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+  .metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric-value{font-size:24px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric-sub{font-size:11px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric.alert{border-color:#FCA5A5}.metric.alert .metric-value{color:var(--bad-ink)}
+  .metric.click{cursor:pointer}.metric.click:hover{border-color:#D1D5DB}
 
-  /* carduri */
-  .card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px;min-width:0}
-  .card-title{font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+  .card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-  .count{font-weight:500;color:#9CA3AF;text-transform:none;letter-spacing:0}
+  .count{font-weight:500;color:var(--faint);text-transform:none;letter-spacing:0}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .search{border:1px solid #D1D5DB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;width:220px;max-width:100%}
-  .seg{display:inline-flex;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;flex-wrap:wrap}
-  .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:#374151;border-right:1px solid #E5E7EB}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+  .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink-2);border-right:1px solid var(--line)}
   .seg button:last-child{border-right:none}
-  .seg button:hover{background:#F3F4F6}
-  .seg button.on{background:#111827;color:#fff}
-  .seg-lbl{font-size:11px;color:#9CA3AF}
+  .seg button:hover{background:var(--line-2)}
+  .seg button.on{background:var(--ink);color:#fff}
+  .hint{font-size:12px;color:var(--muted)}
+  .headline{font-size:13px;color:var(--ink-2);margin-bottom:12px}
+  .headline b{color:var(--ink)}
 
-  /* sectiuni pliabile */
-  details.fold>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-  details.fold>summary::-webkit-details-marker{display:none}
-  details.fold>summary .card-title::before{content:'▸ ';}
-  details.fold[open]>summary .card-title::before{content:'▾ ';}
-  details.fold[open]>summary{margin-bottom:12px}
+  /* tab-uri */
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{border:none;background:none;padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+  .tab:hover{color:var(--ink)}
+  .tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+  .tab .n{font-size:11px;padding:0 6px;border-radius:999px;background:var(--line-2);color:var(--ink-2);font-weight:500}
+  .tab .n.alert{background:var(--bad-bg);color:var(--bad-ink)}
+  .panel{display:none}.panel.on{display:block}
 
-  /* progres */
-  .progress-card{display:none}
-  .progress-card.on{display:block}
-  .progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
-  .progress-title{font-weight:600;font-size:14px}
-  .progress-sub{font-size:12px;color:#6B7280}
-  .progress-bg{height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden}
-  .progress-fill{height:100%;background:#059669;border-radius:4px;width:0;transition:width .6s ease}
-  .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
-  @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
-  .progress-current{font-size:12px;color:#374151;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-  /* clasament (tabel) */
-  .table-wrap{max-height:70vh;overflow:auto;border:1px solid #F3F4F6;border-radius:8px}
-  table.rank{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
-  table.rank th{position:sticky;top:0;z-index:1;background:#F9FAFB;text-align:left;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid #E5E7EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  table.rank th.sortable{cursor:pointer;user-select:none}
-  table.rank th.sortable:hover{color:#111827}
-  table.rank th.active{color:#111827}
-  table.rank th.active::after{content:' ↓'}
-  table.rank td{padding:9px 10px;border-bottom:1px solid #F3F4F6;vertical-align:top}
-  table.rank tr:hover td{background:#FAFAFA}
+  /* tabele */
+  .table-wrap{max-height:70vh;overflow:auto;border:1px solid var(--line-2);border-radius:8px}
+  table.t{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+  table.t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.t th.sortable{cursor:pointer;user-select:none}
+  table.t th.sortable:hover,table.t th.active{color:var(--ink)}
+  table.t th.active::after{content:' ↓'}
+  table.t td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}
+  table.t tr:hover td{background:#FAFAFA}
   .num{text-align:right !important;font-variant-numeric:tabular-nums;white-space:nowrap}
   td.hl{font-weight:700}
-  .c-rank{width:44px;color:#9CA3AF}
-  .c-int{width:96px}.c-ore{width:90px}.c-tot{width:110px}.c-med{width:96px}.c-perf{width:104px}
+  .w-rank{width:44px;color:var(--faint)}
+  .w-80{width:80px}.w-90{width:90px}.w-100{width:100px}.w-110{width:110px}.w-120{width:120px}.w-140{width:140px}.w-160{width:160px}
   .pname{font-weight:500;overflow-wrap:anywhere}
-  .psub{font-size:11px;color:#6B7280;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .palias{font-size:11px;color:#9CA3AF;overflow-wrap:anywhere;margin-top:1px}
+  .psub{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .palias{font-size:11px;color:var(--faint);overflow-wrap:anywhere;margin-top:1px}
   .ptypes{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
   .tt{font-size:10px;padding:1px 6px;border-radius:5px;font-weight:500;white-space:nowrap}
   .tt-standard{background:#E0E7FF;color:#3730A3}.tt-intermediaire{background:#FCE7F3;color:#9D174D}
   .tt-ouverture{background:#FEF3C7;color:#92400E}.tt-alt{background:#E5E7EB;color:#374151}
-  .sub-num{display:block;font-size:11px;color:#9CA3AF;font-weight:400}
-  .perf{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;white-space:nowrap}
-  .ph{background:#D1FAE5;color:#065F46}.pm{background:#FEF3C7;color:#92400E}.pl{background:#FEE2E2;color:#991B1B}
-  .empty{text-align:center;padding:2rem;color:#9CA3AF;font-size:13px}
-  @media(max-width:760px){
-    .c-med,.col-med,.c-perf,.col-perf,.c-ore,.col-ore{display:none}
-    .c-int{width:58px}.c-tot{width:86px}.c-rank{width:28px}
-    table.rank th,table.rank td{padding:8px 6px}
-    .search{width:100%}
-    .topbar{padding:12px 16px}
-  }
+  .sub-num{display:block;font-size:11px;color:var(--faint);font-weight:400}
+  .tag{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;white-space:nowrap;display:inline-block}
+  .tag.ok{background:var(--ok-bg);color:var(--ok-ink)}.tag.mid{background:var(--warn-bg);color:var(--warn-ink)}
+  .tag.low,.tag.bad{background:var(--bad-bg);color:var(--bad-ink)}.tag.info{background:#E0E7FF;color:#3730A3}
+  .tag.gray{background:var(--line-2);color:var(--ink-2)}
+  .share{display:flex;align-items:center;gap:8px}
+  .share-bar{flex:1;height:8px;background:var(--line-2);border-radius:4px;overflow:hidden;min-width:40px}
+  .share-fill{height:100%;background:var(--series);border-radius:0 4px 4px 0}
+  .delta-up{color:#047857}.delta-down{color:var(--bad-ink)}
+  .empty{text-align:center;padding:2rem;color:var(--faint);font-size:13px}
+
+  /* grafice */
+  .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+  @media(max-width:860px){.chart-grid{grid-template-columns:minmax(0,1fr)}}
+  .chart{position:relative;min-width:0}
+  .chart h3{font-size:13px;font-weight:600;margin-bottom:2px}
+  .chart .sub{font-size:11px;color:var(--muted);margin-bottom:8px}
+  .chart svg{display:block;width:100%;overflow:visible}
+  .chart svg text{font-size:10px;fill:var(--muted);font-family:inherit}
+  .grid-line{stroke:var(--line);stroke-width:1}
+  .tip{position:fixed;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.08);z-index:50;display:none;max-width:260px}
+  .tip b{display:block;font-size:13px}
+  .tip .lbl{color:var(--muted)}
+  .tip .lst{color:var(--ink-2);margin-top:4px;font-size:11px}
+
+  /* calendar */
+  .cal-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  @media(max-width:500px){.cal-wrap{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+  .cal-month h4{font-size:12px;font-weight:600;margin-bottom:6px;color:var(--ink-2)}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-dow{font-size:9px;color:var(--faint);text-align:center}
+  .cal-cell{aspect-ratio:1;border-radius:3px;background:var(--h0);position:relative}
+  .cal-cell.pad{background:transparent}
+  .cal-cell.has{cursor:default}
+  .cal-cell:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .legend{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin:10px 0 14px}
+  .legend i{width:14px;height:14px;border-radius:3px;display:inline-block}
+  .two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px}
+  @media(max-width:860px){.two-col{grid-template-columns:minmax(0,1fr)}}
 
   /* facturi */
-  .file-list{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto}
-  .file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#F9FAFB;border-left:3px solid #E5E7EB;min-width:0}
+  .file-list{display:flex;flex-direction:column;gap:6px;max-height:65vh;overflow-y:auto}
+  .file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:var(--bg);border-left:3px solid var(--line);min-width:0}
   .file-item.processing{border-left-color:#F59E0B}.file-item.done{border-left-color:#3B82F6}
   .file-item.error{border-left-color:#EF4444}.file-item.new{border-left-color:#10B981}
   .file-item.warning{border-left-color:#F59E0B}.file-item.duplicate{border-left-color:#9CA3AF;opacity:.75}
@@ -110,46 +140,64 @@
   @keyframes fresh{0%{background:#A7F3D0}100%{background:#ECFDF5}}
   .file-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
   .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-  .file-meta{font-size:11px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .file-warn{font-size:11px;color:#92400E;overflow-wrap:anywhere}
+  .file-meta{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-warn{font-size:11px;color:var(--warn-ink);overflow-wrap:anywhere}
   .badge{font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;font-weight:500;flex:none}
-  .badge-new{background:#D1FAE5;color:#065F46}.badge-proc{background:#FEF3C7;color:#92400E}
-  .badge-done{background:#DBEAFE;color:#1E40AF}.badge-err{background:#FEE2E2;color:#991B1B}
-  .badge-warn{background:#FEF3C7;color:#92400E}.badge-dup{background:#E5E7EB;color:#374151}
-  .last-scan{font-size:11px;color:#9CA3AF;margin-top:8px}
-  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:#F3F4F6;color:#374151;font-weight:500}
-  .pill.warn{background:#FEF3C7;color:#92400E}
+  .badge-new{background:var(--ok-bg);color:var(--ok-ink)}.badge-proc{background:var(--warn-bg);color:var(--warn-ink)}
+  .badge-done{background:#DBEAFE;color:#1E40AF}.badge-err{background:var(--bad-bg);color:var(--bad-ink)}
+  .badge-warn{background:var(--warn-bg);color:var(--warn-ink)}.badge-dup{background:var(--line);color:var(--ink-2)}
+  .last-scan{font-size:11px;color:var(--faint);margin-top:8px}
 
-  /* setari */
+  /* progres */
+  .progress-card{display:none}.progress-card.on{display:block}
+  .progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .progress-title{font-weight:600}
+  .progress-sub{font-size:12px;color:var(--muted)}
+  .progress-bg{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+  .progress-fill{height:100%;background:#059669;border-radius:4px;width:0;transition:width .6s ease}
+  .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
+  @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
+  .progress-current{font-size:12px;color:var(--ink-2);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* pliabile, setari, jurnal */
+  details.fold>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary .card-title::before{content:'▸ '}
+  details.fold[open]>summary .card-title::before{content:'▾ '}
+  details.fold[open]>summary{margin-bottom:12px}
   .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
   @media(max-width:760px){.set-grid{grid-template-columns:minmax(0,1fr)}}
   .set-grid label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
-  .hint{font-size:11px;color:#6B7280;margin-bottom:6px}
+  .set-grid .hint{font-size:11px;margin-bottom:6px}
   .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
   .set-grid textarea{min-height:74px;resize:vertical}
   .merge-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .merge-row select{flex:1 1 140px;min-width:0}
-  .merge-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
-  .merge-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;background:#F9FAFB;border-radius:6px;padding:5px 8px}
+  .merge-list{display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:220px;overflow-y:auto}
+  .merge-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;background:var(--bg);border-radius:6px;padding:5px 8px}
   .link-btn{border:none;background:none;color:#DC2626;cursor:pointer;font-size:12px;flex:none}
   .saved{font-size:12px;color:#059669;margin-left:8px}
-  .sugg-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+  .sugg-list{display:flex;flex-direction:column;gap:6px;margin-top:6px;max-height:320px;overflow-y:auto}
   .sugg{display:flex;align-items:center;gap:8px;font-size:12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;flex-wrap:wrap}
   .sugg .txt{flex:1 1 200px;min-width:0}
-  .sugg .n{color:#6B7280}
+  .sugg .n{color:var(--muted)}
+  .log{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:var(--muted);background:var(--bg);border-radius:8px;padding:10px 12px;max-height:240px;overflow-y:auto;line-height:1.7;border:1px solid var(--line);overflow-wrap:anywhere}
 
-  /* jurnal */
-  .log{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:240px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB;overflow-wrap:anywhere}
+  @media(max-width:760px){
+    .hide-m{display:none}
+    table.t th,table.t td{padding:8px 6px}
+    .w-rank{width:28px}
+    .search{width:100%}
+    .topbar{padding:12px 16px}
+    .period{margin-left:0;width:100%}.period select{flex:1;max-width:none}
+  }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <h1>&#x1F9F9; Analizator Facturi Curățenie</h1>
-  <div class="topbar-right">
-    <div class="dot" id="dot"></div>
-    <span class="status-txt" id="status-txt">Se încarcă...</span>
-  </div>
+  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span></div>
 </div>
 
 <div class="main">
@@ -159,161 +207,233 @@
     <button class="btn btn-green" id="btn-monitor-start" onclick="startMonitor()">&#x25B6; Start monitorizare</button>
     <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
     <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
-    <button class="btn" onclick="resetAll()" style="margin-left:auto">&#x1F5D1; Reset</button>
+    <div class="period"><label for="period">Perioadă</label><select id="period"><option value="all">Toată perioada</option></select></div>
   </div>
 
   <div class="card progress-card" id="progress">
-    <div class="progress-top">
-      <span class="progress-title" id="p-title">Scanare în curs</span>
-      <span class="progress-sub" id="p-sub"></span>
-    </div>
+    <div class="progress-top"><span class="progress-title" id="p-title">Scanare în curs</span><span class="progress-sub" id="p-sub"></span></div>
     <div class="progress-bg"><div class="progress-fill" id="p-fill"></div></div>
     <div class="progress-current" id="p-current"></div>
   </div>
 
   <div class="metric-grid">
-    <div class="metric"><div class="metric-label">Venit total</div><div class="metric-value" id="m-revenue">—</div></div>
-    <div class="metric"><div class="metric-label">Intervenții</div><div class="metric-value" id="m-total">—</div></div>
-    <div class="metric"><div class="metric-label">Proprietăți</div><div class="metric-value" id="m-props">—</div></div>
-    <div class="metric"><div class="metric-label">Facturi citite</div><div class="metric-value" id="m-analyzed">—</div></div>
-    <div class="metric" id="m-warn-box"><div class="metric-label">De verificat</div><div class="metric-value" id="m-warn">—</div></div>
+    <div class="metric"><div class="metric-label">Venit</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
+    <div class="metric"><div class="metric-label">Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
+    <div class="metric"><div class="metric-label">Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
+    <div class="metric click" id="m-prices-box" onclick="showTab('preturi')"><div class="metric-label">Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
+    <div class="metric click" id="m-warn-box" onclick="showTab('facturi')"><div class="metric-label">Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
   </div>
 
-  <!-- CLASAMENT: pe toata latimea -->
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">Clasament proprietăți <span class="count" id="p-count"></span></div>
-      <div class="toolbar">
-        <input class="search" id="p-search" type="search" placeholder="Caută proprietate sau client…" aria-label="Caută proprietate">
-        <span class="seg-lbl">Sortează:</span>
-        <div class="seg" id="sort-bar" role="group" aria-label="Sortare clasament">
-          <button data-sort="total">Încasări</button>
-          <button data-sort="interventii">Intervenții</button>
-          <button data-sort="ore">Ore</button>
-          <button data-sort="medie">€ / intervenție</button>
+  <div class="card" style="padding-top:4px">
+    <nav class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-tab="proprietati">Proprietăți <span class="n" id="n-props"></span></button>
+      <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
+      <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
+      <button class="tab" role="tab" data-tab="calendar">Calendar</button>
+      <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
+      <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
+    </nav>
+
+    <!-- PROPRIETATI -->
+    <section class="panel" id="panel-proprietati" role="tabpanel">
+      <div class="card-head" style="margin-top:14px">
+        <div class="toolbar">
+          <input class="search" id="p-search" type="search" placeholder="Caută proprietate sau client…" aria-label="Caută proprietate">
+          <div class="seg" id="p-filter"><button data-f="all" class="on">Toate</button><button data-f="inactive">Inactive</button></div>
+        </div>
+        <div class="toolbar"><span class="hint">Sortează:</span>
+          <div class="seg" id="sort-bar">
+            <button data-sort="total">Încasări</button><button data-sort="interventii">Intervenții</button>
+            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="table-wrap" id="table-wrap">
-      <table class="rank">
-        <thead>
-          <tr>
-            <th class="c-rank">#</th>
-            <th>Proprietate</th>
-            <th class="c-int num sortable" data-sort="interventii" title="Intervenții">Intervenții</th>
-            <th class="c-ore num sortable" data-sort="ore">Ore</th>
-            <th class="c-tot num sortable" data-sort="total">Încasări</th>
-            <th class="c-med num sortable" data-sort="medie">€ / int.</th>
-            <th class="c-perf">Performanță</th>
-          </tr>
-        </thead>
-        <tbody id="prop-body"><tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr></tbody>
-      </table>
-    </div>
-  </div>
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr>
+            <th class="w-rank">#</th><th>Proprietate</th>
+            <th class="w-100 num sortable" data-sort="interventii">Intervenții</th>
+            <th class="w-90 num sortable hide-m" data-sort="frecventa_luna" title="Intervenții pe lună în perioada aleasă">Pe lună</th>
+            <th class="w-110 num sortable" data-sort="total">Încasări</th>
+            <th class="w-100 num sortable hide-m" data-sort="medie">€ / int.</th>
+            <th class="w-140 sortable hide-m" data-sort="zile_de_la_ultima">Ultima intervenție</th>
+          </tr></thead>
+          <tbody id="prop-body"><tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile).</p>
+    </section>
 
-  <!-- FACTURI: pliabil -->
-  <div class="card">
-    <details class="fold" id="files-box">
-      <summary>
-        <span class="card-title">Facturi din Drive <span class="count" id="f-count"></span></span>
-        <span id="f-pills"></span>
-      </summary>
-      <div class="card-head" style="margin-bottom:10px">
-        <div class="seg" id="f-filter" role="group" aria-label="Filtru facturi">
-          <button data-f="all" class="on">Toate</button>
-          <button data-f="warn">De verificat</button>
-          <button data-f="error">Erori</button>
-          <button data-f="duplicate">Duplicate</button>
+    <!-- CLIENTI -->
+    <section class="panel" id="panel-clienti" role="tabpanel">
+      <div style="margin-top:14px" class="headline" id="c-headline"></div>
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr>
+            <th>Client</th><th class="w-120 num">Venit</th><th class="w-160 hide-m">% din venit</th>
+            <th class="w-80 num">Case</th><th class="w-100 num hide-m">Intervenții</th><th class="w-100 num hide-m">€ / int.</th><th class="w-110 hide-m">Ultima</th>
+          </tr></thead>
+          <tbody id="client-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- EVOLUTIE -->
+    <section class="panel" id="panel-evolutie" role="tabpanel">
+      <div class="chart-grid" style="margin-top:14px">
+        <div class="chart" id="ch-venit"><h3>Venit pe lună</h3><div class="sub" id="ch-venit-sub">€ încasați din intervențiile lunii</div><svg></svg></div>
+        <div class="chart" id="ch-int"><h3>Intervenții pe lună</h3><div class="sub">numărul de menaje</div><svg></svg></div>
+      </div>
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr><th>Luna</th><th class="w-120 num">Venit</th><th class="w-120 num">vs luna trecută</th><th class="w-120 num hide-m">vs anul trecut</th><th class="w-100 num">Intervenții</th><th class="w-90 num hide-m">Ore</th><th class="w-100 num hide-m">Case active</th></tr></thead>
+          <tbody id="month-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="panel" id="panel-calendar" role="tabpanel">
+      <div style="margin-top:14px" class="headline" id="cal-headline"></div>
+      <div class="legend" aria-hidden="true">mai puține <i style="background:var(--h0)"></i><i style="background:var(--h1)"></i><i style="background:var(--h2)"></i><i style="background:var(--h3)"></i><i style="background:var(--h4)"></i><i style="background:var(--h5)"></i><i style="background:var(--h6)"></i> mai multe menaje pe zi</div>
+      <div class="cal-wrap" id="cal"></div>
+      <div class="two-col">
+        <div class="chart" id="ch-wd"><h3>Menaje pe zi, după ziua săptămânii</h3><div class="sub">media zilelor lucrate</div><svg></svg></div>
+        <div>
+          <h3 style="font-size:13px;font-weight:600;margin-bottom:8px">Cele mai aglomerate zile</h3>
+          <div class="table-wrap" style="max-height:320px">
+            <table class="t"><thead><tr><th class="w-120">Data</th><th class="w-80 num">Menaje</th><th class="w-100 num">Venit</th><th class="hide-m">Case</th></tr></thead><tbody id="top-days"></tbody></table>
+          </div>
         </div>
+      </div>
+    </section>
+
+    <!-- PRETURI -->
+    <section class="panel" id="panel-preturi" role="tabpanel">
+      <div class="card-head" style="margin-top:14px">
+        <div class="seg" id="pr-filter">
+          <button data-f="abatere" class="on">Abateri</button><button data-f="de confirmat">De confirmat</button><button data-f="schimbare">Schimbări de tarif</button><button data-f="all">Toate</button>
+        </div>
+        <span class="hint" id="pr-hint"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr><th class="w-120">Tip</th><th>Proprietate</th><th class="w-110">Data</th><th class="w-110 hide-m">Factura</th><th class="w-110 num">Facturat</th><th class="w-110 num">Obișnuit</th><th class="w-100 num hide-m">Diferență</th></tr></thead>
+          <tbody id="price-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FACTURI -->
+    <section class="panel" id="panel-facturi" role="tabpanel">
+      <div class="card-head" style="margin-top:14px">
+        <div class="seg" id="f-filter"><button data-f="all" class="on">Toate</button><button data-f="warn">De verificat</button><button data-f="error">Erori</button><button data-f="duplicate">Duplicate</button></div>
         <input class="search" id="f-search" type="search" placeholder="Caută factură, număr, client…" aria-label="Caută factură">
       </div>
       <div class="file-list" id="file-list"><div class="empty">Niciun fișier detectat încă</div></div>
       <div class="last-scan" id="last-scan"></div>
-    </details>
+    </section>
   </div>
 
-  <!-- SETARI: pliabil -->
   <div class="card">
     <details class="fold" id="settings-box">
       <summary><span class="card-title" id="settings-title">Reguli de calcul și proprietăți</span></summary>
       <div class="set-grid">
-        <div>
-          <label for="s-clienti">Clienți facturați doar la oră</label>
-          <div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div>
-          <textarea id="s-clienti"></textarea>
-        </div>
-        <div>
-          <label for="s-tipuri">Tipuri de menaj facturate la oră</label>
-          <div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div>
-          <textarea id="s-tipuri"></textarea>
-        </div>
-        <div>
-          <label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label>
-          <input id="s-prag" type="number" min="0" step="1">
-          <div style="margin-top:10px"><button class="btn btn-dark" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div>
-        </div>
-        <div>
-          <label>Unește proprietăți (aceeași casă cu nume diferite)</label>
-          <div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
-          <div class="merge-row">
-            <select id="m-din" aria-label="Proprietatea care se unește"></select><span>→</span>
-            <select id="m-in" aria-label="Proprietatea în care se unește"></select>
-            <button class="btn" onclick="mergeProps()">Unește</button>
-          </div>
-          <div class="merge-list" id="m-list"></div>
-        </div>
-        <div style="grid-column:1/-1">
-          <label>Posibile dubluri (nume foarte asemănătoare)</label>
-          <div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div>
-          <div class="sugg-list" id="sugg-list"></div>
-        </div>
+        <div><label for="s-clienti">Clienți facturați doar la oră</label><div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div><textarea id="s-clienti"></textarea></div>
+        <div><label for="s-tipuri">Tipuri de menaj facturate la oră</label><div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div><textarea id="s-tipuri"></textarea></div>
+        <div><label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label><input id="s-prag" type="number" min="0" step="1">
+          <div style="margin-top:10px"><button class="btn btn-dark" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div></div>
+        <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
+          <div class="merge-row"><select id="m-din" aria-label="Proprietatea care se unește"></select><span>→</span><select id="m-in" aria-label="Proprietatea în care se unește"></select><button class="btn" onclick="mergeProps()">Unește</button></div>
+          <div class="merge-list" id="m-list"></div></div>
+        <div style="grid-column:1/-1"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
       </div>
     </details>
   </div>
 
-  <!-- JURNAL: pliabil -->
   <div class="card">
-    <details class="fold" id="log-fold" open>
-      <summary><span class="card-title">Jurnal sistem</span></summary>
+    <details class="fold" id="log-fold">
+      <summary><span class="card-title">Jurnal sistem</span><button class="btn btn-sm" onclick="event.preventDefault();resetAll()">&#x1F5D1; Reset</button></summary>
       <div class="log" id="log-box">Aștept date...</div>
     </details>
   </div>
-
 </div>
 
+<div class="tip" id="tip" role="status"></div>
+
 <script>
-const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// ------------------------------------------------------------ utilitare
 const $ = id => document.getElementById(id);
-const fmtEur = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' €';
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 0}) + ' €';
+const eur2 = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' €';
+const num = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 1});
+const compact = v => v >= 1e6 ? (v/1e6).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + 'M' : v >= 1000 ? (v/1000).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + 'k' : v.toLocaleString('fr-FR', {maximumFractionDigits: 1});
+const fmtDate = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('ro-RO', {day: '2-digit', month: '2-digit', year: 'numeric'}) : '—';
+const fmtDateLong = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ro-RO', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const store = {
   get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || 'Eroare'); return null; }
+  return j;
+}
 
-let lastState = null, lastProps = [], lastFiles = [];
-let sortBy = store.get('sortBy', 'total');
-let fileFilter = 'all';
+// tooltip (text sigur: textContent)
+const tip = $('tip');
+function showTip(e, title, rows, list) {
+  tip.replaceChildren();
+  const b = document.createElement('b'); b.textContent = title; tip.appendChild(b);
+  rows.forEach(([v, l]) => { const d = document.createElement('div'); const s = document.createElement('span'); s.className = 'lbl'; s.textContent = ' ' + l; d.textContent = v; d.appendChild(s); tip.appendChild(d); });
+  if (list) { const d = document.createElement('div'); d.className = 'lst'; d.textContent = list; tip.appendChild(d); }
+  tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  let x = (e.clientX ?? 0) + 14, y = (e.clientY ?? 0) + 14;
+  if (e.clientX === undefined && e.target) { const t = e.target.getBoundingClientRect(); x = t.right + 8; y = t.top; }
+  if (x + r.width > innerWidth - 8) x = Math.max(8, (e.clientX ?? x) - r.width - 14);
+  if (y + r.height > innerHeight - 8) y = Math.max(8, innerHeight - r.height - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.style.display = 'none'; };
+
+// ------------------------------------------------------------ stare
+let S = null, A = null;               // /api/state si /api/analytics
+let period = store.get('period', 'all');
+let tab = store.get('tab', 'proprietati');
+let sortBy = store.get('sortBy2', 'total');
+let propFilter = 'all', fileFilter = 'all', priceFilter = 'abatere';
+let lastDataKey = null, lastAnFetch = 0, anLoading = false;
 
 async function fetchState() {
   try {
-    const r = await fetch('/api/state');
-    const s = await r.json();
-    lastState = s;
-    renderState(s);
-  } catch (e) {
-    $('status-txt').textContent = 'Eroare conexiune server';
-  }
+    S = await (await fetch('/api/state')).json();
+    renderState();
+    // indicatorii se recalculeaza doar cand se schimba datele (in timpul scanarii: cel mult la 10 s)
+    const throttle = S.scan && S.scan.active ? 10000 : 0;
+    if (S.data_key !== lastDataKey && Date.now() - lastAnFetch >= throttle) fetchAnalytics();
+  } catch (e) { $('status-txt').textContent = 'Eroare conexiune server'; }
+}
+async function fetchAnalytics() {
+  if (anLoading) return;
+  anLoading = true; lastAnFetch = Date.now();
+  try {
+    const key = S ? S.data_key : null;
+    A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json();
+    lastDataKey = key;
+    renderAnalytics();
+  } finally { anLoading = false; }
 }
 
-function renderState(s) {
-  const dot = $('dot'), stxt = $('status-txt');
+// ------------------------------------------------------------ stare server (progres, facturi, jurnal)
+function renderState() {
+  const s = S, dot = $('dot'), stxt = $('status-txt');
   dot.className = s.monitoring ? 'dot live' : 'dot';
   stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
-
-  // progres
-  const sc = s.scan || {};
-  const pf = $('p-fill');
+  const sc = s.scan || {}, pf = $('p-fill');
   $('progress').classList.toggle('on', !!sc.active);
   if (sc.active) {
     dot.className = 'dot live';
@@ -337,206 +457,339 @@ function renderState(s) {
   schedule(sc.active ? 2000 : 5000);
   $('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
   $('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
-
-  // indicatori
   const m = s.metrics || {};
-  $('m-revenue').textContent = m.revenue != null ? m.revenue.toLocaleString('fr-FR') + ' €' : '—';
-  $('m-total').textContent = m.interventii ?? '—';
-  $('m-props').textContent = (s.props || []).length || '—';
-  $('m-analyzed').textContent = m.files ? `${m.analyzed}/${m.files}` : '—';
   $('m-warn').textContent = m.warnings ?? '—';
-  $('m-warn-box').classList.toggle('warn', !!m.warnings);
-
-  lastFiles = s.files || [];
+  $('m-warn-box').classList.toggle('alert', !!m.warnings);
+  $('m-files-sub').textContent = m.files ? `${m.analyzed} din ${m.files} facturi citite` : '';
   renderFiles();
   if (s.last_scan) $('last-scan').textContent = 'Ultima scanare: ' + new Date(s.last_scan).toLocaleTimeString('ro-RO');
-
-  lastProps = s.props || [];
-  renderProps();
-
-  // jurnal
   const lb = $('log-box');
   if (s.log && s.log.length) {
     const atBottom = lb.scrollHeight - lb.scrollTop - lb.clientHeight < 30;
     lb.innerHTML = s.log.slice(-50).map(esc).join('<br>');
-    if (atBottom) lb.scrollTop = lb.scrollHeight;  // nu sarim jos daca utilizatorul citeste mai sus
+    if (atBottom) lb.scrollTop = lb.scrollHeight;
   }
 }
 
-// ---- clasament
+// ------------------------------------------------------------ indicatori
+function renderAnalytics() {
+  if (!A) return;
+  // perioade
+  const sel = $('period'), cur = A.period.key;
+  sel.innerHTML = A.options.map(o => `<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('');
+  sel.value = cur; period = cur;
+  const m = A.metrics, plabel = A.period.label;
+  $('m-venit').textContent = eur(m.venit);
+  $('m-venit-sub').textContent = plabel;
+  $('m-int').textContent = m.interventii.toLocaleString('fr-FR');
+  $('m-int-sub').textContent = `în medie ${eur(m.medie)} / intervenție`;
+  $('m-props').textContent = m.proprietati;
+  $('m-props-sub').textContent = m.inactive ? `${m.inactive} inactive acum` : 'nicio casă inactivă';
+  $('m-prices').textContent = m.abateri;
+  $('m-prices-box').classList.toggle('alert', !!m.abateri);
+  $('n-props').textContent = A.props.length || '';
+  $('n-clients').textContent = A.clients.length || '';
+  const np = $('n-prices'); np.textContent = m.abateri || ''; np.classList.toggle('alert', !!m.abateri);
+  renderProps(); renderClients(); renderMonthly(); renderCalendar(); renderPrices();
+}
+
+// ---- proprietati
 const TL = {standard: 'Standard', intermediaire: 'Intermédiaire', ouverture: 'Ouverture'};
 const SORTS = {
-  total:       p => [p.total, p.interventii],
-  interventii: p => [p.interventii, p.total],
-  ore:         p => [p.ore, p.total],
-  medie:       p => [p.medie, p.total],
+  total: p => [p.total, p.interventii], interventii: p => [p.interventii, p.total],
+  frecventa_luna: p => [p.frecventa_luna ?? 0, p.total], medie: p => [p.medie, p.total],
+  zile_de_la_ultima: p => [p.zile_de_la_ultima ?? -1, p.total],
 };
-const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-
 function renderProps() {
   document.querySelectorAll('#sort-bar button').forEach(b => b.classList.toggle('on', b.dataset.sort === sortBy));
-  document.querySelectorAll('th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
+  document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
+  document.querySelectorAll('#p-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === propFilter));
   const body = $('prop-body');
-  if (!lastProps.length) {
-    $('p-count').textContent = '';
-    body.innerHTML = '<tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr>';
-    return;
-  }
+  if (!A || !A.props.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio intervenție în perioada aleasă</td></tr>'; return; }
   const key = SORTS[sortBy] || SORTS.total;
-  const sorted = lastProps.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
-  const max = Math.max(...sorted.map(p => key(p)[0]), 0) || 1;   // performanta fata de criteriul ales
+  const sorted = A.props.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
   const q = norm($('p-search').value.trim());
   const rows = sorted.map((p, i) => ({p, rank: i + 1})).filter(({p}) =>
-    !q || norm(p.name).includes(q) || norm(p.client).includes(q) || (p.variante || []).some(v => norm(v).includes(q)));
-  $('p-count').textContent = q ? `· ${rows.length} din ${lastProps.length}` : `· ${lastProps.length}`;
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio proprietate găsită</td></tr>'; return; }
+    (propFilter !== 'inactive' || p.inactiva) &&
+    (!q || norm(p.name).includes(q) || norm(p.client).includes(q) || (p.variante || []).some(v => norm(v).includes(q))));
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio proprietate pentru filtrul ales</td></tr>'; return; }
   const hl = k => sortBy === k ? ' hl' : '';
   body.innerHTML = rows.map(({p, rank}) => {
-    const v = key(p)[0];
-    const perf = v >= max * 0.7 ? ['Performant', 'ph'] : v >= max * 0.4 ? ['Mediu', 'pm'] : ['Rar', 'pl'];
     const types = Object.entries(p.tipuri || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
       `<span class="tt ${TL[t] ? 'tt-' + t : 'tt-alt'}">${esc(TL[t] || t)} ${n}</span>`).join('');
     const others = (p.variante || []).filter(x => x !== p.name);
+    const last = p.ultima ? `${fmtDate(p.ultima)}<span class="sub-num">${p.zile_de_la_ultima} zile${p.interval_tipic ? ` · de obicei la ${p.interval_tipic} z.` : ''}</span>` : '—';
     return `<tr>
-      <td class="c-rank">${rank}</td>
-      <td>
-        <div class="pname">${esc(p.name)}</div>
+      <td class="w-rank">${rank}</td>
+      <td><div class="pname">${esc(p.name)} ${p.inactiva ? '<span class="tag bad" title="Fără menaj de mult mai mult timp decât de obicei">inactivă</span>' : ''}</div>
         <div class="psub" title="${esc(p.client || '')}">${esc(p.client || '')}</div>
         ${others.length ? `<div class="palias">apare și ca: ${others.map(esc).join(', ')}</div>` : ''}
-        <div class="ptypes">${types}</div>
-      </td>
-      <td class="num${hl('interventii')}">${p.interventii}${p.forfait && p.forfait !== p.interventii ? `<span class="sub-num">${p.forfait} forfait</span>` : ''}</td>
-      <td class="num col-ore${hl('ore')}">${p.ore > 0 ? p.ore.toLocaleString('fr-FR') + ' h' : '—'}${p.pret_ora ? `<span class="sub-num">${p.pret_ora.toLocaleString('fr-FR')} €/h</span>` : ''}</td>
-      <td class="num${hl('total')}">${fmtEur(p.total)}</td>
-      <td class="num col-med${hl('medie')}">${fmtEur(p.medie)}</td>
-      <td class="col-perf"><span class="perf ${perf[1]}">${perf[0]}</span></td>
+        <div class="ptypes">${types}${p.ore > 0 ? `<span class="tt tt-alt">${num(p.ore)} h${p.pret_ora ? ' · ' + num(p.pret_ora) + ' €/h' : ''}</span>` : ''}</div></td>
+      <td class="num${hl('interventii')}">${p.interventii}</td>
+      <td class="num hide-m${hl('frecventa_luna')}">${p.frecventa_luna != null ? num(p.frecventa_luna) : '—'}</td>
+      <td class="num${hl('total')}">${eur(p.total)}</td>
+      <td class="num hide-m${hl('medie')}">${eur2(p.medie)}</td>
+      <td class="hide-m${hl('zile_de_la_ultima')}">${last}</td>
     </tr>`;
   }).join('');
 }
-function setSort(k) {
-  if (!SORTS[k]) return;
-  sortBy = k; store.set('sortBy', k); renderProps();
-}
+function setSort(k) { if (SORTS[k]) { sortBy = k; store.set('sortBy2', k); renderProps(); } }
 $('sort-bar').addEventListener('click', e => { const b = e.target.closest('button[data-sort]'); if (b) setSort(b.dataset.sort); });
-document.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
+document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
 $('p-search').addEventListener('input', renderProps);
+$('p-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { propFilter = b.dataset.f; renderProps(); } });
+
+// ---- clienti
+function renderClients() {
+  const c = A.clients;
+  $('c-headline').innerHTML = c.length
+    ? `Primii 3 clienți aduc <b>${num(A.top3)}%</b> din venitul perioadei.` + (c[0] ? ` Cel mai mare: <b>${esc(c[0].client)}</b> (${num(c[0].procent)}%).` : '')
+    : '';
+  const max = Math.max(...c.map(x => x.procent), 1);
+  $('client-body').innerHTML = c.length ? c.map(x => `<tr>
+    <td><div class="pname">${esc(x.client)}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}</td>
+    <td class="num">${eur(x.venit)}</td>
+    <td class="hide-m"><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>
+    <td class="num">${x.case}</td><td class="num hide-m">${x.interventii}</td><td class="num hide-m">${eur2(x.medie)}</td>
+    <td class="hide-m">${fmtDate(x.ultima)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">Nicio intervenție în perioada aleasă</td></tr>';
+}
+
+// ---- grafice cu bare (o singura serie, o singura axa)
+function barChart(container, data, opts) {
+  const svg = container.querySelector('svg');
+  const W = Math.max(260, container.clientWidth), H = opts.height || 200;
+  const m = {t: 10, r: 4, b: 24, l: 40};
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', opts.label || '');
+  const max = Math.max(...data.map(d => d.value), 0);
+  // axa: valori rotunde
+  const step = (() => { if (!max) return 1; const raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw))); return (max < 20 ? [1, 2, 5, 10] : [1, 2, 2.5, 5, 10]).map(x => Math.max(1, x * p)).find(x => x >= raw); })();
+  const top = Math.max(step * Math.ceil(max / step), step);
+  const y = v => m.t + ih - v / top * ih;
+  const band = iw / Math.max(data.length, 1), bw = Math.min(24, Math.max(4, band - 2));
+  let g = '';
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    g += `<line class="grid-line" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>`;
+    g += `<text x="${m.l - 6}" y="${y(v) + 3}" text-anchor="end">${compact(v)}</text>`;
+  }
+  const every = Math.ceil(data.length / Math.floor(iw / 44));   // etichete X fara suprapuneri
+  data.forEach((d, i) => {
+    const cx = m.l + band * i + band / 2, x = cx - bw / 2, h = Math.max(0, ih - (y(d.value) - m.t)), y0 = m.t + ih;
+    const r = Math.min(4, bw / 2, h);
+    const fill = opts.highlight && !d.hl ? 'var(--series-dim)' : 'var(--series)';
+    if (h > 0) g += `<path d="M${x},${y0} V${y0 - h + r} Q${x},${y0 - h} ${x + r},${y0 - h} H${x + bw - r} Q${x + bw},${y0 - h} ${x + bw},${y0 - h + r} V${y0} Z" fill="${fill}"/>`;
+    if (i % every === 0) g += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>`;
+    g += `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih}" fill="transparent" tabindex="0"/>`;
+  });
+  svg.innerHTML = g;
+  svg.querySelectorAll('.hit').forEach(el => {
+    const d = data[+el.dataset.i];
+    const show = e => showTip(e, d.title || d.label, d.rows || [[opts.fmt(d.value), opts.unit || '']], d.list);
+    el.addEventListener('pointermove', show); el.addEventListener('focus', show);
+    el.addEventListener('pointerleave', hideTip); el.addEventListener('blur', hideTip);
+  });
+}
+
+function renderMonthly() {
+  const ms = A.monthly, sel = A.luna_selectata;
+  const pct = v => v == null ? '—' : `<span class="${v >= 0 ? 'delta-up' : 'delta-down'}">${v > 0 ? '+' : ''}${num(v)}%</span>`;
+  $('ch-venit-sub').textContent = sel ? 'ultimele 12 luni, luna aleasă evidențiată' : '€ încasați din intervențiile lunii';
+  if (!$('panel-evolutie').classList.contains('on')) { pendingCharts = true; } else drawMonthlyCharts();
+  const shown = ms.filter(x => x.interventii > 0);
+  $('month-body').innerHTML = shown.length ? shown.slice().reverse().map(x => `<tr${x.luna === sel ? ' style="background:#EFF6FF"' : ''}>
+    <td>${esc(x.eticheta)}${x.in_curs ? ' <span class="tag gray">în curs</span>' : ''}</td><td class="num">${eur(x.venit)}</td>
+    <td class="num"${x.in_curs ? ' style="opacity:.45" title="Lună în curs: comparația nu e încă relevantă"' : ''}>${pct(x.vs_luna_trecuta)}</td>
+    <td class="num hide-m"${x.in_curs ? ' style="opacity:.45"' : ''}>${pct(x.vs_an_trecut)}</td><td class="num">${x.interventii}</td><td class="num hide-m">${x.ore ? num(x.ore) : '—'}</td><td class="num hide-m">${x.case_active}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">Nicio intervenție cu dată în perioada aleasă</td></tr>';
+}
+let pendingCharts = false;
+function drawMonthlyCharts() {
+  pendingCharts = false;
+  if (!A) return;
+  const ms = A.monthly, sel = A.luna_selectata;
+  const deltaRow = x => x.in_curs ? [['lună în curs', '']] : x.vs_luna_trecuta == null ? [] : [[(x.vs_luna_trecuta > 0 ? '+' : '') + num(x.vs_luna_trecuta) + '%', 'față de luna trecută']];
+  barChart($('ch-venit'), ms.map(x => ({label: x.scurt, value: x.venit, hl: x.luna === sel, title: x.eticheta,
+    rows: [[eur(x.venit), 'venit'], ...deltaRow(x), [String(x.interventii), 'intervenții']]})), {fmt: eur, highlight: !!sel, label: 'Venit pe lună'});
+  barChart($('ch-int'), ms.map(x => ({label: x.scurt, value: x.interventii, hl: x.luna === sel, title: x.eticheta,
+    rows: [[String(x.interventii), 'intervenții'], [String(x.case_active), 'case active']]})), {fmt: String, highlight: !!sel, label: 'Intervenții pe lună'});
+}
+
+// ---- calendar (harta zilelor)
+let pendingCal = false;
+function renderCalendar() {
+  const c = A.calendar, days = c.zile, keys = Object.keys(days).sort();
+  const active = keys.length, total = keys.reduce((s, k) => s + days[k].n, 0);
+  const peak = c.top[0];
+  $('cal-headline').innerHTML = active
+    ? `<b>${active}</b> zile lucrate · în medie <b>${num(total / active)}</b> menaje pe zi` + (peak ? ` · vârf: <b>${peak.n}</b> menaje pe ${esc(fmtDateLong(peak.data))}` : '')
+    : 'Nicio intervenție cu dată în perioada aleasă.';
+  $('top-days').innerHTML = c.top.map(d => `<tr><td>${fmtDate(d.data)}</td><td class="num">${d.n}</td><td class="num">${eur(d.venit)}</td>
+    <td class="hide-m"><div class="psub" title="${esc(d.case.join(', '))}">${esc(d.case.join(', '))}</div></td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty">—</td></tr>';
+  if (!$('panel-calendar').classList.contains('on')) { pendingCal = true; return; }
+  drawCalendar();
+}
+function drawCalendar() {
+  pendingCal = false;
+  const c = A.calendar, days = c.zile, keys = Object.keys(days).sort();
+  const wrap = $('cal');
+  if (!keys.length) { wrap.innerHTML = ''; } else {
+    const maxN = Math.max(...keys.map(k => days[k].n));
+    const level = n => !n ? 0 : Math.min(6, Math.max(1, Math.ceil(n / maxN * 6)));
+    // lunile perioadei (din prima pana in ultima zi lucrata)
+    const months = [];
+    let d = new Date(keys[0].slice(0, 7) + '-01T00:00:00'); const end = new Date(keys[keys.length - 1].slice(0, 7) + '-01T00:00:00');
+    const activeMonths = new Set(keys.map(k => k.slice(0, 7)));
+    while (d <= end) {
+      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (activeMonths.has(mk)) months.push(new Date(d));   // lunile fara niciun menaj (iarna) nu se afiseaza
+      d.setMonth(d.getMonth() + 1);
+    }
+    const DOW = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D'];
+    wrap.innerHTML = months.map(mo => {
+      const y = mo.getFullYear(), mi = mo.getMonth(), nd = new Date(y, mi + 1, 0).getDate();
+      const pad = (new Date(y, mi, 1).getDay() + 6) % 7;
+      let cells = DOW.map(x => `<div class="cal-dow">${x}</div>`).join('') + '<div class="cal-cell pad"></div>'.repeat(pad);
+      for (let day = 1; day <= nd; day++) {
+        const iso = `${y}-${String(mi + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, v = days[iso];
+        cells += `<div class="cal-cell${v ? ' has' : ''}" data-d="${iso}" style="background:var(--h${level(v ? v.n : 0)})" ${v ? 'tabindex="0"' : ''} aria-label="${iso}: ${v ? v.n : 0} menaje"></div>`;
+      }
+      const label = mo.toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
+      return `<div class="cal-month"><h4>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h4><div class="cal-grid">${cells}</div></div>`;
+    }).join('');
+    wrap.querySelectorAll('.cal-cell.has').forEach(el => {
+      const v = days[el.dataset.d];
+      const show = e => showTip(e, fmtDateLong(el.dataset.d), [[String(v.n), v.n === 1 ? 'menaj' : 'menaje'], [eur(v.venit), 'venit']],
+        v.case.slice(0, 8).join(', ') + (v.case.length > 8 ? ` … +${v.case.length - 8}` : ''));
+      el.addEventListener('pointermove', show); el.addEventListener('focus', show);
+      el.addEventListener('pointerleave', hideTip); el.addEventListener('blur', hideTip);
+    });
+  }
+  const wd = c.pe_zi_saptamana;
+  barChart($('ch-wd'), wd.map(w => ({label: w.zi.slice(0, 3), value: w.medie, title: w.zi,
+    rows: [[num(w.medie), 'menaje în medie'], [String(w.zile_active), 'zile lucrate'], [String(w.total), 'menaje în total']]})),
+    {fmt: num, height: 180, label: 'Menaje pe zi după ziua săptămânii'});
+}
+
+// ---- verificare preturi
+const FEL = {'abatere': ['Abatere', 'bad'], 'de confirmat': ['De confirmat', 'mid'], 'schimbare': ['Schimbare tarif', 'info']};
+function renderPrices() {
+  document.querySelectorAll('#pr-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === priceFilter));
+  const all = A.prices, rows = all.filter(p => priceFilter === 'all' || p.fel === priceFilter);
+  const cnt = f => all.filter(p => p.fel === f).length;
+  document.querySelectorAll('#pr-filter button').forEach(b => {
+    const n = b.dataset.f === 'all' ? all.length : cnt(b.dataset.f);
+    b.textContent = b.textContent.replace(/ \(\d+\)$/, '') + ` (${n})`;
+  });
+  $('pr-hint').textContent = {
+    'abatere': 'Preț diferit doar pe o factură, între facturi cu prețul obișnuit: foarte probabil o greșeală.',
+    'de confirmat': 'Ultima factură are alt preț: încă nu se știe dacă e o greșeală sau un tarif nou.',
+    'schimbare': 'Prețul s-a schimbat și a rămas așa: schimbare de tarif (informativ).',
+    'all': 'Toate diferențele de preț față de factura anterioară a aceleiași case.'}[priceFilter];
+  $('price-body').innerHTML = rows.length ? rows.map(p => {
+    const [lbl, cls] = FEL[p.fel];
+    return `<tr><td><span class="tag ${cls}">${lbl}</span></td>
+      <td><div class="pname">${esc(p.proprietate)}</div><div class="psub">${esc(p.client || '')} · ${esc(TL[p.tip] || p.tip)}${p.facturare === 'heure' ? ' · la oră' : ''}</div></td>
+      <td>${fmtDate(p.data)}</td><td class="hide-m"><div class="psub" style="font-size:12px;color:var(--ink-2)" title="${esc(p.fisier || '')}">${esc(p.factura || '—')}</div></td>
+      <td class="num"><b>${num(p.pret)} ${p.unitate}</b></td><td class="num">${num(p.pret_anterior)} ${p.unitate}</td>
+      <td class="num hide-m"><span class="${p.diferenta >= 0 ? 'delta-up' : 'delta-down'}">${p.diferenta > 0 ? '+' : ''}${num(p.diferenta)}</span></td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty">${priceFilter === 'abatere' ? '✓ Nicio abatere de preț în perioada aleasă' : 'Nimic de afișat'}</td></tr>`;
+}
+$('pr-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { priceFilter = b.dataset.f; renderPrices(); } });
 
 // ---- facturi
 function renderFiles() {
-  const files = lastFiles;
-  const nWarn = files.filter(f => f.status === 'warning').length;
-  const nErr = files.filter(f => f.status === 'error').length;
-  const nDup = files.filter(f => f.status === 'duplicate').length;
-  $('f-count').textContent = files.length ? `· ${files.length}` : '';
-  $('f-pills').innerHTML = [
-    nWarn ? `<span class="pill warn">${nWarn} de verificat</span>` : '',
-    nErr ? `<span class="pill warn">${nErr} erori</span>` : '',
-    nDup ? `<span class="pill">${nDup} duplicate</span>` : '',
-  ].join(' ');
+  const files = (S && S.files) || [];
+  const nWarn = files.filter(f => f.status === 'warning' || f.status === 'error').length;
+  const nf = $('n-files'); nf.textContent = nWarn || ''; nf.classList.toggle('alert', !!nWarn);
   document.querySelectorAll('#f-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === fileFilter));
   const q = norm($('f-search').value.trim());
-  const shown = files.filter(f =>
-    (fileFilter === 'all' || (fileFilter === 'warn' ? f.status === 'warning' : f.status === fileFilter)) &&
+  const shown = files.filter(f => (fileFilter === 'all' || (fileFilter === 'warn' ? f.status === 'warning' : f.status === fileFilter)) &&
     (!q || [f.name, f.numar, f.client].some(x => norm(x).includes(q))));
   const fl = $('file-list');
   if (!files.length) { fl.innerHTML = '<div class="empty">Niciun fișier detectat</div>'; return; }
   if (!shown.length) { fl.innerHTML = '<div class="empty">Nicio factură pentru filtrul ales</div>'; return; }
-  const now = lastState ? lastState.now : 0;
   fl.innerHTML = shown.map(f => {
-    const fresh = f.processed_at && now - f.processed_at < 8 ? ' fresh' : '';
-    const cls = esc(f.status);
-    const n = f.n_interventii ?? 0;
-    const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>'
-      : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
-      : cls === 'done' ? `<span class="badge badge-done">${n} intervenții</span>`
-      : cls === 'warning' ? `<span class="badge badge-warn">${n} intervenții · verifică</span>`
-      : cls === 'duplicate' ? '<span class="badge badge-dup">Duplicat</span>'
-      : '<span class="badge badge-err">Eroare</span>';
-    const meta = [f.numar, f.client, f.total != null ? fmtEur(f.total) : null,
-                  f.metoda === 'ai' ? 'citită cu AI' : null].filter(Boolean).map(esc).join(' · ');
+    const fresh = f.processed_at && S.now - f.processed_at < 8 ? ' fresh' : '';
+    const cls = esc(f.status), n = f.n_interventii ?? 0;
+    const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>' : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
+      : cls === 'done' ? `<span class="badge badge-done">${n} intervenții</span>` : cls === 'warning' ? `<span class="badge badge-warn">${n} intervenții · verifică</span>`
+      : cls === 'duplicate' ? '<span class="badge badge-dup">Duplicat</span>' : '<span class="badge badge-err">Eroare</span>';
+    const meta = [f.numar, f.client, f.total != null ? eur2(f.total) : null, f.metoda === 'ai' ? 'citită cu AI' : null].filter(Boolean).map(esc).join(' · ');
     const warns = (f.error ? [f.error] : (f.avertismente || [])).map(w => `<span class="file-warn">⚠ ${esc(w)}</span>`).join('');
-    return `<div class="file-item ${cls}${fresh}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
-      + (meta ? `<span class="file-meta">${meta}</span>` : '') + warns + `</div>${badge}</div>`;
+    return `<div class="file-item ${cls}${fresh}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>` + (meta ? `<span class="file-meta">${meta}</span>` : '') + warns + `</div>${badge}</div>`;
   }).join('');
 }
 $('f-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { fileFilter = b.dataset.f; renderFiles(); } });
 $('f-search').addEventListener('input', renderFiles);
 
-// sectiunile pliabile isi amintesc starea
-['files-box', 'log-fold'].forEach(id => {
-  const el = $(id), saved = store.get('open-' + id, null);
-  if (saved !== null) el.open = saved === '1';
-  el.addEventListener('toggle', () => store.set('open-' + id, el.open ? '1' : '0'));
-});
+// ------------------------------------------------------------ tab-uri & perioada
+function showTab(t) {
+  tab = t; store.set('tab', t);
+  document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'panel-' + t));
+  if (t === 'evolutie' && A) drawMonthlyCharts();
+  if (t === 'calendar' && A) drawCalendar();
+}
+$('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
+$('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!A) return; if (tab === 'evolutie') drawMonthlyCharts(); if (tab === 'calendar') drawCalendar(); }, 150); });
 
-// ---- actiuni
+// ------------------------------------------------------------ actiuni
 async function scan() { await fetch('/api/scan', {method: 'POST'}); setTimeout(fetchState, 500); }
 async function startMonitor() { await post('/api/monitor', {active: true}); fetchState(); }
 async function stopMonitor() { await post('/api/monitor', {active: false}); fetchState(); }
-function exportExcel() { window.location.href = '/api/export?sort=' + encodeURIComponent(sortBy); }
+function exportExcel() { location.href = `/api/export?sort=${encodeURIComponent(['total', 'interventii', 'medie'].includes(sortBy) ? sortBy : 'total')}&period=${encodeURIComponent(period)}`; }
 async function resetAll() {
   if (!confirm('Reset șterge toate datele și backup-ul. Toate facturile vor fi recitite la următoarea scanare. Continui?')) return;
-  try { await fetch('/api/reset', {method: 'POST'}); fetchState(); } catch (e) { console.error('Reset error:', e); }
-}
-async function post(url, body) {
-  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  const j = await r.json();
-  if (!r.ok) { alert(j.error || 'Eroare'); return null; }
-  return j;
+  try { await fetch('/api/reset', {method: 'POST'}); fetchState(); } catch (e) { console.error(e); }
 }
 
-// ---- reguli de calcul & unire proprietati
+// ------------------------------------------------------------ reguli & unire proprietati
 let lastSugg = [];
 async function loadSettings(data) {
   const s = data || await (await fetch('/api/settings')).json();
   const ta = $('s-clienti'); if (document.activeElement !== ta) ta.value = (s.clienti_la_ora || []).join('\n');
   const tt = $('s-tipuri'); if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
   const pr = $('s-prag'); if (document.activeElement !== pr) pr.value = s.prag_forfait;
-  const opts = (s.proprietati || []).map(p =>
-    `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
-  const din = $('m-din'), inn = $('m-in');
-  const keep = [din.value, inn.value];
-  din.innerHTML = '<option value="">Proprietatea…</option>' + opts;
-  inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
+  const opts = (s.proprietati || []).map(p => `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
+  const din = $('m-din'), inn = $('m-in'), keep = [din.value, inn.value];
+  din.innerHTML = '<option value="">Proprietatea…</option>' + opts; inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
   din.value = keep[0]; inn.value = keep[1];
-  const sg = s.sugestii || [];
-  lastSugg = sg;
-  $('sugg-list').innerHTML = sg.length ? sg.map((x, i) =>
-    `<div class="sugg"><span class="txt"><b>${esc(x.din_nume)}</b> <span class="n">(${x.din_n}x)</span> ↔ <b>${esc(x.in_nume)}</b> <span class="n">(${x.in_n}x)</span></span>
-     <button class="btn btn-sm btn-dark" onclick="acceptSugg(${i})">Unește în „${esc(x.in_nume)}”</button>
-     <button class="btn btn-sm" onclick="ignoreSugg(${i})">Nu e dublură</button></div>`).join('')
+  const sg = s.sugestii || []; lastSugg = sg;
+  $('sugg-list').innerHTML = sg.length ? sg.map((x, i) => `<div class="sugg"><span class="txt"><b>${esc(x.din_nume)}</b> <span class="n">(${x.din_n}x)</span> ↔ <b>${esc(x.in_nume)}</b> <span class="n">(${x.in_n}x)</span></span>
+     <button class="btn btn-sm btn-dark" onclick="acceptSugg(${i})">Unește în „${esc(x.in_nume)}”</button><button class="btn btn-sm" onclick="ignoreSugg(${i})">Nu e dublură</button></div>`).join('')
     : '<div class="hint">Nicio pereche suspectă.</div>';
   $('settings-title').textContent = 'Reguli de calcul și proprietăți' + (sg.length ? ` · ${sg.length} posibile dubluri` : '');
-  $('m-list').innerHTML = (s.unite || []).map(u =>
-    `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span>
-     <button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
+  $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
 }
 $('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
 async function saveSettings() {
-  const j = await post('/api/settings', {
-    clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, prag_forfait: $('s-prag').value,
-  });
-  if (j) { loadSettings(j); fetchState(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
+  const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, prag_forfait: $('s-prag').value});
+  if (j) { loadSettings(j); lastDataKey = null; fetchState(); fetchAnalytics(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
 }
 async function mergeProps() {
-  const din = $('m-din').value, inn = $('m-in').value;
-  if (!din || !inn) return;
-  const j = await post('/api/merge', {din, in: inn});
-  if (j) { $('m-din').value = ''; loadSettings(j); fetchState(); }
+  const din = $('m-din').value, inn = $('m-in').value; if (!din || !inn) return;
+  const j = await post('/api/merge', {din, in: inn}); if (j) { $('m-din').value = ''; loadSettings(j); fetchState(); }
 }
 async function acceptSugg(i) { const x = lastSugg[i]; if (!x) return; const j = await post('/api/merge', {din: x.din, in: x.in}); if (j) { loadSettings(j); fetchState(); } }
 async function ignoreSugg(i) { const x = lastSugg[i]; if (!x) return; const j = await post('/api/ignore-suggestion', {din: x.din, in: x.in}); if (j) loadSettings(j); }
 async function unmerge(din) { const j = await post('/api/unmerge', {din}); if (j) { loadSettings(j); fetchState(); } }
 $('settings-box').addEventListener('toggle', e => { if (e.target.open) loadSettings(); });
+['settings-box', 'log-fold'].forEach(id => {
+  const el = $(id), saved = store.get('open-' + id, null);
+  if (saved !== null) el.open = saved === '1';
+  el.addEventListener('toggle', () => store.set('open-' + id, el.open ? '1' : '0'));
+});
 
-// actualizare: la 2s in timpul scanarii, la 5s in rest
+// ------------------------------------------------------------ pornire
 let timer = null, every = 5000;
-function schedule(ms) {
-  if (ms === every && timer) return;
-  every = ms; clearInterval(timer); timer = setInterval(fetchState, ms);
-}
+function schedule(ms) { if (ms === every && timer) return; every = ms; clearInterval(timer); timer = setInterval(fetchState, ms); }
+showTab(tab);
 fetchState();
-loadSettings();  // numarul de posibile dubluri apare si cu panoul inchis
+loadSettings();
 schedule(5000);
 </script>
 </body>

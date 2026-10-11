@@ -75,6 +75,23 @@ python invoice_parser.py Facture_NET-26-001.pdf Facture_NET-26-010.pdf
 - `/api/test-ai`: verifică cheia AI și dacă modelul există
 - `/api/factura/<file_id>`: tot ce s-a extras dintr-o factură
 
+## Indicatori (dashboard pe tab-uri)
+
+Toți indicatorii se calculează din facturi și respectă **filtrul de perioadă** de sus: toată perioada, un an, sezonul (iun–sep) sau o lună.
+
+| Tab | Ce arată |
+|---|---|
+| **Proprietăți** | clasament după încasări, intervenții, frecvență (intervenții/lună), € / intervenție, inactivitate; căutare și filtru „Inactive” |
+| **Clienți** | venit, % din venit (concentrare: cât aduc primii 3), case, intervenții, € / intervenție |
+| **Evoluție** | grafice lunare (venit, intervenții) și tabel cu comparația față de luna și anul trecut; luna curentă e marcată „în curs” |
+| **Calendar** | harta zilelor lucrate, media menajelor pe zi a săptămânii, cele mai aglomerate zile |
+| **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
+| **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
+
+- O casă e **inactivă** când n-a mai avut menaj de mult mai mult timp decât intervalul ei obișnuit (de 3 ori intervalul tipic, cel puțin 45 de zile).
+- Verificarea prețurilor compară facturile aceleiași case, pentru același client și același tip de menaj.
+- **Export Excel** folosește perioada și sortarea alese și are foile: Clasament, Detalii intervenții, Facturi, Clienți, Evoluție lunară, Verificare prețuri.
+
 ## Backup în Google Drive (recomandat)
 
 Rezultatele scanărilor se salvează în fișierul `cache-facturi.json`, din folderul facturilor. La pornire, aplicația îl încarcă și citește doar facturile **noi sau modificate**. Facturile șterse din Drive dispar din aplicație, iar cele redenumite se actualizează fără să fie recitite.
@@ -98,6 +115,7 @@ Fără fișier, aplicația funcționează ca înainte (doar în memorie).
 cleaning-app/
 ├── app.py              # Flask, Google Drive, agregări, export Excel
 ├── invoice_parser.py   # parserul facturilor SimNettoyage
+├── analytics.py        # indicatorii: perioade, clienți, evoluție, calendar, prețuri
 ├── templates/index.html
 ├── requirements.txt
 ├── Procfile            # pentru Railway/Heroku (Render folosește render.yaml)

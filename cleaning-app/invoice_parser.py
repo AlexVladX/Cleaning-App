@@ -17,6 +17,7 @@ Calculul interventiilor se face in cod (nu de AI), cu aceleasi reguli ca inainte
 import os
 import re
 import unicodedata
+from functools import lru_cache
 from datetime import datetime, timedelta
 
 import pdfplumber
@@ -398,6 +399,7 @@ DEFAULT_RULES = {
 TIP_LABEL = {"standard": "Standard", "intermediaire": "Intermédiaire", "ouverture": "Ouverture"}
 
 
+@lru_cache(maxsize=20000)
 def norm_text(s):
     """'Intermédiaire ' -> 'intermediaire'; fara accente, litere mici, spatii simple."""
     s = unicodedata.normalize("NFKD", _clean(s or ""))

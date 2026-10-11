@@ -9,12 +9,13 @@ import re
 import json
 import io
 import hmac
+from functools import lru_cache
 import socket
 import threading
 import time
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, date
 
 from flask import Flask, render_template, jsonify, send_file, request, Response
 from google.oauth2 import service_account
@@ -23,6 +24,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 import google_auth_httplib2
 import httplib2
 import openpyxl
+import analytics
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from invoice_parser import (
@@ -73,6 +75,7 @@ GENERIC_PROP_WORDS = {"villa", "maison", "appartement", "appart", "appt", "apt",
                       "menage", "la", "le", "les", "l"}
 
 
+@lru_cache(maxsize=20000)
 def base_prop_key(name):
     """Cheia automata (fara unirile manuale): 'Villa Blue' -> 'blue'."""
     words = norm_text(name).split()
@@ -862,11 +865,89 @@ SORT_KEYS = {
 }
 
 
-def build_excel(sort="interventii"):
+# ---------------------------------------------------------------- indicatori (etapa 1)
+_an_cache = {}   # (data_key, perioada, zi) -> (lista de interventii, rezultat); cateva intrari
+_an_lock = threading.Lock()
+
+
+def data_key():
+    """Se schimba de fiecare data cand se schimba interventiile sau unirile de proprietati."""
+    ivs = state["interventii"]
+    alias = hash(tuple(sorted(settings["alias"].items())))
+    return f"{id(ivs)}-{len(ivs)}-{alias}"
+
+
+def compute_analytics(period_key="all"):
+    """
+    Toti indicatorii pentru perioada aleasa. Rezultatul e pastrat in memorie pana se schimba
+    datele/perioada/ziua — dashboard-ul il cere des, dar calculul se face doar cand e nevoie.
+    """
     with state_lock:
-        interventii = list(state["interventii"])
+        ivs_all = state["interventii"]
+    key = (data_key(), period_key, date.today().isoformat())
+    with _an_lock:
+        hit = _an_cache.get(key)
+        if hit:
+            return hit[1]
+    period, options = analytics.resolve_period(period_key, ivs_all)
+    ivs = analytics.filter_ivs(ivs_all, period)
+
+    names_all = {p["key"]: p["name"] for p in aggregate_props(ivs_all)}
+
+    def prop_display(name):
+        return names_all.get(prop_key(name), name)
+
+    months = analytics.period_months(ivs_all, period)
+    activity = analytics.property_activity(ivs, ivs_all, prop_key, len(months))
+    props = aggregate_props(ivs)
+    for p in props:
+        p.update(activity.get(p["key"], {}))
+
+    clients, top3 = analytics.clients_table(ivs, norm_text)
+    # o singura luna aleasa -> graficul arata ultimele 12 luni pana la ea (o bara singura nu spune nimic)
+    if period.get("key", "").startswith("m") and months:
+        all_months = analytics.period_months(ivs_all, None)
+        end = all_months.index(months[-1]) + 1 if months[-1] in all_months else len(all_months)
+        chart_months = all_months[max(0, end - 12):end]
+    else:
+        chart_months = months
+    prices = analytics.price_checks(ivs_all, period, prop_key, prop_display)
+
+    venit = round(sum(float(iv.get("suma") or 0) for iv in ivs), 2)
+    val = {
+        "period": period, "options": options,
+        "metrics": {
+            "venit": venit, "interventii": len(ivs), "proprietati": len(props),
+            "ore": round(sum(float(iv.get("ore") or 0) for iv in ivs if iv.get("tip_facturare") == "heure"), 2),
+            "medie": round(venit / len(ivs), 2) if ivs else 0,
+            "luni": len(months),
+            "abateri": sum(1 for r in prices if r["fel"] == "abatere"),
+            "inactive": sum(1 for p in props if p.get("inactiva")),
+            "fara_data": sum(1 for iv in ivs if not iv.get("data_iso")),
+        },
+        "props": props,
+        "clients": clients, "top3": top3,
+        "monthly": analytics.monthly_series(ivs_all, chart_months, prop_key),
+        "luna_selectata": months[-1] if period.get("key", "").startswith("m") and months else None,
+        "calendar": analytics.calendar_data(ivs, prop_display),
+        "prices": prices,
+    }
+    with _an_lock:
+        # pastram referinta la lista: cat timp e in cache, id-ul ei nu poate fi refolosit
+        for k in [k for k in _an_cache if k[0] != key[0]]:
+            del _an_cache[k]            # date vechi -> afara
+        while len(_an_cache) >= 8:
+            del _an_cache[next(iter(_an_cache))]
+        _an_cache[key] = (ivs_all, val)
+    return val
+
+
+def build_excel(sort="interventii", period_key="all"):
+    with state_lock:
         files = [dict(f) for f in state["files"].values()]
-    props = sorted(aggregate_props(interventii), key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
+    an = compute_analytics(period_key)
+    interventii = analytics.filter_ivs(state["interventii"], an["period"])
+    props = sorted(an["props"], key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
 
     wb = openpyxl.Workbook()
     header_fill = PatternFill("solid", fgColor="1F2937")
@@ -887,18 +968,20 @@ def build_excel(sort="interventii"):
     ws1 = wb.active
     ws1.title = "Clasament proprietati"
     sheet(ws1, ["Rang", "Proprietate", "Client", "Interventii", "Standard", "Intermédiaire",
-                "Ouverture", "Ore (la ora)", "€/ora", "Venit total (EUR)", "Medie / interventie",
-                "Ultima interventie", "Performanta", "Apare in facturi ca"],
-          [6, 26, 24, 11, 10, 13, 11, 11, 8, 15, 17, 16, 13, 36])
+                "Ouverture", "Ore (la ora)", "€/ora", "Venit (EUR)", "Medie / interventie",
+                "Interventii / luna", "Ultima interventie", "Zile de la ultima", "Inactiva",
+                "Performanta", "Apare in facturi ca"],
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 13, 36])
     for i, p in enumerate(props, 1):
-        ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p["ultima"] else ""
+        ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
         ws1.append([i, p["name"], p["client"], p["interventii"], t.get("standard") or None,
                     t.get("intermediaire") or None, t.get("ouverture") or None, p["ore"] or None,
-                    p["pret_ora"], p["total"], p["medie"], ultima, p["perf"],
+                    p["pret_ora"], p["total"], p["medie"], p.get("frecventa_luna"), ultima,
+                    p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "", p["perf"],
                     ", ".join(p["variante"]) if len(p["variante"]) > 1 else ""])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 15):
+        for col in range(1, 18):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
@@ -936,6 +1019,49 @@ def build_excel(sort="interventii"):
             ws3.cell(r, col).border = thin
         if f.get("status") in ("warning", "error", "duplicate"):
             ws3.cell(r, 7).fill = PatternFill("solid", fgColor="FEF3C7" if f["status"] != "error" else "FEE2E2")
+
+    ws4 = wb.create_sheet("Clienti")
+    sheet(ws4, ["Client", "Venit (EUR)", "% din venit", "Case", "Interventii", "Medie / interventie",
+                "Ore (la ora)", "Ultima interventie"], [32, 13, 12, 8, 11, 18, 13, 17])
+    for c in an["clients"]:
+        ws4.append([c["client"], c["venit"], c["procent"] / 100, c["case"], c["interventii"], c["medie"],
+                    c["ore"] or None, datetime.fromisoformat(c["ultima"]) if c["ultima"] else None])
+        r = ws4.max_row
+        ws4.cell(r, 3).number_format = "0.0%"
+        ws4.cell(r, 8).number_format = "DD/MM/YYYY"
+        for col in range(1, 9):
+            ws4.cell(r, col).border = thin
+
+    ws5 = wb.create_sheet("Evolutie lunara")
+    sheet(ws5, ["Luna", "Venit (EUR)", "vs luna trecuta", "vs anul trecut", "Interventii", "Ore",
+                "Case active"], [18, 13, 15, 15, 11, 8, 12])
+    for m in an["monthly"]:
+        ws5.append([m["eticheta"], m["venit"],
+                    m["vs_luna_trecuta"] / 100 if m["vs_luna_trecuta"] is not None else None,
+                    m["vs_an_trecut"] / 100 if m["vs_an_trecut"] is not None else None,
+                    m["interventii"], m["ore"] or None, m["case_active"]])
+        r = ws5.max_row
+        ws5.cell(r, 3).number_format = ws5.cell(r, 4).number_format = "+0.0%;-0.0%;0%"
+        for col in range(1, 8):
+            ws5.cell(r, col).border = thin
+
+    ws6 = wb.create_sheet("Verificare preturi")
+    sheet(ws6, ["Tip", "Proprietate", "Client", "Tip menaj", "Data", "Factura", "Pret facturat",
+                "Pret obisnuit", "Diferenta", "Unitate", "Fisier"], [13, 24, 24, 14, 12, 13, 13, 13, 11, 8, 30])
+    fel = {"abatere": "Abatere", "de confirmat": "De confirmat", "schimbare": "Schimbare tarif"}
+    for p in an["prices"]:
+        ws6.append([fel[p["fel"]], p["proprietate"], p["client"], tip_label(p["tip"]),
+                    datetime.fromisoformat(p["data"]) if p["data"] else None, p["factura"], p["pret"],
+                    p["pret_anterior"], p["diferenta"], p["unitate"], p["fisier"]])
+        r = ws6.max_row
+        ws6.cell(r, 5).number_format = "DD/MM/YYYY"
+        for col in range(1, 12):
+            ws6.cell(r, col).border = thin
+        if p["fel"] == "abatere":
+            ws6.cell(r, 1).fill = PatternFill("solid", fgColor="FEE2E2")
+
+    # perioada exportata, vizibila in titlul primei foi
+    ws1.title = f"Clasament {an['period']['label']}"[:31].replace("/", "-")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -987,8 +1113,13 @@ def api_state():
         "interventii": len(interventii),
         "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2),
     }
-    s["props"] = aggregate_props(interventii)
+    s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
     return jsonify(s)
+
+
+@app.route("/api/analytics")
+def api_analytics():
+    return jsonify(compute_analytics(request.args.get("period", "all")))
 
 
 @app.route("/api/factura/<file_id>")
@@ -1016,7 +1147,7 @@ def api_monitor():
 
 @app.route("/api/export")
 def api_export():
-    buf = build_excel(request.args.get("sort", "interventii"))
+    buf = build_excel(request.args.get("sort", "interventii"), request.args.get("period", "all"))
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
