@@ -15,7 +15,7 @@ import threading
 import time
 import urllib.request
 import urllib.error
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from flask import Flask, render_template, jsonify, send_file, request, Response
 from google.oauth2 import service_account
@@ -29,7 +29,7 @@ import geo
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from invoice_parser import (
-    parse_invoice, compute_interventions, layout_text, parse_ddmmyyyy, ParseError,
+    parse_invoice, compute_interventions, layout_text, parse_ddmmyyyy, ParseError, sane_invoice_date,
     norm_text, canonical_type, DEFAULT_RULES, TIP_LABEL,
 )
 
@@ -76,6 +76,8 @@ settings = {
     # clienti grupati: [{"nume": "Client X", "potriviri": ["dupont", "martin", ...]}]
     # o factura intra in grup daca numele clientului SAU folderul din Drive contine o potrivire
     "grupuri_clienti": [],
+    # incasari: id fisier factura -> {"suma": incasat, "data": "YYYY-MM-DD", "nota": ""}
+    "incasari": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -164,6 +166,12 @@ def client_group_rules():
     return out
 
 
+def group_of(client, folder_norm, rules):
+    c = norm_text(client or "")
+    return next((name for name, words in rules
+                 if any(w in c or (folder_norm and w in folder_norm) for w in words)), None)
+
+
 def group_clients(ivs):
     """
     Inlocuieste clientul facturat cu numele grupului (ex. persoane fizice aduse de acelasi
@@ -180,9 +188,7 @@ def group_clients(ivs):
         folder = folders.get(iv.get("_file_id"), "")
         mk = (client, folder)
         if mk not in memo:
-            c = norm_text(client)
-            memo[mk] = next((name for name, words in rules
-                             if any(w in c or (folder and w in folder) for w in words)), None)
+            memo[mk] = group_of(client, folder, rules)
         grp = memo[mk]
         out.append({**iv, "client": grp, "client_factura": client} if grp else iv)
     return out
@@ -435,7 +441,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
               "numar", "client", "data_emitere", "total", "metoda", "processed_at",
               "randuri", "antet", "av_factura", "folder")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
-PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "baza", "coord_sheet", "coords",
+PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -1616,6 +1622,182 @@ def api_settings():
                 f"{len(settings.get('grupuri_clienti') or [])} — recalculat fara recitirea facturilor")
         _save_async()
     return jsonify(_settings_payload())
+
+
+# ---------------------------------------------------------------- incasari (matrice client x luna)
+LUNI_SCURT = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep", "Oct", "Noi", "Dec"]
+
+
+def _invoice_month(f, emis):
+    """Luna lucrarilor (cea mai frecventa luna din datele menajelor); altfel luna emiterii."""
+    cnt = {}
+    for iv in f.get("interventii") or []:
+        d = iv.get("data_iso") or ""
+        if len(d) >= 7:
+            cnt[d[:7]] = cnt.get(d[:7], 0) + 1
+    if cnt:
+        return max(cnt, key=lambda m: (cnt[m], m))
+    return emis.strftime("%Y-%m") if emis else None
+
+
+def invoice_ledger(today=None):
+    """O intrare pe factura valida (fara duplicate/erori), cu scadenta, suma si cat s-a incasat."""
+    today = today or date.today()
+    rules = client_group_rules()
+    pay = settings.get("incasari") or {}
+    with state_lock:
+        files = [dict(f) for f in state["files"].values() if f.get("status") in ("done", "warning")]
+    out = []
+    for f in files:
+        total = float(f.get("total") or 0)
+        if total <= 0:
+            continue
+        emis, _ = sane_invoice_date(parse_ddmmyyyy(f.get("data_emitere") or ""))
+        due = parse_ddmmyyyy((f.get("antet") or {}).get("scadenta") or "")
+        if emis and (not due or abs((due - emis).days) > 120):
+            due = emis + timedelta(days=30)        # scadenta lipsa / tastata gresit
+        luna = _invoice_month(f, emis)
+        if not luna:
+            continue
+        client = (f.get("client") or "Necunoscut").strip()
+        grup = group_of(client, norm_text(f.get("folder") or ""), rules) if rules else None
+        p = pay.get(f["id"]) or {}
+        inc = min(float(p.get("suma") or 0), total)
+        rest = round(total - inc, 2)
+        if rest <= 0.01:
+            stare = "ok"
+        elif due and due < today:
+            stare = "late" if inc <= 0 else "part"
+        else:
+            stare = "part" if inc > 0 else "wait"
+        out.append({
+            "id": f["id"], "numar": f.get("numar"), "fisier": f.get("name"), "client": grup or client,
+            "client_factura": client, "grup": bool(grup), "luna": luna, "total": round(total, 2),
+            "incasat": round(inc, 2), "rest": max(rest, 0), "stare": stare,
+            "emisa": emis.isoformat() if emis else None, "scadenta": due.isoformat() if due else None,
+            "zile_intarziere": (today - due).days if due and due < today and rest > 0.01 else 0,
+            "data_incasare": p.get("data"), "nota": p.get("nota") or "",
+        })
+    return out
+
+
+def payments_matrix(an=None):
+    today = date.today()
+    led = invoice_ledger(today)
+    ani = sorted({x["luna"][:4] for x in led}, reverse=True)
+    an = an if an in ani else (ani[0] if ani else str(today.year))
+    rows_led = [x for x in led if x["luna"][:4] == an]
+    luni = sorted({x["luna"] for x in rows_led})
+    clients = {}
+    for x in rows_led:
+        c = clients.setdefault(norm_text(x["client"]), {"client": x["client"], "grup": x["grup"], "celule": {},
+                                                        "de_incasat": 0.0, "restant": 0.0})
+        cell = c["celule"].setdefault(x["luna"], {"total": 0.0, "incasat": 0.0, "facturi": []})
+        cell["total"] += x["total"]
+        cell["incasat"] += x["incasat"]
+        cell["facturi"].append(x)
+        c["de_incasat"] += x["rest"]
+        if x["stare"] in ("late", "part") and x["zile_intarziere"] > 0:
+            c["restant"] += x["rest"]
+    for c in clients.values():
+        for cell in c["celule"].values():
+            fs = sorted(cell["facturi"], key=lambda x: (x["emisa"] or "", x["numar"] or ""))
+            cell["facturi"] = fs
+            cell["total"], cell["incasat"] = round(cell["total"], 2), round(cell["incasat"], 2)
+            cell["rest"] = round(cell["total"] - cell["incasat"], 2)
+            late = [x for x in fs if x["zile_intarziere"] > 0]
+            if cell["rest"] <= 0.01:
+                cell["stare"] = "ok"            # verde: tot incasat
+            elif cell["incasat"] > 0:
+                cell["stare"] = "part"          # galben: o parte incasata
+            elif late:
+                cell["stare"] = "late"          # rosu: trecut de scadenta, nimic incasat
+            else:
+                cell["stare"] = "wait"          # alb: inca nescadent
+            cell["zile"] = max((x["zile_intarziere"] for x in late), default=0)
+            nesc = [x["scadenta"] for x in fs if x["rest"] > 0.01 and x["scadenta"]]
+            cell["scadenta"] = min(nesc) if nesc else None
+            cell["in_curs"] = any(x["luna"] == today.strftime("%Y-%m") for x in fs)
+        c["de_incasat"], c["restant"] = round(c["de_incasat"], 2), round(c["restant"], 2)
+    # ordine stabila (dupa cat s-a facturat in an), ca randurile sa nu sara cand marchezi o plata
+    for c in clients.values():
+        c["facturat"] = round(sum(cell["total"] for cell in c["celule"].values()), 2)
+    rows = sorted(clients.values(), key=lambda c: (-c["facturat"], c["client"].casefold()))
+    tot = []
+    for m in luni:
+        t = sum(x["total"] for x in rows_led if x["luna"] == m)
+        i = sum(x["incasat"] for x in rows_led if x["luna"] == m)
+        tot.append({"luna": m, "facturat": round(t, 2), "incasat": round(i, 2),
+                    "procent": round(i / t * 100) if t else 0})
+    all_rest = round(sum(x["rest"] for x in led), 2)
+    all_late = round(sum(x["rest"] for x in led if x["zile_intarziere"] > 0), 2)
+    return {
+        "an": an, "ani": ani,
+        "luni": [{"key": m, "label": LUNI_SCURT[int(m[5:]) - 1]} for m in luni],
+        "clienti": rows, "totaluri": tot,
+        "sumar": {"de_incasat": all_rest, "restant": all_late,
+                  "facturi_restante": sum(1 for x in led if x["zile_intarziere"] > 0),
+                  "de_incasat_an": round(sum(c["de_incasat"] for c in rows), 2)},
+        "azi": today.isoformat(),
+    }
+
+
+@app.route("/api/incasari")
+def api_incasari():
+    return jsonify(payments_matrix(request.args.get("an")))
+
+
+@app.route("/api/incasari", methods=["POST"])
+def api_incasari_set():
+    """
+    Marcheaza facturi incasate. {ids:[...]} = integral; {ids:[id], suma: 200} = partial;
+    {ids:[...], undo:true} = anuleaza. Optional data (YYYY-MM-DD) si nota.
+    """
+    data = request.json or {}
+    ids = [i for i in (data.get("ids") or []) if isinstance(i, str)]
+    pana_la = str(data.get("pana_la") or "")
+    if pana_la and not data.get("undo"):
+        # pornire rapida: tot ce e neincasat pana la luna aleasa (inclusiv) devine incasat
+        if not re.fullmatch(r"\d{4}-\d{2}", pana_la):
+            return jsonify({"ok": False, "error": "Luna nu e validă"}), 400
+        ids = [x["id"] for x in invoice_ledger() if x["luna"] <= pana_la and x["rest"] > 0.01]
+        if not ids:
+            return jsonify({"ok": True, "ids": []})
+    if not ids:
+        return jsonify({"ok": False, "error": "Nicio factură aleasă"}), 400
+    pay = settings.setdefault("incasari", {})
+    with state_lock:
+        totals = {fid: float(state["files"][fid].get("total") or 0) for fid in ids if fid in state["files"]}
+    if data.get("undo"):
+        for fid in ids:
+            pay.pop(fid, None)
+    else:
+        when = (data.get("data") or date.today().isoformat())[:10]
+        try:
+            date.fromisoformat(when)
+        except ValueError:
+            return jsonify({"ok": False, "error": "Data nu e validă"}), 400
+        suma = data.get("suma")
+        if suma is not None and len(ids) == 1:
+            try:
+                suma = float(str(suma).replace(",", ".").replace("€", "").replace(" ", ""))
+            except ValueError:
+                return jsonify({"ok": False, "error": "Suma nu e validă"}), 400
+            if suma <= 0:
+                pay.pop(ids[0], None)
+            else:
+                pay[ids[0]] = {"suma": round(min(suma, totals.get(ids[0], suma)), 2), "data": when,
+                               "nota": (data.get("nota") or "").strip()[:200]}
+        else:
+            for fid in ids:
+                if fid in totals:
+                    pay[fid] = {"suma": round(totals[fid], 2), "data": when,
+                                "nota": (data.get("nota") or "").strip()[:200]}
+    cache["dirty"] = True
+    _save_async()
+    if pana_la:
+        add_log(f"Încasări: {len(ids)} facturi până la {pana_la} marcate încasate")
+    return jsonify({"ok": True, "ids": ids})
 
 
 @app.route("/api/exclude", methods=["POST"])

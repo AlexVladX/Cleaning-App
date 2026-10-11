@@ -87,6 +87,7 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Evoluție** | grafice lunare (venit, intervenții) și tabel cu comparația față de luna și anul trecut; luna curentă e marcată „în curs” |
 | **Calendar** | harta zilelor lucrate, media menajelor pe zi a săptămânii, cele mai aglomerate zile |
 | **Zone** | distanța pe drum de la bază la fiecare casă, venit pe zone (sub 10 / 10–20 / 20–35 / peste 35 km), € încasați pe km de drum, casele scumpe la drum, casele fără coordonate |
+| **Încasări** | matrice clienți × luni, colorată: verde încasat, galben parțial, roșu restant, alb nescadent. Click pe căsuță → facturile lunii, cu „✓ Încasată”, „Parțial…” și „Toată luna încasată”. „Pornire rapidă” marchează dintr-o dată tot ce e plătit până la o lună. Încasările se salvează în backup. |
 | **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
