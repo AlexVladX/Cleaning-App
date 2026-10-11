@@ -70,6 +70,9 @@ settings = {
     "ignorate": [],  # sugestii de unire respinse ("Nu e dubla")
     "verificate": {},  # factura -> amprenta avertismentelor marcate "Am verificat"
     "preturi_ok": [],  # semnalari de pret marcate "E corect"
+    "excluse": [],     # proprietati scoase manual din lista (ex. produse de curatenie facturate)
+    "cuvinte_produse": ["produit"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
+    "pastrate": [],    # proprietati puse inapoi manual: cuvintele de produse nu le mai scot
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -102,6 +105,47 @@ def prop_key(name):
         seen.add(key)
         key = settings["alias"][key]
     return key
+
+def sheet_keys():
+    """Cheile caselor cunoscute din Sheet-ul cu coordonate (inclusiv legaturile manuale)."""
+    return ({prop_key(c["nume"]) for c in settings.get("coords") or []}
+            | set(settings.get("coord_alias") or {}))
+
+
+def _excl_cfg():
+    return (set(settings.get("excluse") or []),
+            [norm_text(w) for w in settings.get("cuvinte_produse") or [] if w.strip()],
+            set(settings.get("pastrate") or []) | sheet_keys())
+
+
+def exclusion_reason(iv, cfg=None):
+    """
+    'manual' (scos cu ✕) / 'produs' (cuvant din Reguli) / None.
+    Siguranta: cuvintele NU scot niciodata o casa din Sheet-ul cu coordonate
+    sau una pusa inapoi manual - doar butonul ✕ poate face asta.
+    """
+    excl, words, safe = cfg or _excl_cfg()
+    name = re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut"
+    key = prop_key(name)
+    if key in excl:
+        return "manual"
+    if words and key not in safe:
+        txt = norm_text(name) + " | " + norm_text(iv.get("tip_serviciu") or "")
+        if any(w in txt for w in words):
+            return "produs"
+    return None
+
+
+def split_ivs(ivs):
+    """(interventii de menaj, randuri scoase din lista)."""
+    cfg = _excl_cfg()
+    if not cfg[0] and not cfg[1]:
+        return ivs, []
+    keep, out = [], []
+    for iv in ivs:
+        (out if exclusion_reason(iv, cfg) else keep).append(iv)
+    return keep, out
+
 
 state = {
     "files": {},
@@ -343,7 +387,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
               "numar", "client", "data_emitere", "total", "metoda", "processed_at",
               "randuri", "antet", "av_factura")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
-PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "baza", "coord_sheet", "coords",
+PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -957,6 +1001,7 @@ def geo_for_props(props, all_names=None):
     missing = []
     for p in props:
         c = by_name.get(manual.get(p["key"])) if p["key"] in manual else sheet.get(p["key"])
+        p["in_sheet"] = bool(c)
         d = dist.get(geo.coord_key(c["lat"], c["lng"])) if c else None
         if d:
             p.update({"distanta_km": d[0], "timp_min": d[1], "dist_sursa": d[2],
@@ -1015,7 +1060,8 @@ def data_key():
     """Se schimba de fiecare data cand se schimba interventiile sau unirile de proprietati."""
     ivs = state["interventii"]
     alias = hash(tuple(sorted(settings["alias"].items())))
-    ok = hash(tuple(sorted(settings.get("preturi_ok") or [])))
+    ok = hash((tuple(sorted(settings.get("preturi_ok") or [])), tuple(sorted(settings.get("excluse") or [])),
+               tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or []))))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
     return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
@@ -1027,14 +1073,37 @@ def compute_analytics(period_key="all"):
     datele/perioada/ziua — dashboard-ul il cere des, dar calculul se face doar cand e nevoie.
     """
     with state_lock:
-        ivs_all = state["interventii"]
+        ivs_raw = state["interventii"]
     key = (data_key(), period_key, date.today().isoformat())
     with _an_lock:
         hit = _an_cache.get(key)
         if hit:
             return hit[1]
+    ivs_all, ex_all = split_ivs(ivs_raw)
     period, options = analytics.resolve_period(period_key, ivs_all)
     ivs = analytics.filter_ivs(ivs_all, period)
+    ex = analytics.filter_ivs(ex_all, period)
+    excl_set = set(settings.get("excluse") or [])
+    sk = sheet_keys()
+    ex_rows = {}
+    for iv in ex:
+        raw = re.sub(r"\s+", " ", (iv.get("proprietate") or "Necunoscut").strip())
+        k = prop_key(raw)
+        r = ex_rows.setdefault(k, {"key": k, "name": raw, "randuri": 0, "total": 0.0, "ultima": "",
+                                   "manual": k in excl_set, "clienti": set(), "in_sheet": k in sk})
+        r["randuri"] += 1
+        r["ultima"] = max(r["ultima"], iv.get("data_iso") or "")
+        r["total"] += float(iv.get("suma") or 0)
+        if iv.get("client"):
+            r["clienti"].add(iv["client"])
+    excluse = sorted(ex_rows.values(), key=lambda r: -r["total"])
+    for r in excluse:
+        r["total"] = round(r["total"], 2)
+        r["clienti"] = ", ".join(sorted(r["clienti"]))
+    # proprietatile scoase manual, dar fara randuri in perioada aleasa (ca sa poata fi puse inapoi)
+    for k in sorted(excl_set - set(ex_rows)):
+        excluse.append({"key": k, "name": k, "randuri": 0, "total": 0, "manual": True, "clienti": "",
+                        "ultima": "", "in_sheet": k in sk})
 
     names_all = {p["key"]: p["name"] for p in aggregate_props(ivs_all)}
 
@@ -1074,7 +1143,9 @@ def compute_analytics(period_key="all"):
             "inactive": sum(1 for p in props if p.get("inactiva")),
             "venit_inactive": round(sum(p["total"] for p in props if p.get("inactiva")), 2),
             "fara_data": sum(1 for iv in ivs if not iv.get("data_iso")),
+            "venit_excluse": round(sum(float(iv.get("suma") or 0) for iv in ex), 2),
         },
+        "excluse": excluse,
         "props": props,
         "clients": clients, "top3": top3,
         "monthly": analytics.monthly_series(ivs_all, chart_months, prop_key),
@@ -1100,7 +1171,7 @@ def compute_analytics(period_key="all"):
             del _an_cache[k]            # date vechi -> afara
         while len(_an_cache) >= 8:
             del _an_cache[next(iter(_an_cache))]
-        _an_cache[key] = (ivs_all, val)
+        _an_cache[key] = (ivs_raw, val)
     return val
 
 
@@ -1108,7 +1179,7 @@ def build_excel(sort="interventii", period_key="all"):
     with state_lock:
         files = [dict(f) for f in state["files"].values()]
     an = compute_analytics(period_key)
-    interventii = analytics.filter_ivs(state["interventii"], an["period"])
+    interventii = analytics.filter_ivs(split_ivs(state["interventii"])[0], an["period"])
     props = sorted(an["props"], key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
 
     wb = openpyxl.Workbook()
@@ -1270,7 +1341,7 @@ def index():
 @app.route("/api/state")
 def api_state():
     with state_lock:
-        interventii = list(state["interventii"])
+        interventii = split_ivs(list(state["interventii"]))[0]
         files = sorted((_public_file(f, light=True) for f in state["files"].values()),
                        key=_file_sort_key)
         s = {
@@ -1365,7 +1436,7 @@ def merge_suggestions(props, limit=20):
 
 def _settings_payload():
     with state_lock:
-        interventii = list(state["interventii"])
+        interventii = split_ivs(list(state["interventii"]))[0]
     props = aggregate_props(interventii)
     alias = settings["alias"]
     names = {p["key"]: p["name"] for p in props}
@@ -1375,6 +1446,7 @@ def _settings_payload():
         "clienti_la_ora": settings["clienti_la_ora"],
         "tipuri_la_ora": settings["tipuri_la_ora"],
         "prag_forfait": settings["prag_forfait"],
+        "cuvinte_produse": settings.get("cuvinte_produse") or [],
         "unite": [{"din": k, "din_nume": variant_name.get(k, k), "in": v,
                    "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
         "proprietati": sorted(({"key": p["key"], "name": p["name"], "variante": p["variante"]}
@@ -1450,6 +1522,8 @@ def api_settings():
             settings["clienti_la_ora"] = clean_list(data["clienti_la_ora"])
         if "tipuri_la_ora" in data:
             settings["tipuri_la_ora"] = clean_list(data["tipuri_la_ora"])
+        if "cuvinte_produse" in data:
+            settings["cuvinte_produse"] = clean_list(data["cuvinte_produse"])
         if "prag_forfait" in data:
             try:
                 settings["prag_forfait"] = max(0.0, float(str(data["prag_forfait"]).replace(",", ".")))
@@ -1458,9 +1532,31 @@ def api_settings():
         recompute_all()
         add_log(f"Reguli actualizate: clienti la ora = {', '.join(settings['clienti_la_ora']) or '—'} · "
                 f"tipuri la ora = {', '.join(settings['tipuri_la_ora']) or '—'} · "
-                f"prag forfait = {settings['prag_forfait']:g} € — recalculat fara recitirea facturilor")
+                f"prag forfait = {settings['prag_forfait']:g} € · produse = "
+                f"{', '.join(settings.get('cuvinte_produse') or []) or '—'} — recalculat fara recitirea facturilor")
         _save_async()
     return jsonify(_settings_payload())
+
+
+@app.route("/api/exclude", methods=["POST"])
+def api_exclude():
+    """Scoate o proprietate din lista (ex. un produs facturat), sau o pune inapoi cu undo=true."""
+    data = request.json or {}
+    key, undo = (data.get("key") or "").strip(), bool(data.get("undo"))
+    if not key:
+        return jsonify({"ok": False, "error": "Lipseste proprietatea"}), 400
+    cur, keep = set(settings.get("excluse") or []), set(settings.get("pastrate") or [])
+    if undo:
+        # "Pune inapoi": ramane in lista si daca numele contine un cuvant de produs
+        settings["excluse"] = sorted(cur - {key})
+        settings["pastrate"] = sorted(keep | {key})
+    else:
+        settings["excluse"] = sorted(cur | {key})
+        settings["pastrate"] = sorted(keep - {key})
+    cache["dirty"] = True
+    add_log(f"{'Pus inapoi in lista' if undo else 'Scos din lista'}: '{data.get('name') or key}'")
+    _save_async()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/merge", methods=["POST"])

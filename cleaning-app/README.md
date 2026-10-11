@@ -90,6 +90,7 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
+- **Produse și alte rânduri care nu sunt case**: butonul ✕ din Proprietăți le scoate din listă (se pot pune înapoi din „Scoase din listă”). Rândurile care conțin cuvintele din **Reguli → Produse** (implicit „produit”) se scot automat, și din facturile viitoare. Nu intră în venit, intervenții sau clasament. Siguranță: ✕ cere confirmare (cu avertisment dacă rândul pare o casă) și poate fi anulat imediat; cuvintele-cheie nu scot niciodată o casă din Sheet-ul cu coordonate sau una pusă înapoi manual.
 - O casă e **inactivă** când n-a mai avut menaj de mult mai mult timp decât intervalul ei obișnuit (de 3 ori intervalul tipic, cel puțin 45 de zile).
 - Verificarea prețurilor compară facturile aceleiași case, pentru același client și același tip de menaj.
 - **Export Excel** folosește perioada și sortarea alese și are foile: Clasament (cu distanță, timp și zonă), Detalii intervenții, Facturi, Zone, Clienți, Evoluție lunară, Verificare prețuri.
