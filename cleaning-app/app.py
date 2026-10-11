@@ -113,9 +113,10 @@ def sheet_keys():
 
 
 def _excl_cfg():
+    kept = set(settings.get("pastrate") or [])
     return (set(settings.get("excluse") or []),
             [norm_text(w) for w in settings.get("cuvinte_produse") or [] if w.strip()],
-            set(settings.get("pastrate") or []) | sheet_keys())
+            kept | sheet_keys(), kept)
 
 
 def exclusion_reason(iv, cfg=None):
@@ -124,14 +125,18 @@ def exclusion_reason(iv, cfg=None):
     Siguranta: cuvintele NU scot niciodata o casa din Sheet-ul cu coordonate
     sau una pusa inapoi manual - doar butonul ✕ poate face asta.
     """
-    excl, words, safe = cfg or _excl_cfg()
+    excl, words, safe, kept = cfg or _excl_cfg()
     name = re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut"
     key = prop_key(name)
     if key in excl:
         return "manual"
-    if words and key not in safe:
-        txt = norm_text(name) + " | " + norm_text(iv.get("tip_serviciu") or "")
-        if any(w in txt for w in words):
+    if words:
+        # tipul randului e "produs" (ex. Villa Emma · Produits) -> doar randul acela iese, casa ramane
+        tip = norm_text(iv.get("tip_serviciu") or "")
+        if tip and key not in kept and any(w in tip for w in words):
+            return "produs"
+        # numele e un produs -> iese, dar NICIODATA o casa din Sheet sau una pusa inapoi manual
+        if key not in safe and any(w in norm_text(name) for w in words):
             return "produs"
     return None
 
@@ -1553,6 +1558,9 @@ def api_exclude():
     else:
         settings["excluse"] = sorted(cur | {key})
         settings["pastrate"] = sorted(keep - {key})
+        # daca fusese legat gresit de o casa din Sheet (tab-ul Zone), legatura se sterge
+        if (settings.get("coord_alias") or {}).pop(key, None) is not None:
+            settings["geo_v"] = settings.get("geo_v", 0) + 1
     cache["dirty"] = True
     add_log(f"{'Pus inapoi in lista' if undo else 'Scos din lista'}: '{data.get('name') or key}'")
     _save_async()
