@@ -1,3 +1,9 @@
+# Incarcam codec-ul 'idna' in firul principal, INAINTE de orice fir din fundal.
+# Altfel, daca doua fire il incarca simultan (ex. scanarea + health check-ul Render),
+# Python memoreaza esecul si TOATE cererile dau "LookupError: unknown encoding: idna".
+import encodings.idna  # noqa: F401
+"x".encode("idna")
+
 import os
 import re
 import json
@@ -684,7 +690,10 @@ def start_background():
     threading.Thread(target=monitor_loop, daemon=True).start()
     add_log("Aplicatie pornita (parser direct, AI doar ca rezerva).")
     if FOLDER_ID:
-        threading.Thread(target=scan_folder, kwargs={"retry_errors": True}, daemon=True).start()
+        # asteptam ca serverul sa termine de pornit inainte de prima conexiune la Google
+        t = threading.Timer(5.0, scan_folder, kwargs={"retry_errors": True})
+        t.daemon = True
+        t.start()
 
 
 # ---------------------------------------------------------------- agregari
