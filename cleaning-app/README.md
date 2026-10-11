@@ -1,6 +1,6 @@
 # Analizator Facturi Curățenie
 
-Aplicație Python care citește automat facturile PDF SimNettoyage din Google Drive, extrage intervențiile pe fiecare proprietate și afișează un clasament (dashboard + export Excel).
+Aplicație Python care citește automat facturile PDF x din Google Drive, extrage intervențiile pe fiecare proprietate și afișează un clasament (dashboard + export Excel).
 
 ## Cum citește facturile
 
@@ -8,7 +8,7 @@ Aplicație Python care citește automat facturile PDF SimNettoyage din Google Dr
    - antet: client ("Facture pour"), număr factură, data emiterii, scadența
    - tabelul **Détail des prestations**, rând cu rând: casa, tipul serviciului, **toate datele** de curățenie, cantitate, preț unitar, total
    - totalurile (Subtotal, Ajustements, Total), cu verificare că rândurile dau Subtotalul
-2. **AI doar ca rezervă.** Dacă o factură nu are șablonul SimNettoyage, iar `GROQ_API_KEY` e setat, AI-ul copiază doar datele brute. Calculele se fac tot în cod, iar factura e marcată „de verificat”.
+2. **AI doar ca rezervă.** Dacă o factură nu are șablonul x, iar `GROQ_API_KEY` e setat, AI-ul copiază doar datele brute. Calculele se fac tot în cod, iar factura e marcată „de verificat”.
 
 ### Reguli de calcul (în cod, nu în AI)
 - **Forfait** (preț unitar ≥ `FORFAIT_MIN_PRICE`, implicit 40 €): fiecare dată = o intervenție, la prețul unitar.
@@ -89,6 +89,7 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Zone** | distanța pe drum de la bază la fiecare casă, venit pe zone (sub 10 / 10–20 / 20–35 / peste 35 km), € încasați pe km de drum, casele scumpe la drum, casele fără coordonate |
 | **Încasări** | matrice clienți × luni, colorată: verde încasat, galben parțial, roșu restant, alb nescadent. Click pe căsuță → facturile lunii, cu „✓ Încasată”, „Parțial…” și „Toată luna încasată”. „Pornire rapidă” marchează dintr-o dată tot ce e plătit până la o lună. Încasările se salvează în backup. |
 | **Cheltuieli & profit** | cheltuieli pe categorii × luni (unele lunare, recurente), profit și marjă, „unde se duc banii”. Motorina e estimată din traseele zilnice (baza → casele zilei, de la una la cea mai apropiată → baza); unde treci bonuri reale pe o lună, profitul folosește bonurile. Categoriile marcate „(personal)” (ex. transferuri acasă) nu scad din profitul firmei. În Proprietăți apare „Profit est.” pe casă: încasări minus drumul casei, salarii/produse/mâncare după numărul de menaje și restul cheltuielilor după venit. |
+| **Verificare calendar** | compară menajele din Google Calendar cu cele facturate: **nefacturate** (în calendar, pe nicio factură), **dată diferită** (aceeași casă la 1–3 zile), **fără eveniment**. Configurare: activezi Google Calendar API în proiectul service account-ului, partajezi calendarul cu email-ul service account-ului („Vezi toate detaliile evenimentelor”) și lipești ID-ul calendarului în tab. Titlurile evenimentelor nu se salvează, se citesc doar pentru comparație. |
 | **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
@@ -135,10 +136,11 @@ Fără fișier, aplicația funcționează ca înainte (doar în memorie).
 ```
 cleaning-app/
 ├── app.py              # Flask, Google Drive, agregări, export Excel
-├── invoice_parser.py   # parserul facturilor SimNettoyage
+├── invoice_parser.py   # parserul facturilor x
 ├── analytics.py        # indicatorii: perioade, clienți, evoluție, calendar, prețuri
 ├── geo.py              # coordonate din Sheet, trasee OSRM, zone
 ├── costs.py            # cheltuieli, motorina estimata, profit
+├── calendar_check.py   # comparatia Google Calendar ↔ facturi
 ├── templates/index.html
 ├── requirements.txt
 ├── Procfile            # pentru Railway/Heroku (Render folosește render.yaml)

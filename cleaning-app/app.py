@@ -25,6 +25,7 @@ import google_auth_httplib2
 import httplib2
 import openpyxl
 import analytics
+import calendar_check
 import costs
 import geo
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -85,6 +86,10 @@ settings = {
     "consum": 8.0,             # litri / 100 km
     "pret_motorina": 1.95,     # € / litru
     "dist_matrix": {},         # distante pe drum intre toate casele (pentru motorina estimata)
+    # Google Calendar cu interventiile (ID-ul se lipeste in aplicatie; evenimentele NU se salveaza)
+    "calendar_id": "",
+    "calendar_de_la": "",      # verificarea incepe de la data asta (optional)
+    "calendar_ok": [],         # semnalari marcate "E corect"
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -214,6 +219,7 @@ state = {
     "monitoring": False,
     "log": [],
     "scan": {"active": False, "phase": None, "done": 0, "total": 0, "eta": None},
+    "calendar": {"events": [], "citit": None, "eroare": None},   # doar in memorie
 }
 state_lock = threading.Lock()
 scan_lock = threading.Lock()
@@ -449,7 +455,8 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
               "randuri", "antet", "av_factura", "folder")
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
-                "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix", "baza", "coord_sheet", "coords",
+                "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
+                "calendar_id", "calendar_de_la", "calendar_ok", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -897,6 +904,8 @@ def scan_folder(retry_errors=False):
             sync_geo()
         except Exception as e:  # distantele nu au voie sa strice scanarea facturilor
             add_log(f"⚠ Distante: {e}")
+        if settings.get("calendar_id"):
+            read_calendar()
         save_cache()
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
@@ -2171,6 +2180,133 @@ def api_cheltuieli_settings():
             return jsonify({"ok": False, "error": "Lista de categorii e goală"}), 400
         settings["categorii_cheltuieli"] = cats
     _cost_changed()
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------- Google Calendar
+def service_account_email():
+    try:
+        return json.loads(GOOGLE_CREDENTIALS_JSON).get("client_email") if GOOGLE_CREDENTIALS_JSON else None
+    except ValueError:
+        return None
+
+
+def read_calendar():
+    """Citeste evenimentele (doar data + titlu) din calendarul partajat cu service account-ul."""
+    cid = (settings.get("calendar_id") or "").strip()
+    if not cid:
+        return
+    set_stage("citesc Google Calendar")
+    try:
+        info = json.loads(GOOGLE_CREDENTIALS_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/calendar.readonly"])
+        http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=60))
+        svc = build("calendar", "v3", http=http, cache_discovery=False)
+        start = settings.get("calendar_de_la") or (date.today() - timedelta(days=550)).isoformat()
+        tmin = f"{start}T00:00:00Z"
+        tmax = f"{(date.today() + timedelta(days=1)).isoformat()}T00:00:00Z"
+        events, token = [], None
+        while True:
+            r = svc.events().list(calendarId=cid, timeMin=tmin, timeMax=tmax, singleEvents=True,
+                                  orderBy="startTime", maxResults=2500, pageToken=token,
+                                  fields="nextPageToken,items(summary,start,status)").execute()
+            for ev in r.get("items", []):
+                d = calendar_check.event_day(ev)
+                if d and ev.get("status") != "cancelled" and ev.get("summary"):
+                    events.append((d, ev["summary"].strip()[:200]))
+            token = r.get("nextPageToken")
+            if not token or len(events) > 20000:
+                break
+        with state_lock:
+            state["calendar"] = {"events": events, "citit": datetime.now().strftime("%d/%m/%Y %H:%M"), "eroare": None}
+        add_log(f"Google Calendar: {len(events)} evenimente citite")
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        if "accessNotConfigured" in msg or "has not been used" in msg or "disabled" in msg:
+            msg = "Google Calendar API nu e activat în proiectul service account-ului (Google Cloud Console)."
+        elif "notFound" in msg or "Not Found" in msg or "404" in msg:
+            msg = "Calendarul nu e găsit: verifică ID-ul și că l-ai partajat cu email-ul service account-ului."
+        elif "forbidden" in msg.lower() or "403" in msg:
+            msg = "Acces refuzat: partajează calendarul cu service account-ul („Vezi toate detaliile evenimentelor”)."
+        with state_lock:
+            state["calendar"]["eroare"] = msg
+        add_log(f"⚠ Google Calendar: {msg}")
+    finally:
+        set_stage(None)
+
+
+def calendar_report():
+    with state_lock:
+        cal = dict(state["calendar"])
+        ivs_raw = state["interventii"]
+    ivs = split_ivs(ivs_raw)[0]
+    props = aggregate_props(ivs)
+    names = {p["key"]: list(p["variante"]) + [p["name"]] for p in props}
+    for c in settings.get("coords") or []:            # numele din Sheet ajuta si ele la potrivire
+        names.setdefault(prop_key(c["nume"]), []).append(c["nume"])
+    for k, nume in (settings.get("coord_alias") or {}).items():
+        names.setdefault(k, []).append(nume)
+    display = {p["key"]: p["name"] for p in props}
+    inv = {}
+    for iv in ivs:
+        if iv.get("data_iso"):
+            k = prop_key(re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut")
+            inv.setdefault((k, iv["data_iso"]), {"factura": iv.get("factura"), "client": iv.get("client"),
+                                                  "fisier": iv.get("_source")})
+    start = None
+    if settings.get("calendar_de_la"):
+        try:
+            start = date.fromisoformat(settings["calendar_de_la"])
+        except ValueError:
+            start = None
+    out = calendar_check.compare(cal.get("events") or [], inv, calendar_check.build_index(names), start,
+                                 frozenset(settings.get("calendar_ok") or []))
+    for lst in ("nefacturat", "data_diferita", "fara_eveniment", "de_facturat"):
+        for x in out[lst]:
+            x["nume"] = display.get(x["cheie"], x["cheie"])
+    out.update({"configurat": bool(settings.get("calendar_id")), "calendar_id": settings.get("calendar_id"),
+                "de_la_setat": settings.get("calendar_de_la"), "citit": cal.get("citit"), "eroare": cal.get("eroare"),
+                "service_account": service_account_email()})
+    out["de_verificat"] = sum(1 for k in ("nefacturat", "data_diferita") for x in out[k] if not x["ok"])
+    return out
+
+
+@app.route("/api/calendar")
+def api_calendar():
+    return jsonify(calendar_report())
+
+
+@app.route("/api/calendar", methods=["POST"])
+def api_calendar_set():
+    d = request.json or {}
+    if "calendar_id" in d:
+        settings["calendar_id"] = str(d["calendar_id"] or "").strip()[:200]
+    if "de_la" in d:
+        v = str(d["de_la"] or "").strip()[:10]
+        if v:
+            try:
+                date.fromisoformat(v)
+            except ValueError:
+                return jsonify({"ok": False, "error": "Data de început nu e validă"}), 400
+        settings["calendar_de_la"] = v
+    cache["dirty"] = True
+    _save_async()
+    if settings.get("calendar_id"):
+        read_calendar()
+    else:
+        with state_lock:
+            state["calendar"] = {"events": [], "citit": None, "eroare": None}
+    return jsonify(calendar_report())
+
+
+@app.route("/api/calendar/ok", methods=["POST"])
+def api_calendar_ok():
+    d = request.json or {}
+    ids, cur = set(d.get("ids") or []), set(settings.get("calendar_ok") or [])
+    settings["calendar_ok"] = sorted(cur - ids if d.get("undo") else cur | ids)
+    cache["dirty"] = True
+    _save_async()
     return jsonify({"ok": True})
 
 
