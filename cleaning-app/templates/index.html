@@ -6,65 +6,57 @@
 <title>Analizator Facturi Curățenie</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
+  html,body{max-width:100%}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F9FAFB;color:#111827;font-size:14px}
-  .topbar{background:#111827;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
-  .topbar h1{font-size:16px;font-weight:500;letter-spacing:.01em}
-  .topbar-right{display:flex;align-items:center;gap:12px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#6B7280}
+  .topbar{background:#111827;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .topbar h1{font-size:16px;font-weight:500;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
+  .dot{width:8px;height:8px;border-radius:50%;background:#6B7280;flex:none}
   .dot.live{background:#10B981;animation:pulse 2s infinite}
-  .dot.err{background:#EF4444}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  .status-txt{font-size:12px;color:#9CA3AF}
-  .main{max-width:1100px;margin:0 auto;padding:24px 16px}
-  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
-  .metric{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px}
-  .metric-label{font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-  .metric-value{font-size:26px;font-weight:600;color:#111827}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-  @media(max-width:700px){.grid2{grid-template-columns:1fr}}
-  .card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px}
-  .card-title{font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
-  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#111827;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+  .status-txt{font-size:12px;color:#9CA3AF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .main{max-width:1200px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:16px}
+  .main>*{min-width:0}
+
+  /* butoane */
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#111827;display:inline-flex;align-items:center;gap:6px;transition:background .15s;white-space:nowrap}
   .btn:hover{background:#F3F4F6}
-  .btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn-dark{background:#111827;color:#fff;border-color:#111827}
-  .btn-dark:hover{background:#1F2937}
-  .btn-green{background:#059669;color:#fff;border-color:#059669}
-  .btn-green:hover{background:#047857}
+  .btn-dark{background:#111827;color:#fff;border-color:#111827}.btn-dark:hover{background:#1F2937}
+  .btn-green{background:#059669;color:#fff;border-color:#059669}.btn-green:hover{background:#047857}
   .btn-red{background:#DC2626;color:#fff;border-color:#DC2626}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-  .file-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
-  .file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#F9FAFB;border-left:3px solid #E5E7EB}
-  .file-item.processing{border-left-color:#F59E0B}
-  .file-item.done{border-left-color:#3B82F6}
-  .file-item.error{border-left-color:#EF4444}
-  .file-item.new{border-left-color:#10B981}
-  .file-item.warning{border-left-color:#F59E0B}
-  .file-item.duplicate{border-left-color:#9CA3AF;opacity:.7}
-  .file-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-  .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-  .file-meta{font-size:11px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .file-warn{font-size:11px;color:#92400E}
-  .badge-warn{background:#FEF3C7;color:#92400E}
-  .badge-dup{background:#E5E7EB;color:#374151}
-  .badge{font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;font-weight:500}
-  .badge-new{background:#D1FAE5;color:#065F46}
-  .badge-proc{background:#FEF3C7;color:#92400E}
-  .badge-done{background:#DBEAFE;color:#1E40AF}
-  .badge-err{background:#FEE2E2;color:#991B1B}
-  .prop-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
-  .prop-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#F9FAFB;border-radius:8px}
-  .prop-rank{font-size:12px;color:#9CA3AF;width:20px}
-  .prop-info{flex:1;display:flex;flex-direction:column;gap:2px}.prop-name{font-weight:500;font-size:13px}.prop-client{font-size:11px;color:#6B7280}.prop-stat{font-size:12px;color:#374151;min-width:52px;text-align:right}.prop-total{font-weight:500}
-  .prop-bar-wrap{width:80px}
-  .prop-bar-bg{height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden}
-  .prop-bar-fill{height:100%;border-radius:3px;background:#111827}
-  .prop-count{font-size:12px;color:#6B7280;min-width:30px;text-align:right}
-  .perf{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500}
-  .ph{background:#D1FAE5;color:#065F46}.pm{background:#FEF3C7;color:#92400E}.pl{background:#FEE2E2;color:#991B1B}
-  .log{font-size:11px;font-family:monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:220px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB}
-  .empty{text-align:center;padding:2rem;color:#9CA3AF;font-size:13px}
-  .progress-card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none}
+  .btn-sm{padding:3px 9px;font-size:12px}
+
+  /* indicatori */
+  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .metric{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;min-width:0}
+  .metric-label{font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric-value{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric.warn .metric-value{color:#B45309}
+
+  /* carduri */
+  .card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px;min-width:0}
+  .card-title{font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .count{font-weight:500;color:#9CA3AF;text-transform:none;letter-spacing:0}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .search{border:1px solid #D1D5DB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;width:220px;max-width:100%}
+  .seg{display:inline-flex;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;flex-wrap:wrap}
+  .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:#374151;border-right:1px solid #E5E7EB}
+  .seg button:last-child{border-right:none}
+  .seg button:hover{background:#F3F4F6}
+  .seg button.on{background:#111827;color:#fff}
+  .seg-lbl{font-size:11px;color:#9CA3AF}
+
+  /* sectiuni pliabile */
+  details.fold>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary .card-title::before{content:'▸ ';}
+  details.fold[open]>summary .card-title::before{content:'▾ ';}
+  details.fold[open]>summary{margin-bottom:12px}
+
+  /* progres */
+  .progress-card{display:none}
   .progress-card.on{display:block}
   .progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
   .progress-title{font-weight:600;font-size:14px}
@@ -74,42 +66,80 @@
   .progress-fill.indet{width:30%;animation:indet 1.4s ease-in-out infinite}
   @keyframes indet{0%{margin-left:-30%}100%{margin-left:100%}}
   .progress-current{font-size:12px;color:#374151;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  .sort-bar{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
-  .sort-lbl{font-size:11px;color:#9CA3AF;margin-right:2px}
-  .sort-bar button{border:1px solid #E5E7EB;background:#fff;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer;color:#374151}
-  .sort-bar button:hover{background:#F3F4F6}
-  .sort-bar button.on{background:#111827;color:#fff;border-color:#111827}
-  .prop-stat.hl{font-weight:700;color:#111827}
-  .sugg-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
-  .sugg{display:flex;align-items:center;gap:8px;font-size:12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;flex-wrap:wrap}
-  .sugg .txt{flex:1;min-width:180px}
-  .sugg .n{color:#6B7280}
-  .btn-sm{padding:3px 9px;font-size:12px}
-  .prop-types{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+
+  /* clasament (tabel) */
+  .table-wrap{max-height:70vh;overflow:auto;border:1px solid #F3F4F6;border-radius:8px}
+  table.rank{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+  table.rank th{position:sticky;top:0;z-index:1;background:#F9FAFB;text-align:left;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid #E5E7EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.rank th.sortable{cursor:pointer;user-select:none}
+  table.rank th.sortable:hover{color:#111827}
+  table.rank th.active{color:#111827}
+  table.rank th.active::after{content:' ↓'}
+  table.rank td{padding:9px 10px;border-bottom:1px solid #F3F4F6;vertical-align:top}
+  table.rank tr:hover td{background:#FAFAFA}
+  .num{text-align:right !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.hl{font-weight:700}
+  .c-rank{width:44px;color:#9CA3AF}
+  .c-int{width:96px}.c-ore{width:90px}.c-tot{width:110px}.c-med{width:96px}.c-perf{width:104px}
+  .pname{font-weight:500;overflow-wrap:anywhere}
+  .psub{font-size:11px;color:#6B7280;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .palias{font-size:11px;color:#9CA3AF;overflow-wrap:anywhere;margin-top:1px}
+  .ptypes{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
   .tt{font-size:10px;padding:1px 6px;border-radius:5px;font-weight:500;white-space:nowrap}
   .tt-standard{background:#E0E7FF;color:#3730A3}.tt-intermediaire{background:#FCE7F3;color:#9D174D}
   .tt-ouverture{background:#FEF3C7;color:#92400E}.tt-alt{background:#E5E7EB;color:#374151}
-  .prop-alias{font-size:10px;color:#9CA3AF}
-  details.settings{margin-top:16px}
-  details.settings>summary{cursor:pointer;list-style:none;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:.05em}
-  details.settings>summary::before{content:'▸ ';}
-  details.settings[open]>summary::before{content:'▾ ';}
-  .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
-  @media(max-width:700px){.set-grid{grid-template-columns:1fr}}
-  .set-grid label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
-  .set-grid .hint{font-size:11px;color:#6B7280;margin-bottom:6px}
-  .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff}
-  .set-grid textarea{min-height:74px;resize:vertical}
-  .merge-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}
-  .merge-row select{flex:1;min-width:0}
-  .merge-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
-  .merge-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;background:#F9FAFB;border-radius:6px;padding:5px 8px}
-  .link-btn{border:none;background:none;color:#DC2626;cursor:pointer;font-size:12px}
-  .saved{font-size:12px;color:#059669;margin-left:8px}
+  .sub-num{display:block;font-size:11px;color:#9CA3AF;font-weight:400}
+  .perf{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;white-space:nowrap}
+  .ph{background:#D1FAE5;color:#065F46}.pm{background:#FEF3C7;color:#92400E}.pl{background:#FEE2E2;color:#991B1B}
+  .empty{text-align:center;padding:2rem;color:#9CA3AF;font-size:13px}
+  @media(max-width:760px){
+    .c-med,.col-med,.c-perf,.col-perf,.c-ore,.col-ore{display:none}
+    .c-int{width:58px}.c-tot{width:86px}.c-rank{width:28px}
+    table.rank th,table.rank td{padding:8px 6px}
+    .search{width:100%}
+    .topbar{padding:12px 16px}
+  }
+
+  /* facturi */
+  .file-list{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto}
+  .file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#F9FAFB;border-left:3px solid #E5E7EB;min-width:0}
+  .file-item.processing{border-left-color:#F59E0B}.file-item.done{border-left-color:#3B82F6}
+  .file-item.error{border-left-color:#EF4444}.file-item.new{border-left-color:#10B981}
+  .file-item.warning{border-left-color:#F59E0B}.file-item.duplicate{border-left-color:#9CA3AF;opacity:.75}
   .file-item.fresh{background:#ECFDF5;animation:fresh 2.5s ease-out}
   @keyframes fresh{0%{background:#A7F3D0}100%{background:#ECFDF5}}
-  .last-scan{font-size:11px;color:#9CA3AF;margin-top:6px}
+  .file-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .file-meta{font-size:11px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-warn{font-size:11px;color:#92400E;overflow-wrap:anywhere}
+  .badge{font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;font-weight:500;flex:none}
+  .badge-new{background:#D1FAE5;color:#065F46}.badge-proc{background:#FEF3C7;color:#92400E}
+  .badge-done{background:#DBEAFE;color:#1E40AF}.badge-err{background:#FEE2E2;color:#991B1B}
+  .badge-warn{background:#FEF3C7;color:#92400E}.badge-dup{background:#E5E7EB;color:#374151}
+  .last-scan{font-size:11px;color:#9CA3AF;margin-top:8px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:#F3F4F6;color:#374151;font-weight:500}
+  .pill.warn{background:#FEF3C7;color:#92400E}
+
+  /* setari */
+  .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  @media(max-width:760px){.set-grid{grid-template-columns:minmax(0,1fr)}}
+  .set-grid label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
+  .hint{font-size:11px;color:#6B7280;margin-bottom:6px}
+  .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
+  .set-grid textarea{min-height:74px;resize:vertical}
+  .merge-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .merge-row select{flex:1 1 140px;min-width:0}
+  .merge-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .merge-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;background:#F9FAFB;border-radius:6px;padding:5px 8px}
+  .link-btn{border:none;background:none;color:#DC2626;cursor:pointer;font-size:12px;flex:none}
+  .saved{font-size:12px;color:#059669;margin-left:8px}
+  .sugg-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+  .sugg{display:flex;align-items:center;gap:8px;font-size:12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;flex-wrap:wrap}
+  .sugg .txt{flex:1 1 200px;min-width:0}
+  .sugg .n{color:#6B7280}
+
+  /* jurnal */
+  .log{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;max-height:240px;overflow-y:auto;line-height:1.7;border:1px solid #E5E7EB;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -125,14 +155,14 @@
 <div class="main">
 
   <div class="controls">
-    <button class="btn btn-dark" id="btn-scan" onclick="scan()">&#x1F504; Scanare manuală</button>
+    <button class="btn btn-dark" onclick="scan()">&#x1F504; Scanare manuală</button>
     <button class="btn btn-green" id="btn-monitor-start" onclick="startMonitor()">&#x25B6; Start monitorizare</button>
     <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
     <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
     <button class="btn" onclick="resetAll()" style="margin-left:auto">&#x1F5D1; Reset</button>
   </div>
 
-  <div class="progress-card" id="progress">
+  <div class="card progress-card" id="progress">
     <div class="progress-top">
       <span class="progress-title" id="p-title">Scanare în curs</span>
       <span class="progress-sub" id="p-sub"></span>
@@ -142,44 +172,71 @@
   </div>
 
   <div class="metric-grid">
-    <div class="metric"><div class="metric-label">Fișiere detectate</div><div class="metric-value" id="m-files">—</div></div>
-    <div class="metric"><div class="metric-label">Analizate</div><div class="metric-value" id="m-analyzed">—</div></div>
-    <div class="metric"><div class="metric-label">Intervenții totale</div><div class="metric-value" id="m-total">—</div></div>
     <div class="metric"><div class="metric-label">Venit total</div><div class="metric-value" id="m-revenue">—</div></div>
-    <div class="metric"><div class="metric-label">De verificat</div><div class="metric-value" id="m-warn">—</div></div>
+    <div class="metric"><div class="metric-label">Intervenții</div><div class="metric-value" id="m-total">—</div></div>
+    <div class="metric"><div class="metric-label">Proprietăți</div><div class="metric-value" id="m-props">—</div></div>
+    <div class="metric"><div class="metric-label">Facturi citite</div><div class="metric-value" id="m-analyzed">—</div></div>
+    <div class="metric" id="m-warn-box"><div class="metric-label">De verificat</div><div class="metric-value" id="m-warn">—</div></div>
   </div>
 
-  <div class="grid2">
-
-    <div class="card">
-      <div class="card-title">Fișiere din Drive</div>
-      <div class="file-list" id="file-list">
-        <div class="empty">Niciun fișier detectat încă</div>
-      </div>
-      <div class="last-scan" id="last-scan"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <div class="card-title" style="margin:0">Clasament proprietăți</div>
-        <div class="sort-bar" id="sort-bar" role="group" aria-label="Sortare clasament">
-          <span class="sort-lbl">Sortează:</span>
+  <!-- CLASAMENT: pe toata latimea -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Clasament proprietăți <span class="count" id="p-count"></span></div>
+      <div class="toolbar">
+        <input class="search" id="p-search" type="search" placeholder="Caută proprietate sau client…" aria-label="Caută proprietate">
+        <span class="seg-lbl">Sortează:</span>
+        <div class="seg" id="sort-bar" role="group" aria-label="Sortare clasament">
           <button data-sort="total">Încasări</button>
           <button data-sort="interventii">Intervenții</button>
           <button data-sort="ore">Ore</button>
           <button data-sort="medie">€ / intervenție</button>
         </div>
       </div>
-      <div class="prop-list" id="prop-list">
-        <div class="empty">Datele vor apărea după analiză</div>
-      </div>
     </div>
-
+    <div class="table-wrap" id="table-wrap">
+      <table class="rank">
+        <thead>
+          <tr>
+            <th class="c-rank">#</th>
+            <th>Proprietate</th>
+            <th class="c-int num sortable" data-sort="interventii" title="Intervenții">Intervenții</th>
+            <th class="c-ore num sortable" data-sort="ore">Ore</th>
+            <th class="c-tot num sortable" data-sort="total">Încasări</th>
+            <th class="c-med num sortable" data-sort="medie">€ / int.</th>
+            <th class="c-perf">Performanță</th>
+          </tr>
+        </thead>
+        <tbody id="prop-body"><tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px">
-    <details class="settings" id="settings-box" style="margin-top:0">
-      <summary>Reguli de calcul și proprietăți</summary>
+  <!-- FACTURI: pliabil -->
+  <div class="card">
+    <details class="fold" id="files-box">
+      <summary>
+        <span class="card-title">Facturi din Drive <span class="count" id="f-count"></span></span>
+        <span id="f-pills"></span>
+      </summary>
+      <div class="card-head" style="margin-bottom:10px">
+        <div class="seg" id="f-filter" role="group" aria-label="Filtru facturi">
+          <button data-f="all" class="on">Toate</button>
+          <button data-f="warn">De verificat</button>
+          <button data-f="error">Erori</button>
+          <button data-f="duplicate">Duplicate</button>
+        </div>
+        <input class="search" id="f-search" type="search" placeholder="Caută factură, număr, client…" aria-label="Caută factură">
+      </div>
+      <div class="file-list" id="file-list"><div class="empty">Niciun fișier detectat încă</div></div>
+      <div class="last-scan" id="last-scan"></div>
+    </details>
+  </div>
+
+  <!-- SETARI: pliabil -->
+  <div class="card">
+    <details class="fold" id="settings-box">
+      <summary><span class="card-title" id="settings-title">Reguli de calcul și proprietăți</span></summary>
       <div class="set-grid">
         <div>
           <label for="s-clienti">Clienți facturați doar la oră</label>
@@ -200,7 +257,8 @@
           <label>Unește proprietăți (aceeași casă cu nume diferite)</label>
           <div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
           <div class="merge-row">
-            <select id="m-din"></select><span>→</span><select id="m-in"></select>
+            <select id="m-din" aria-label="Proprietatea care se unește"></select><span>→</span>
+            <select id="m-in" aria-label="Proprietatea în care se unește"></select>
             <button class="btn" onclick="mergeProps()">Unește</button>
           </div>
           <div class="merge-list" id="m-list"></div>
@@ -214,106 +272,90 @@
     </details>
   </div>
 
+  <!-- JURNAL: pliabil -->
   <div class="card">
-    <div class="card-title">Jurnal sistem</div>
-    <div class="log" id="log-box">Aștept date...</div>
+    <details class="fold" id="log-fold" open>
+      <summary><span class="card-title">Jurnal sistem</span></summary>
+      <div class="log" id="log-box">Aștept date...</div>
+    </details>
   </div>
 
 </div>
 
 <script>
-let monitoring = false;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+const fmtEur = v => (v ?? 0).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' €';
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+let lastState = null, lastProps = [], lastFiles = [];
+let sortBy = store.get('sortBy', 'total');
+let fileFilter = 'all';
 
 async function fetchState() {
   try {
     const r = await fetch('/api/state');
     const s = await r.json();
+    lastState = s;
     renderState(s);
-  } catch(e) {
-    document.getElementById('status-txt').textContent = 'Eroare conexiune server';
+  } catch (e) {
+    $('status-txt').textContent = 'Eroare conexiune server';
   }
 }
 
 function renderState(s) {
-  // Status dot
-  const dot = document.getElementById('dot');
-  const stxt = document.getElementById('status-txt');
-  if (s.monitoring) {
-    dot.className = 'dot live';
-    stxt.textContent = 'Monitorizare activă';
-  } else {
-    dot.className = 'dot';
-    stxt.textContent = 'Monitorizare oprită';
-  }
+  const dot = $('dot'), stxt = $('status-txt');
+  dot.className = s.monitoring ? 'dot live' : 'dot';
+  stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
+
+  // progres
   const sc = s.scan || {};
-  const pc = document.getElementById('progress'), pf = document.getElementById('p-fill');
-  pc.classList.toggle('on', !!sc.active);
+  const pf = $('p-fill');
+  $('progress').classList.toggle('on', !!sc.active);
   if (sc.active) {
     dot.className = 'dot live';
     if (sc.phase === 'listare' || !sc.total) {
       stxt.textContent = 'Scanare: citesc lista din Drive...';
-      document.getElementById('p-title').textContent = 'Citesc lista de facturi din Drive…';
-      document.getElementById('p-sub').textContent = sc.found ? `${sc.found} PDF-uri găsite până acum` : '';
+      $('p-title').textContent = 'Citesc lista de facturi din Drive…';
+      $('p-sub').textContent = sc.found ? `${sc.found} PDF-uri găsite până acum` : '';
       const waited = sc.stage_since ? Math.round(s.now - sc.stage_since) : 0;
-      document.getElementById('p-current').textContent = sc.stage ? `Pas: ${sc.stage}${waited >= 5 ? ` (${waited}s)` : ''}` : '';
+      $('p-current').textContent = sc.stage ? `Pas: ${sc.stage}${waited >= 5 ? ` (${waited}s)` : ''}` : '';
       pf.classList.add('indet'); pf.style.width = '';
     } else {
       const left = sc.total - sc.done;
-      const eta = sc.eta == null || !left ? '' : sc.eta >= 60 ? ` · ~${Math.ceil(sc.eta/60)} min rămase` : ` · ~${sc.eta}s rămase`;
+      const eta = sc.eta == null || !left ? '' : sc.eta >= 60 ? ` · ~${Math.ceil(sc.eta / 60)} min rămase` : ` · ~${sc.eta}s rămase`;
       stxt.textContent = `Scanare ${sc.done}/${sc.total}${eta}`;
-      document.getElementById('p-title').textContent = `Citite ${sc.done} din ${sc.total} facturi`;
-      document.getElementById('p-sub').textContent = `mai sunt ${left}${eta}`;
-      document.getElementById('p-current').textContent = sc.current && left ? `Acum: ${sc.current}` : '';
+      $('p-title').textContent = `Citite ${sc.done} din ${sc.total} facturi`;
+      $('p-sub').textContent = `mai sunt ${left}${eta}`;
+      $('p-current').textContent = sc.current && left ? `Acum: ${sc.current}` : '';
       pf.classList.remove('indet'); pf.style.width = `${Math.round(sc.done / sc.total * 100)}%`;
     }
   }
   schedule(sc.active ? 2000 : 5000);
-  monitoring = s.monitoring;
-  document.getElementById('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
-  document.getElementById('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
+  $('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
+  $('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
 
-  // Metrics
+  // indicatori
   const m = s.metrics || {};
-  document.getElementById('m-files').textContent = m.files ?? '—';
-  document.getElementById('m-analyzed').textContent = m.analyzed ?? '—';
-  document.getElementById('m-total').textContent = m.interventii ?? '—';
-  document.getElementById('m-revenue').textContent = m.revenue != null ? m.revenue.toLocaleString('ro-RO') + '€' : '—';
-  document.getElementById('m-warn').textContent = m.warnings ?? '—';
+  $('m-revenue').textContent = m.revenue != null ? m.revenue.toLocaleString('fr-FR') + ' €' : '—';
+  $('m-total').textContent = m.interventii ?? '—';
+  $('m-props').textContent = (s.props || []).length || '—';
+  $('m-analyzed').textContent = m.files ? `${m.analyzed}/${m.files}` : '—';
+  $('m-warn').textContent = m.warnings ?? '—';
+  $('m-warn-box').classList.toggle('warn', !!m.warnings);
 
-  // Files
-  const fl = document.getElementById('file-list');
-  if (!s.files || !s.files.length) {
-    fl.innerHTML = '<div class="empty">Niciun fișier detectat</div>';
-  } else {
-    fl.innerHTML = s.files.map(f => {
-      const fresh = f.processed_at && s.now - f.processed_at < 8 ? ' fresh' : '';
-      const cls = esc(f.status);
-      const n = f.n_interventii ?? 0;
-      const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>'
-        : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
-        : cls === 'done' ? `<span class="badge badge-done">${n} intervenții</span>`
-        : cls === 'warning' ? `<span class="badge badge-warn">${n} intervenții · verifică</span>`
-        : cls === 'duplicate' ? '<span class="badge badge-dup">Duplicat</span>'
-        : `<span class="badge badge-err">Eroare</span>`;
-      const meta = [f.numar, f.client, f.total != null ? f.total.toLocaleString('fr-FR') + '€' : null,
-                    f.metoda === 'ai' ? 'citită cu AI' : null].filter(Boolean).map(esc).join(' · ');
-      const warns = (f.error ? [f.error] : (f.avertismente || [])).map(w => `<span class="file-warn">⚠ ${esc(w)}</span>`).join('');
-      return `<div class="file-item ${cls}${fresh}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
-        + (meta ? `<span class="file-meta">${meta}</span>` : '') + warns + `</div>${badge}</div>`;
-    }).join('');
-  }
+  lastFiles = s.files || [];
+  renderFiles();
+  if (s.last_scan) $('last-scan').textContent = 'Ultima scanare: ' + new Date(s.last_scan).toLocaleTimeString('ro-RO');
 
-  if (s.last_scan) {
-    document.getElementById('last-scan').textContent = 'Ultima scanare: ' + new Date(s.last_scan).toLocaleTimeString('ro-RO');
-  }
-
-  // Props
   lastProps = s.props || [];
   renderProps();
 
-  // Log
-  const lb = document.getElementById('log-box');
+  // jurnal
+  const lb = $('log-box');
   if (s.log && s.log.length) {
     const atBottom = lb.scrollHeight - lb.scrollTop - lb.clientHeight < 30;
     lb.innerHTML = s.log.slice(-50).map(esc).join('<br>');
@@ -321,160 +363,180 @@ function renderState(s) {
   }
 }
 
-async function scan() {
-  await fetch('/api/scan', {method:'POST'});
-  setTimeout(fetchState, 500);
-}
-
-async function startMonitor() {
-  await fetch('/api/monitor', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({active:true})});
-  fetchState();
-}
-
-async function stopMonitor() {
-  await fetch('/api/monitor', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({active:false})});
-  fetchState();
-}
-
-// ---- clasament: sortare (retinuta in browser)
-let lastProps = [];
-let sortBy = 'total';
-try { sortBy = localStorage.getItem('sortBy') || 'total'; } catch (e) {}
-const TL = {standard:'Standard', intermediaire:'Intermédiaire', ouverture:'Ouverture'};
+// ---- clasament
+const TL = {standard: 'Standard', intermediaire: 'Intermédiaire', ouverture: 'Ouverture'};
 const SORTS = {
   total:       p => [p.total, p.interventii],
   interventii: p => [p.interventii, p.total],
   ore:         p => [p.ore, p.total],
   medie:       p => [p.medie, p.total],
 };
+const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 function renderProps() {
   document.querySelectorAll('#sort-bar button').forEach(b => b.classList.toggle('on', b.dataset.sort === sortBy));
-  const pl = document.getElementById('prop-list');
-  if (!lastProps.length) { pl.innerHTML = '<div class="empty">Datele vor apărea după analiză</div>'; return; }
+  document.querySelectorAll('th.sortable').forEach(th => th.classList.toggle('active', th.dataset.sort === sortBy));
+  const body = $('prop-body');
+  if (!lastProps.length) {
+    $('p-count').textContent = '';
+    body.innerHTML = '<tr><td colspan="7" class="empty">Datele vor apărea după analiză</td></tr>';
+    return;
+  }
   const key = SORTS[sortBy] || SORTS.total;
-  const props = lastProps.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
-  // eticheta de performanta se calculeaza fata de criteriul ales
-  const max = Math.max(...props.map(p => key(p)[0]), 0) || 1;
-  pl.innerHTML = props.map((p, i) => {
+  const sorted = lastProps.slice().sort((a, b) => { const x = key(a), y = key(b); return (y[0] - x[0]) || (y[1] - x[1]); });
+  const max = Math.max(...sorted.map(p => key(p)[0]), 0) || 1;   // performanta fata de criteriul ales
+  const q = norm($('p-search').value.trim());
+  const rows = sorted.map((p, i) => ({p, rank: i + 1})).filter(({p}) =>
+    !q || norm(p.name).includes(q) || norm(p.client).includes(q) || (p.variante || []).some(v => norm(v).includes(q)));
+  $('p-count').textContent = q ? `· ${rows.length} din ${lastProps.length}` : `· ${lastProps.length}`;
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">Nicio proprietate găsită</td></tr>'; return; }
+  const hl = k => sortBy === k ? ' hl' : '';
+  body.innerHTML = rows.map(({p, rank}) => {
     const v = key(p)[0];
     const perf = v >= max * 0.7 ? ['Performant', 'ph'] : v >= max * 0.4 ? ['Mediu', 'pm'] : ['Rar', 'pl'];
-    const types = Object.entries(p.tipuri || {}).sort((a,b) => b[1]-a[1]).map(([t,n]) =>
-      `<span class="tt ${TL[t] ? 'tt-'+t : 'tt-alt'}">${esc(TL[t] || t)} ${n}</span>`).join('');
+    const types = Object.entries(p.tipuri || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
+      `<span class="tt ${TL[t] ? 'tt-' + t : 'tt-alt'}">${esc(TL[t] || t)} ${n}</span>`).join('');
     const others = (p.variante || []).filter(x => x !== p.name);
-    const hl = k => sortBy === k ? ' hl' : '';
-    return `
-    <div class="prop-row">
-      <span class="prop-rank">${i+1}</span>
-      <div class="prop-info">
-        <span class="prop-name">${esc(p.name)}</span>
-        <span class="prop-client">${esc(p.client || '')}</span>
-        ${others.length ? `<span class="prop-alias">apare și ca: ${others.map(esc).join(', ')}</span>` : ''}
-        <span class="prop-types">${types}</span>
-      </div>
-      <span class="prop-stat${hl('interventii')}" title="Intervenții (forfait: ${p.forfait})">&#x1F3E0; ${p.interventii}x</span>
-      <span class="prop-stat${hl('ore')}" title="Ore facturate la oră${p.pret_ora ? ' · ' + p.pret_ora + ' €/h' : ''}">${p.ore > 0 ? '&#x23F1; ' + p.ore + 'h' : ''}</span>
-      <span class="prop-stat prop-total${hl('total')}" title="Medie: ${p.medie.toLocaleString('fr-FR')} € / intervenție">${p.total.toLocaleString('fr-FR')}€${sortBy === 'medie' ? `<br><span class="prop-alias">${p.medie.toLocaleString('fr-FR')} €/int.</span>` : ''}</span>
-      <span class="perf ${perf[1]}">${perf[0]}</span>
-    </div>`; }).join('');
+    return `<tr>
+      <td class="c-rank">${rank}</td>
+      <td>
+        <div class="pname">${esc(p.name)}</div>
+        <div class="psub" title="${esc(p.client || '')}">${esc(p.client || '')}</div>
+        ${others.length ? `<div class="palias">apare și ca: ${others.map(esc).join(', ')}</div>` : ''}
+        <div class="ptypes">${types}</div>
+      </td>
+      <td class="num${hl('interventii')}">${p.interventii}${p.forfait && p.forfait !== p.interventii ? `<span class="sub-num">${p.forfait} forfait</span>` : ''}</td>
+      <td class="num col-ore${hl('ore')}">${p.ore > 0 ? p.ore.toLocaleString('fr-FR') + ' h' : '—'}${p.pret_ora ? `<span class="sub-num">${p.pret_ora.toLocaleString('fr-FR')} €/h</span>` : ''}</td>
+      <td class="num${hl('total')}">${fmtEur(p.total)}</td>
+      <td class="num col-med${hl('medie')}">${fmtEur(p.medie)}</td>
+      <td class="col-perf"><span class="perf ${perf[1]}">${perf[0]}</span></td>
+    </tr>`;
+  }).join('');
 }
-document.getElementById('sort-bar').addEventListener('click', e => {
-  const b = e.target.closest('button[data-sort]');
-  if (!b) return;
-  sortBy = b.dataset.sort;
-  try { localStorage.setItem('sortBy', sortBy); } catch (err) {}
-  renderProps();
+function setSort(k) {
+  if (!SORTS[k]) return;
+  sortBy = k; store.set('sortBy', k); renderProps();
+}
+$('sort-bar').addEventListener('click', e => { const b = e.target.closest('button[data-sort]'); if (b) setSort(b.dataset.sort); });
+document.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
+$('p-search').addEventListener('input', renderProps);
+
+// ---- facturi
+function renderFiles() {
+  const files = lastFiles;
+  const nWarn = files.filter(f => f.status === 'warning').length;
+  const nErr = files.filter(f => f.status === 'error').length;
+  const nDup = files.filter(f => f.status === 'duplicate').length;
+  $('f-count').textContent = files.length ? `· ${files.length}` : '';
+  $('f-pills').innerHTML = [
+    nWarn ? `<span class="pill warn">${nWarn} de verificat</span>` : '',
+    nErr ? `<span class="pill warn">${nErr} erori</span>` : '',
+    nDup ? `<span class="pill">${nDup} duplicate</span>` : '',
+  ].join(' ');
+  document.querySelectorAll('#f-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === fileFilter));
+  const q = norm($('f-search').value.trim());
+  const shown = files.filter(f =>
+    (fileFilter === 'all' || (fileFilter === 'warn' ? f.status === 'warning' : f.status === fileFilter)) &&
+    (!q || [f.name, f.numar, f.client].some(x => norm(x).includes(q))));
+  const fl = $('file-list');
+  if (!files.length) { fl.innerHTML = '<div class="empty">Niciun fișier detectat</div>'; return; }
+  if (!shown.length) { fl.innerHTML = '<div class="empty">Nicio factură pentru filtrul ales</div>'; return; }
+  const now = lastState ? lastState.now : 0;
+  fl.innerHTML = shown.map(f => {
+    const fresh = f.processed_at && now - f.processed_at < 8 ? ' fresh' : '';
+    const cls = esc(f.status);
+    const n = f.n_interventii ?? 0;
+    const badge = cls === 'new' ? '<span class="badge badge-new">Nou</span>'
+      : cls === 'processing' ? '<span class="badge badge-proc">Analizez...</span>'
+      : cls === 'done' ? `<span class="badge badge-done">${n} intervenții</span>`
+      : cls === 'warning' ? `<span class="badge badge-warn">${n} intervenții · verifică</span>`
+      : cls === 'duplicate' ? '<span class="badge badge-dup">Duplicat</span>'
+      : '<span class="badge badge-err">Eroare</span>';
+    const meta = [f.numar, f.client, f.total != null ? fmtEur(f.total) : null,
+                  f.metoda === 'ai' ? 'citită cu AI' : null].filter(Boolean).map(esc).join(' · ');
+    const warns = (f.error ? [f.error] : (f.avertismente || [])).map(w => `<span class="file-warn">⚠ ${esc(w)}</span>`).join('');
+    return `<div class="file-item ${cls}${fresh}"><div class="file-main"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
+      + (meta ? `<span class="file-meta">${meta}</span>` : '') + warns + `</div>${badge}</div>`;
+  }).join('');
+}
+$('f-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { fileFilter = b.dataset.f; renderFiles(); } });
+$('f-search').addEventListener('input', renderFiles);
+
+// sectiunile pliabile isi amintesc starea
+['files-box', 'log-fold'].forEach(id => {
+  const el = $(id), saved = store.get('open-' + id, null);
+  if (saved !== null) el.open = saved === '1';
+  el.addEventListener('toggle', () => store.set('open-' + id, el.open ? '1' : '0'));
 });
 
-function exportExcel() {
-  window.location.href = '/api/export?sort=' + encodeURIComponent(sortBy);
-}
-
+// ---- actiuni
+async function scan() { await fetch('/api/scan', {method: 'POST'}); setTimeout(fetchState, 500); }
+async function startMonitor() { await post('/api/monitor', {active: true}); fetchState(); }
+async function stopMonitor() { await post('/api/monitor', {active: false}); fetchState(); }
+function exportExcel() { window.location.href = '/api/export?sort=' + encodeURIComponent(sortBy); }
 async function resetAll() {
   if (!confirm('Reset șterge toate datele și backup-ul. Toate facturile vor fi recitite la următoarea scanare. Continui?')) return;
-  try {
-    await fetch('/api/reset', {method:'POST'});
-    fetchState();
-  } catch(e) {
-    console.error('Reset error:', e);
-  }
+  try { await fetch('/api/reset', {method: 'POST'}); fetchState(); } catch (e) { console.error('Reset error:', e); }
+}
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || 'Eroare'); return null; }
+  return j;
 }
 
 // ---- reguli de calcul & unire proprietati
+let lastSugg = [];
 async function loadSettings(data) {
   const s = data || await (await fetch('/api/settings')).json();
-  const ta = document.getElementById('s-clienti');
-  if (document.activeElement !== ta) ta.value = (s.clienti_la_ora || []).join('\n');
-  const tt = document.getElementById('s-tipuri');
-  if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
-  const pr = document.getElementById('s-prag');
-  if (document.activeElement !== pr) pr.value = s.prag_forfait;
+  const ta = $('s-clienti'); if (document.activeElement !== ta) ta.value = (s.clienti_la_ora || []).join('\n');
+  const tt = $('s-tipuri'); if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
+  const pr = $('s-prag'); if (document.activeElement !== pr) pr.value = s.prag_forfait;
   const opts = (s.proprietati || []).map(p =>
     `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
-  const din = document.getElementById('m-din'), inn = document.getElementById('m-in');
+  const din = $('m-din'), inn = $('m-in');
   const keep = [din.value, inn.value];
   din.innerHTML = '<option value="">Proprietatea…</option>' + opts;
   inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
   din.value = keep[0]; inn.value = keep[1];
   const sg = s.sugestii || [];
-  document.getElementById('sugg-list').innerHTML = sg.length ? sg.map((x, i) =>
+  lastSugg = sg;
+  $('sugg-list').innerHTML = sg.length ? sg.map((x, i) =>
     `<div class="sugg"><span class="txt"><b>${esc(x.din_nume)}</b> <span class="n">(${x.din_n}x)</span> ↔ <b>${esc(x.in_nume)}</b> <span class="n">(${x.in_n}x)</span></span>
      <button class="btn btn-sm btn-dark" onclick="acceptSugg(${i})">Unește în „${esc(x.in_nume)}”</button>
      <button class="btn btn-sm" onclick="ignoreSugg(${i})">Nu e dublură</button></div>`).join('')
     : '<div class="hint">Nicio pereche suspectă.</div>';
-  lastSugg = sg;
-  const sum = document.querySelector('#settings-box > summary');
-  sum.textContent = 'Reguli de calcul și proprietăți' + (sg.length ? ` · ${sg.length} posibile dubluri` : '');
-  document.getElementById('m-list').innerHTML = (s.unite || []).map(u =>
+  $('settings-title').textContent = 'Reguli de calcul și proprietăți' + (sg.length ? ` · ${sg.length} posibile dubluri` : '');
+  $('m-list').innerHTML = (s.unite || []).map(u =>
     `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span>
-     <button class="link-btn" onclick="unmerge('${esc(u.din).replace(/'/g, "\\'")}')">anulează</button></div>`).join('');
+     <button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
 }
-async function post(url, body) {
-  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  const j = await r.json();
-  if (!r.ok) { alert(j.error || 'Eroare'); return null; }
-  return j;
-}
+$('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
 async function saveSettings() {
   const j = await post('/api/settings', {
-    clienti_la_ora: document.getElementById('s-clienti').value,
-    tipuri_la_ora: document.getElementById('s-tipuri').value,
-    prag_forfait: document.getElementById('s-prag').value,
+    clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, prag_forfait: $('s-prag').value,
   });
-  if (j) { loadSettings(j); fetchState(); const el = document.getElementById('s-saved'); el.textContent = '✓ Salvat și recalculat'; setTimeout(() => el.textContent = '', 3000); }
+  if (j) { loadSettings(j); fetchState(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
 }
 async function mergeProps() {
-  const din = document.getElementById('m-din').value, inn = document.getElementById('m-in').value;
+  const din = $('m-din').value, inn = $('m-in').value;
   if (!din || !inn) return;
   const j = await post('/api/merge', {din, in: inn});
-  if (j) { document.getElementById('m-din').value = ''; loadSettings(j); fetchState(); }
+  if (j) { $('m-din').value = ''; loadSettings(j); fetchState(); }
 }
-let lastSugg = [];
-async function acceptSugg(i) {
-  const x = lastSugg[i]; if (!x) return;
-  const j = await post('/api/merge', {din: x.din, in: x.in});
-  if (j) { loadSettings(j); fetchState(); }
-}
-async function ignoreSugg(i) {
-  const x = lastSugg[i]; if (!x) return;
-  const j = await post('/api/ignore-suggestion', {din: x.din, in: x.in});
-  if (j) loadSettings(j);
-}
-async function unmerge(din) {
-  const j = await post('/api/unmerge', {din});
-  if (j) { loadSettings(j); fetchState(); }
-}
-document.getElementById('settings-box').addEventListener('toggle', e => { if (e.target.open) loadSettings(); });
+async function acceptSugg(i) { const x = lastSugg[i]; if (!x) return; const j = await post('/api/merge', {din: x.din, in: x.in}); if (j) { loadSettings(j); fetchState(); } }
+async function ignoreSugg(i) { const x = lastSugg[i]; if (!x) return; const j = await post('/api/ignore-suggestion', {din: x.din, in: x.in}); if (j) loadSettings(j); }
+async function unmerge(din) { const j = await post('/api/unmerge', {din}); if (j) { loadSettings(j); fetchState(); } }
+$('settings-box').addEventListener('toggle', e => { if (e.target.open) loadSettings(); });
 
 // actualizare: la 2s in timpul scanarii, la 5s in rest
 let timer = null, every = 5000;
 function schedule(ms) {
   if (ms === every && timer) return;
-  every = ms;
-  clearInterval(timer);
-  timer = setInterval(fetchState, ms);
+  every = ms; clearInterval(timer); timer = setInterval(fetchState, ms);
 }
 fetchState();
-loadSettings();  // ca sa apara numarul de posibile dubluri si cu panoul inchis
+loadSettings();  // numarul de posibile dubluri apare si cu panoul inchis
 schedule(5000);
 </script>
 </body>
