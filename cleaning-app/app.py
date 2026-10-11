@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, render_template, jsonify, send_file, request, Response
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 import google_auth_httplib2
 import httplib2
 import openpyxl
@@ -38,6 +38,16 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "openai/gpt-oss-120b")
 
 # Optional: parola pentru dashboard (HTTP Basic Auth, orice utilizator)
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+# Backup-ul scanarilor: un fisier JSON din Drive, creat de utilizator si partajat
+# cu service account-ul ca EDITOR. Gasit dupa ID sau dupa nume in folderul facturilor.
+CACHE_FILE_ID = os.environ.get("CACHE_FILE_ID", "").strip()
+CACHE_FILE_NAME = os.environ.get("CACHE_FILE_NAME", "cache-facturi.json").strip()
+CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
+# Schimbati valoarea cand se modifica parserul/regulile de calcul -> se recitesc toate facturile
+PARSER_VERSION = "2026-10-11"
+
+cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False}
 
 state = {
     "files": {},
@@ -88,7 +98,9 @@ def get_drive_service():
         raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
     creds = service_account.Credentials.from_service_account_info(
         json.loads(GOOGLE_CREDENTIALS_JSON),
-        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        # 'drive' (nu doar readonly) ca sa putem actualiza fisierul de backup.
+        # Service account-ul vede/modifica tot doar ce i-ati partajat explicit.
+        scopes=["https://www.googleapis.com/auth/drive"],
     )
     http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=60))
     svc = build("drive", "v3", http=http, cache_discovery=False)
@@ -105,7 +117,7 @@ def list_pdf_files(folder_id):
         while True:  # paginare: altfel se pierd fisierele peste primele 100
             results = service.files().list(
                 q=f"'{fid}' in parents and trashed=false",
-                fields="nextPageToken, files(id, name, mimeType, modifiedTime, size)",
+                fields="nextPageToken, files(id, name, mimeType, modifiedTime, size, md5Checksum)",
                 pageSize=1000,
                 pageToken=page_token,
                 supportsAllDrives=True,
@@ -134,6 +146,94 @@ def download_pdf(file_id):
         _, done = downloader.next_chunk()
     buf.seek(0)
     return buf
+
+
+def file_signature(f):
+    """Amprenta continutului PDF: se schimba doar daca se schimba fisierul (nu la redenumire)."""
+    return f.get("md5Checksum") or f.get("modifiedTime") or ""
+
+
+# ---------------------------------------------------------------- backup in Drive
+CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "interventii",
+              "numar", "client", "data_emitere", "total", "metoda", "_dup_key")
+
+
+def find_cache_file():
+    if CACHE_FILE_ID:
+        return CACHE_FILE_ID
+    name = CACHE_FILE_NAME.replace("'", "\\'")
+    res = get_drive_service().files().list(
+        q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
+        fields="files(id, name, capabilities/canEdit)",
+        supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    found = res.get("files", [])
+    if not found:
+        return None
+    if not found[0].get("capabilities", {}).get("canEdit"):
+        add_log(f"⚠ Backup: {CACHE_FILE_NAME} exista, dar service account-ul nu e Editor pe el")
+        return None
+    return found[0]["id"]
+
+
+def load_cache():
+    """Incarca scanarile salvate. Fara backup -> aplicatia merge ca inainte (doar in memorie)."""
+    cache["loaded"] = True
+    try:
+        fid = find_cache_file()
+    except Exception as e:
+        add_log(f"⚠ Backup indisponibil ({e}) — continui fara backup")
+        return
+    if not fid:
+        add_log(f"Backup dezactivat: nu gasesc '{CACHE_FILE_NAME}' (editabil) in folderul facturilor")
+        return
+    cache.update({"file_id": fid, "enabled": True})
+    try:
+        raw = download_pdf(fid).read().decode("utf-8").strip()
+        data = json.loads(raw) if raw else {}
+    except Exception as e:
+        add_log(f"⚠ Backup ilizibil ({e}) — il refac de la zero")
+        cache["dirty"] = True
+        return
+    if data.get("parser_version") != PARSER_VERSION:
+        if data.get("files"):
+            add_log("Parserul s-a actualizat — recitesc toate facturile o singura data")
+        cache["dirty"] = True
+        return
+    files = data.get("files") or {}
+    with state_lock:
+        for fid_, entry in files.items():
+            if entry.get("_dup_key") is not None:
+                entry["_dup_key"] = tuple(entry["_dup_key"])
+            entry.setdefault("interventii", [])
+            state["files"][fid_] = entry
+        state["interventii"] = [iv for f in state["files"].values()
+                                if f.get("status") in ("done", "warning")
+                                for iv in f.get("interventii") or []]
+    add_log(f"Backup incarcat: {len(files)} facturi (salvat {data.get('saved_at', '?')})")
+
+
+def save_cache(force=False):
+    if not cache["enabled"] or not (cache["dirty"] or force):
+        return
+    with state_lock:
+        files = {fid: {k: f.get(k) for k in CACHE_KEYS}
+                 for fid, f in state["files"].items()
+                 if f.get("status") in ("done", "warning", "duplicate", "error")}
+        cache["dirty"] = False
+    payload = json.dumps({"parser_version": PARSER_VERSION,
+                          "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                          "files": files}, ensure_ascii=False, default=str)
+    try:
+        get_drive_service().files().update(
+            fileId=cache["file_id"],
+            media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
+                                         mimetype="application/json", resumable=False),
+            supportsAllDrives=True,
+        ).execute()
+    except Exception as e:
+        cache["dirty"] = True
+        add_log(f"⚠ Nu am putut salva backup-ul: {e}")
 
 
 # ---------------------------------------------------------------- rezerva AI
@@ -240,7 +340,7 @@ def process_file(file_info):
         entry = state["files"].setdefault(file_id, {})
         entry.update({
             "id": file_id, "name": name, "status": "processing",
-            "modifiedTime": file_info.get("modifiedTime", entry.get("modifiedTime")),
+            "sig": file_signature(file_info) or entry.get("sig"),
             "error": None, "avertismente": [],
         })
         entry.setdefault("interventii", [])
@@ -302,7 +402,10 @@ def process_file(file_info):
         with state_lock:
             state["files"][file_id]["status"] = "error"
             state["files"][file_id]["error"] = str(e)
+            state["files"][file_id]["interventii"] = []
+            state["interventii"] = [iv for iv in state["interventii"] if iv.get("_file_id") != file_id]
         add_log(f"✗ Eroare la {name}: {e}")
+    cache["dirty"] = True
     return used_ai
 
 
@@ -318,12 +421,18 @@ def process_queue_background(new_files):
                                   "eta": round(elapsed / (i + 1) * (n - i - 1))})
         if (i + 1) % 10 == 0 and i + 1 < n:
             add_log(f"Progres: {i + 1}/{n} · {elapsed / (i + 1):.1f}s per factura")
+        if (i + 1) % CACHE_SAVE_EVERY == 0 and i + 1 < n:
+            save_cache()  # daca serverul adoarme in mijlocul scanarii, nu pierdem progresul
         if used_ai and i < n - 1:
             time.sleep(3)  # menajam limita gratuita a AI-ului
     add_log(f"Toate fisierele procesate in {time.time() - t0:.0f}s.")
 
 
-def scan_folder():
+def scan_folder(retry_errors=False):
+    """
+    retry_errors: reincearca si facturile care au dat eroare (la pornire si la scanare
+    manuala). Monitorizarea automata nu le reincearca, ca sa nu le descarce la fiecare minut.
+    """
     if not FOLDER_ID:
         add_log("DRIVE_FOLDER_ID nu e setat")
         return
@@ -333,35 +442,68 @@ def scan_folder():
     with state_lock:
         state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0, "eta": None}
     try:
-        add_log("Scanez folderul Drive...")
+        if not cache["loaded"]:
+            load_cache()
         files = list_pdf_files(FOLDER_ID)
         with state_lock:
             state["scan"]["phase"] = "procesare"
-        add_log(f"{len(files)} PDF-uri gasite in total")
-        with state_lock:
-            known = {fid: f for fid, f in state["files"].items()}
-        # fisiere noi sau modificate (re-urcate in Drive) + cele cu eroare
+            known = {fid: dict(f) for fid, f in state["files"].items()}  # copie, nu referinte
+        in_drive = {f["id"] for f in files}
+
+        # 1) facturi sterse din Drive -> le scoatem si din aplicatie
+        removed = [fid for fid, f in known.items()
+                   if fid not in in_drive and f.get("status") != "processing"]
+        # 2) facturi redenumite (acelasi continut) -> doar actualizam numele
+        renamed = [f for f in files if f["id"] in known
+                   and known[f["id"]].get("name") != f["name"]
+                   and known[f["id"]].get("sig") == file_signature(f)]
+        # 3) facturi noi / cu continut schimbat / cu eroare (doar la cerere)
         todo = [f for f in files
                 if f["id"] not in known
-                or known[f["id"]].get("modifiedTime") != f.get("modifiedTime")
-                or known[f["id"]].get("status") == "error"]
+                or known[f["id"]].get("sig") != file_signature(f)
+                or (retry_errors and known[f["id"]].get("status") == "error")]
+        # un duplicat al unei facturi sterse redevine factura valida
+        if removed:
+            todo_ids = {f["id"] for f in todo}
+            todo += [f for f in files if f["id"] not in todo_ids
+                     and known.get(f["id"], {}).get("status") == "duplicate"]
+
         with state_lock:
+            for fid in removed:
+                state["files"].pop(fid, None)
+            if removed:
+                gone = set(removed)
+                state["interventii"] = [iv for iv in state["interventii"]
+                                        if iv.get("_file_id") not in gone]
+            for f in renamed:
+                state["files"][f["id"]]["name"] = f["name"]
+                for iv in state["files"][f["id"]].get("interventii") or []:
+                    iv["_source"] = f["name"]
             for f in todo:
                 prev = state["files"].get(f["id"], {})
                 state["files"][f["id"]] = {
                     **prev, "id": f["id"], "name": f["name"], "status": "new",
-                    "modifiedTime": f.get("modifiedTime"),
                     "interventii": prev.get("interventii", []), "error": None,
                     "avertismente": prev.get("avertismente", []),
                 }
             state["last_scan"] = datetime.now().isoformat()
+
+        for fid in removed:
+            add_log(f"− Stearsa din Drive: {known[fid].get('name')}")
+        for f in renamed:
+            add_log(f"~ Redenumita: {known[f['id']].get('name')} → {f['name']}")
+        if removed or renamed:
+            cache["dirty"] = True
+
+        unchanged = len(files) - len(todo)
+        add_log(f"{len(files)} PDF-uri in Drive · {unchanged} deja citite · {len(todo)} de procesat")
         if todo:
             process_queue_background(todo)
-        else:
-            add_log("Nicio factura noua.")
+        save_cache()
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
         _drive_local.service = None  # la urmatoarea scanare ne reconectam de la zero
+        save_cache()
     finally:
         with state_lock:
             state["scan"]["active"] = False
@@ -389,7 +531,7 @@ def start_background():
     threading.Thread(target=monitor_loop, daemon=True).start()
     add_log("Aplicatie pornita (parser direct, AI doar ca rezerva).")
     if FOLDER_ID:
-        threading.Thread(target=scan_folder, daemon=True).start()
+        threading.Thread(target=scan_folder, kwargs={"retry_errors": True}, daemon=True).start()
 
 
 # ---------------------------------------------------------------- agregari
@@ -537,7 +679,7 @@ def api_factura(file_id):
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
-    threading.Thread(target=scan_folder, daemon=True).start()
+    threading.Thread(target=scan_folder, kwargs={"retry_errors": True}, daemon=True).start()
     return jsonify({"ok": True})
 
 
@@ -575,6 +717,8 @@ def api_test():
         "folder_id": bool(FOLDER_ID),
         "files_count": len(state["files"]),
         "monitor_thread": _bg_started,
+        "backup": {"activ": cache["enabled"], "fisier": CACHE_FILE_NAME,
+                   "file_id": cache["file_id"], "nesalvat": cache["dirty"]},
     })
 
 
@@ -593,11 +737,18 @@ def api_test_ai():
 
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
-    with state_lock:
-        state.update({"files": {}, "interventii": [], "last_scan": None,
-                      "monitoring": False, "log": []})
-        state["scan"].update({"done": 0, "total": 0, "eta": None})
-    add_log("Reset complet.")
+    """Sterge tot (inclusiv backup-ul) -> urmatoarea scanare reciteste toate facturile."""
+    if not scan_lock.acquire(timeout=5):
+        return jsonify({"ok": False, "error": "Scanare in curs, incercati dupa ce se termina"}), 409
+    try:
+        with state_lock:
+            state.update({"files": {}, "interventii": [], "last_scan": None,
+                          "monitoring": False, "log": []})
+            state["scan"].update({"done": 0, "total": 0, "eta": None})
+        save_cache(force=True)
+    finally:
+        scan_lock.release()
+    add_log("Reset complet (inclusiv backup-ul). Apasati Scanare pentru a reciti facturile.")
     return jsonify({"ok": True})
 
 

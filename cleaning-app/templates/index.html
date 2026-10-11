@@ -240,6 +240,7 @@ function exportExcel() {
 }
 
 async function resetAll() {
+  if (!confirm('Reset șterge toate datele și backup-ul. Toate facturile vor fi recitite la următoarea scanare. Continui?')) return;
   try {
     await fetch('/api/reset', {method:'POST'});
     fetchState();

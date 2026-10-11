@@ -75,8 +75,22 @@ python invoice_parser.py Facture_NET-26-001.pdf Facture_NET-26-010.pdf
 - `/api/test-ai`: verifică cheia AI și dacă modelul există
 - `/api/factura/<file_id>`: tot ce s-a extras dintr-o factură
 
+## Backup în Google Drive (recomandat)
+
+Rezultatele scanărilor se salvează în fișierul `cache-facturi.json`, din folderul facturilor. La pornire, aplicația îl încarcă și citește doar facturile **noi sau modificate**. Facturile șterse din Drive dispar din aplicație, iar cele redenumite se actualizează fără să fie recitite.
+
+Configurare, o singură dată:
+1. Urcă fișierul `cache-facturi.json` (conține doar `{}`) în **folderul cu facturi**.
+2. Click dreapta pe fișier → **Share** → email-ul service account-ului → permisiunea **Editor**. Folderul rămâne la **Viewer**.
+3. Gata. În jurnal apare „Backup încărcat: N facturi”, iar `/api/test` arată `"backup": {"activ": true}`.
+
+Fără fișier, aplicația funcționează ca înainte (doar în memorie).
+
+- **Reset** golește și backup-ul, iar la următoarea scanare se recitesc toate facturile.
+- Când se modifică regulile de calcul din `invoice_parser.py`, schimbă `PARSER_VERSION` din `app.py`. Facturile se recitesc atunci automat, o singură dată.
+- Facturile cu eroare se reîncearcă la pornire și la „Scanare manuală”, nu la fiecare verificare automată.
+
 ## Limitări
-- Starea e păstrată în memorie: la repornire, facturile se recitesc din Drive (durează câteva secunde, fără costuri).
 - PDF-urile scanate (imagini) nu au text, deci apar ca eroare.
 
 ## Structură
