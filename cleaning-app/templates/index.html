@@ -327,6 +327,7 @@
       <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
       <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
       <button class="tab" role="tab" data-tab="cheltuieli">Cheltuieli &amp; profit</button>
+      <button class="tab" role="tab" data-tab="gcal">Verificare calendar <span class="n" id="n-gcal"></span></button>
       <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
       <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
     </nav>
@@ -456,6 +457,33 @@
         <textarea id="x-cats" style="width:100%;min-height:150px;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font:inherit;font-size:13px"></textarea>
         <div style="margin-top:8px"><button class="btn btn-dark btn-sm" type="button" id="x-cats-save">Salvează categoriile</button></div>
       </details>
+    </section>
+
+    <!-- VERIFICARE GOOGLE CALENDAR -->
+    <section class="panel" id="panel-gcal" role="tabpanel">
+      <div id="g-setup" style="display:none;margin-top:14px">
+        <div class="headline">Compară menajele din Google Calendar cu cele facturate: vezi menajele <b>uitate la facturare</b>, datele tastate greșit și facturile fără eveniment.</div>
+        <ol style="margin:4px 0 12px 20px;line-height:1.9;font-size:13px">
+          <li>În Google Cloud Console (proiectul service account-ului) activează <b>Google Calendar API</b>.</li>
+          <li>În Google Calendar → setările calendarului cu menaje → <b>Distribuie cu anumite persoane</b> → adaugă <b id="g-sa">email-ul service account-ului</b> <button class="btn btn-sm" type="button" id="g-sa-copy">Copiază</button> cu <b>„Vezi toate detaliile evenimentelor”</b>.</li>
+          <li>Tot acolo, la „Integrează calendarul”, copiază <b>ID-ul calendarului</b> și lipește-l mai jos.</li>
+        </ol>
+        <p class="hint" style="margin-bottom:12px">Recomandat: un calendar separat doar pentru menaje, cu numele casei în titlu (ex. „Villa Emma 45 – Ouverture”). Titlurile evenimentelor nu se salvează nicăieri, se citesc doar pentru comparație.</p>
+      </div>
+      <div class="xform" id="g-form" style="margin-top:14px">
+        <label style="flex:3 1 280px">ID-ul calendarului<input id="g-cid" placeholder="abc123…@group.calendar.google.com"></label>
+        <label>Verifică de la (opțional)<input type="date" id="g-from"></label>
+        <button class="btn btn-dark" type="button" id="g-save">Salvează și citește calendarul</button>
+        <span class="hint" id="g-status" style="flex-basis:100%"></span>
+      </div>
+      <div id="g-body" style="display:none">
+        <div class="headline" id="g-head"></div>
+        <div class="seg" id="g-filter" style="margin-bottom:10px">
+          <button data-g="nefacturat" class="on">Nefacturate</button><button data-g="data_diferita">Dată diferită</button><button data-g="fara_eveniment">Fără eveniment</button><button data-g="de_facturat">De facturat</button><button data-g="neidentificate">Neidentificate</button><button data-g="ok">Verificate</button>
+        </div>
+        <div class="hint" id="g-help" style="margin-bottom:8px"></div>
+        <div class="table-wrap"><table class="t"><tbody id="g-list"></tbody></table></div>
+      </div>
     </section>
 
     <!-- ZONE -->
@@ -621,6 +649,7 @@ async function fetchAnalytics() {
     renderAnalytics();
     if (!P || payKey !== key) fetchPayments();
     if (tab === 'cheltuieli') fetchExpenses();
+    fetchGcal();
   } finally { anLoading = false; }
 }
 
@@ -1328,6 +1357,66 @@ $('x-an').addEventListener('change', e => { xYear = e.target.value; store.set('x
 $('x-fuel-save').addEventListener('click', async () => { if (await post('/api/cheltuieli/setari', {consum: $('x-consum').value, pret_motorina: $('x-pret').value})) { afterExpenseChange(); showToast('Consum și preț salvate', null); } });
 $('x-cats-save').addEventListener('click', async () => { if (await post('/api/cheltuieli/setari', {categorii: $('x-cats').value})) { afterExpenseChange(); showToast('Categorii salvate', null); } });
 
+// ------------------------------------------------------------ verificare Google Calendar
+let G = null, gFilter = 'nefacturat';
+async function fetchGcal() { try { G = await (await fetch('/api/calendar')).json(); renderGcal(); } catch (e) { console.error(e); } }
+const G_HELP = {
+  nefacturat: 'Menaj în calendar, dar pe nicio factură: verifică dacă l-ai facturat. Dacă nu era un menaj (sau l-ai facturat altfel), apasă „E corect”.',
+  data_diferita: 'Aceeași casă, dar cu 1–3 zile diferență între calendar și factură: de obicei o dată tastată greșit.',
+  fara_eveniment: 'Facturat, dar nu apare în calendar în ziua aceea (poate menaj neplanificat sau dată greșită).',
+  de_facturat: 'Menaje din calendar de după ultima zi facturată: urmează să intre pe factura următoare. Nu sunt greșeli.',
+  neidentificate: 'Evenimente în al căror titlu nu am găsit numele niciunei case. Dacă sunt menaje, scrie numele casei ca pe factură.',
+  ok: 'Semnalări marcate „E corect”.',
+};
+function renderGcal() {
+  if (!G) return;
+  const nb = $('n-gcal'); nb.textContent = G.de_verificat || ''; nb.classList.toggle('alert', !!G.de_verificat);
+  $('g-setup').style.display = G.configurat && G.citit ? 'none' : '';
+  $('g-sa').textContent = G.service_account || 'email-ul service account-ului';
+  const ci = $('g-cid'); if (document.activeElement !== ci) ci.value = G.calendar_id || '';
+  const fi = $('g-from'); if (document.activeElement !== fi) fi.value = G.de_la_setat || '';
+  $('g-status').innerHTML = G.eroare ? `<span style="color:var(--bad-ink)">⚠ ${esc(G.eroare)}</span>`
+    : G.citit ? `✓ ${G.evenimente} evenimente citite · ${esc(G.citit)} · se recitește la fiecare scanare` : (G.configurat ? 'Încă necitit.' : '');
+  $('g-body').style.display = G.configurat && G.citit ? '' : 'none';
+  if (!G.citit) return;
+  const nf = G.nefacturat.filter(x => !x.ok).length, dd = G.data_diferita.filter(x => !x.ok).length, fe = G.fara_eveniment.filter(x => !x.ok).length;
+  $('g-head').innerHTML = `<b>${G.potrivite}</b> menaje se potrivesc între calendar și facturi`
+    + (G.de_la ? ` (de la ${fmtDate(G.de_la)} până la ultima zi facturată, ${fmtDate(G.facturat_pana_la)})` : '') + '. '
+    + (nf ? `<b style="color:var(--bad-ink)">${nf} ${nf === 1 ? 'menaj pare nefacturat' : 'menaje par nefacturate'}</b>. ` : '✓ Niciun menaj nefacturat. ')
+    + (dd ? `<b>${dd}</b> cu dată diferită. ` : '') + (fe ? `${fe} facturate fără eveniment.` : '');
+  const counts = {nefacturat: nf, data_diferita: dd, fara_eveniment: fe, de_facturat: G.de_facturat.length, neidentificate: G.neidentificate.length,
+    ok: ['nefacturat', 'data_diferita', 'fara_eveniment'].reduce((a, k) => a + G[k].filter(x => x.ok).length, 0)};
+  document.querySelectorAll('#g-filter button').forEach(b => { b.classList.toggle('on', b.dataset.g === gFilter); const base = b.textContent.replace(/ \(\d+\)$/, ''); b.textContent = counts[b.dataset.g] ? `${base} (${counts[b.dataset.g]})` : base; });
+  $('g-help').textContent = G_HELP[gFilter];
+  let rows;
+  const okBtn = x => x.ok ? `<button class="undo-btn" data-gundo="${esc(x.id)}">anulează</button>` : `<button class="ok-btn" data-gok="${esc(x.id)}">✓ E corect</button>`;
+  if (gFilter === 'ok') rows = ['nefacturat', 'data_diferita', 'fara_eveniment'].flatMap(k => G[k].filter(x => x.ok).map(x => ({...x, kind: k})));
+  else if (['nefacturat', 'data_diferita', 'fara_eveniment'].includes(gFilter)) rows = G[gFilter].filter(x => !x.ok).map(x => ({...x, kind: gFilter}));
+  else rows = G[gFilter].map(x => ({...x, kind: gFilter}));
+  const line = x => {
+    if (x.kind === 'neidentificate') return `<tr><td class="w-110">${fmtDate(x.data)}</td><td>${esc(x.titlu)}</td></tr>`;
+    if (x.kind === 'data_diferita') return `<tr><td><div class="pname">${esc(x.nume)}</div><div class="psub">${esc(x.client || '')}</div></td>
+      <td>calendar <b>${fmtDate(x.data_calendar)}</b> · factură <b>${fmtDate(x.data_factura)}</b><div class="psub">${esc(x.factura || '')} · „${esc(x.titlu)}”</div></td><td class="num">${okBtn(x)}</td></tr>`;
+    if (x.kind === 'fara_eveniment') return `<tr><td><div class="pname">${esc(x.nume)}</div><div class="psub">${esc(x.client || '')}</div></td>
+      <td><b>${fmtDate(x.data)}</b><div class="psub">${esc(x.factura || '')} · ${esc(x.fisier || '')}</div></td><td class="num">${okBtn(x)}</td></tr>`;
+    return `<tr><td><div class="pname">${esc(x.nume)}</div></td><td><b>${fmtDate(x.data)}</b><div class="psub">„${esc(x.titlu)}”</div></td><td class="num">${x.kind === 'de_facturat' ? '' : okBtn(x)}</td></tr>`;
+  };
+  $('g-list').innerHTML = rows.length ? rows.slice(0, 500).map(line).join('') : `<tr><td class="empty">${gFilter === 'nefacturat' ? '✓ Niciun menaj din calendar rămas nefacturat' : 'Nimic aici'}</td></tr>`;
+}
+$('g-filter').addEventListener('click', e => { const b = e.target.closest('button[data-g]'); if (b) { gFilter = b.dataset.g; renderGcal(); } });
+$('g-list').addEventListener('click', async e => {
+  const ok = e.target.closest('[data-gok]'), un = e.target.closest('[data-gundo]');
+  if (!ok && !un) return;
+  const id = (ok || un).dataset.gok || (ok || un).dataset.gundo;
+  if (await post('/api/calendar/ok', {ids: [id], undo: !!un})) { await fetchGcal(); if (ok) showToast('Marcat „E corect”', async () => { await post('/api/calendar/ok', {ids: [id], undo: true}); fetchGcal(); }); }
+});
+$('g-save').addEventListener('click', async () => {
+  $('g-status').textContent = 'Citesc calendarul…';
+  const j = await post('/api/calendar', {calendar_id: $('g-cid').value, de_la: $('g-from').value});
+  if (j) { G = j; renderGcal(); }
+});
+$('g-sa-copy').addEventListener('click', () => { try { navigator.clipboard.writeText($('g-sa').textContent); showToast('Email copiat', null); } catch (e) {} });
+
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
   tab = t; store.set('tab', t);
@@ -1338,6 +1427,7 @@ function showTab(t) {
   if (t === 'zone' && A) drawZoneChart();
   if (t === 'incasari') fetchPayments();
   if (t === 'cheltuieli') fetchExpenses();
+  if (t === 'gcal') fetchGcal();
 }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
