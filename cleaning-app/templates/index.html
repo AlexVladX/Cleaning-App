@@ -84,6 +84,8 @@
   .w-rank{width:44px;color:var(--faint)}
   .w-80{width:80px}.w-90{width:90px}.w-100{width:100px}.w-110{width:110px}.w-120{width:120px}.w-140{width:140px}.w-160{width:160px}
   .pname{font-weight:500;overflow-wrap:anywhere}
+  .grp-prev{font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+  .grp-prev div{margin-top:3px}
   .x-btn{border:1px solid var(--line);background:none;color:var(--faint);cursor:pointer;font-size:11px;line-height:1;padding:3px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
   .x-btn:hover{color:#DC2626;border-color:#FCA5A5}
   .ex-list{margin-top:10px}
@@ -400,6 +402,7 @@
         <div><label for="s-clienti">Clienți facturați doar la oră</label><div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div><textarea id="s-clienti"></textarea></div>
         <div><label for="s-tipuri">Tipuri de menaj facturate la oră</label><div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div><textarea id="s-tipuri"></textarea></div>
         <div><label for="s-produse">Produse (nu sunt menaje)</label><div class="hint">Câte un cuvânt pe rând. Rândurile din facturi care îl conțin în nume sau tip sunt scoase din listă (ex. „produit”, „savon”).</div><textarea id="s-produse"></textarea></div>
+        <div><label for="s-grupuri">Grupuri de clienți</label><div class="hint">Un grup pe rând: <b>Nume grup: cuvânt, cuvânt</b>. O factură intră în grup dacă numele clientului <i>sau</i> folderul din Drive conține unul din cuvinte (ex. „Colaborator X: Dupont, Martin” sau „Colaborator X: NosVillasBois”).</div><textarea id="s-grupuri" placeholder="Colaborator X: Dupont, Martin"></textarea><div class="grp-prev" id="s-grupuri-prev"></div></div>
         <div><label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label><input id="s-prag" type="number" min="0" step="1">
           <div style="margin-top:10px"><button class="btn btn-dark" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div></div>
         <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
@@ -688,7 +691,8 @@ function renderClients() {
     : '';
   const max = Math.max(...c.map(x => x.procent), 1);
   $('client-body').innerHTML = c.length ? c.map(x => `<tr>
-    <td><div class="pname">${esc(x.client)}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}</td>
+    <td><div class="pname">${esc(x.client)}${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
+      ${(x.membri || []).length ? `<div class="palias" title="${esc(x.membri.join(', '))}">${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}: ${x.membri.slice(0, 6).map(esc).join(', ')}${x.membri.length > 6 ? ` și încă ${x.membri.length - 6}` : ''}</div>` : ''}</td>
     <td class="num">${eur(x.venit)}</td>
     <td class="hide-m"><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>
     <td class="num">${x.case}</td><td class="num hide-m">${x.interventii}</td><td class="num hide-m">${eur2(x.medie)}</td>
@@ -984,6 +988,10 @@ async function loadSettings(data) {
   const tt = $('s-tipuri'); if (document.activeElement !== tt) tt.value = (s.tipuri_la_ora || []).join('\n');
   const pr = $('s-prag'); if (document.activeElement !== pr) pr.value = s.prag_forfait;
   const sp = $('s-produse'); if (document.activeElement !== sp) sp.value = (s.cuvinte_produse || []).join('\n');
+  const sg2 = $('s-grupuri'); if (document.activeElement !== sg2) sg2.value = (s.grupuri_clienti || []).map(g => `${g.nume}: ${g.potriviri.join(', ')}`).join('\n');
+  $('s-grupuri-prev').innerHTML = (s.grupuri_preview || []).map(g => `<div><b>${esc(g.nume)}</b>: ${g.membri.length
+    ? `${g.membri.length} ${g.membri.length === 1 ? 'client' : 'clienți'} de pe facturi · ${g.interventii} intervenții — ${g.membri.map(esc).join(', ')}`
+    : '<span style="color:var(--bad-ink)">nicio factură nu se potrivește încă</span>'}</div>`).join('');
   const opts = (s.proprietati || []).map(p => `<option value="${esc(p.key)}">${esc(p.name)}${p.variante.length > 1 ? ' (' + p.variante.length + ' variante)' : ''}</option>`).join('');
   const din = $('m-din'), inn = $('m-in'), keep = [din.value, inn.value];
   din.innerHTML = '<option value="">Proprietatea…</option>' + opts; inn.innerHTML = '<option value="">…se unește cu</option>' + opts;
@@ -1004,7 +1012,7 @@ async function saveGeo(force) {
   if (j) { loadSettings(j); $('g-saved').textContent = '✓ Salvat · calculez distanțele (urmărește jurnalul)…'; setTimeout(() => { $('g-saved').textContent = ''; loadSettings(); }, 6000); }
 }
 async function saveSettings() {
-  const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, cuvinte_produse: $('s-produse').value, prag_forfait: $('s-prag').value});
+  const j = await post('/api/settings', {clienti_la_ora: $('s-clienti').value, tipuri_la_ora: $('s-tipuri').value, cuvinte_produse: $('s-produse').value, grupuri_clienti: $('s-grupuri').value, prag_forfait: $('s-prag').value});
   if (j) { loadSettings(j); lastDataKey = null; fetchState(); fetchAnalytics(); $('s-saved').textContent = '✓ Salvat și recalculat'; setTimeout(() => $('s-saved').textContent = '', 3000); }
 }
 async function mergeProps() {
