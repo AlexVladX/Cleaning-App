@@ -71,7 +71,7 @@ settings = {
     "verificate": {},  # factura -> amprenta avertismentelor marcate "Am verificat"
     "preturi_ok": [],  # semnalari de pret marcate "E corect"
     "excluse": [],     # proprietati scoase manual din lista (ex. produse de curatenie facturate)
-    "cuvinte_produse": ["produit"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
+    "cuvinte_produse": ["produit", "fourniture"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
     "pastrate": [],    # proprietati puse inapoi manual: cuvintele de produse nu le mai scot
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
