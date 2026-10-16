@@ -1099,10 +1099,20 @@ def sync_geo(force_routes=False):
         if c.get("ore") and k not in pending:
             ore[k] = c["ore"]
     try:
-        for nume, h in read_hours_tab(sid).items():   # foaia separata "Ore" are prioritate
-            k = prop_key(nume)
-            if k not in pending:
-                ore[k] = h
+        tab = read_hours_tab(sid)
+        if tab is not None:
+            vals, names = tab
+            for nume, h in vals.items():   # foaia separata "Ore" are prioritate
+                k = prop_key(nume)
+                if k not in pending:
+                    ore[k] = h
+            # case cu ore in aplicatie, dar fara rand in foaia "Ore" (ex. randuri sterse): le rescriem
+            in_tab = {prop_key(n) for n in names}
+            lipsa = [k for k, h in ore.items() if h and k not in in_tab]
+            if lipsa:
+                settings["ore_nescrise"] = sorted(set(settings.get("ore_nescrise") or []) | set(lipsa))
+                pending |= set(lipsa)
+                add_log(f"Foaia „{ORE_TAB}”: {len(lipsa)} case lipsă — le rescriu din aplicație")
     except Exception as e:  # noqa: BLE001
         add_log(f"⚠ Foaia „{ORE_TAB}”: {e}")
     for c in coords:
@@ -1922,6 +1932,8 @@ def _settings_payload():
         "coord_sheet": settings.get("coord_sheet"),
         "geo_sync": settings.get("geo_sync"),
         "n_coords": len(settings.get("coords") or []),
+        "n_ore": sum(1 for h in (settings.get("ore_estimate") or {}).values() if h),
+        "ore_status": dict(hours_status),
     }
 
 
@@ -2395,7 +2407,10 @@ def write_hours_to_sheet(items):
 
 
 def read_hours_tab(sid):
-    """Orele din foaia "Ore": prin Sheets API, altfel prin linkul public. {nume: ore} sau {}."""
+    """
+    Orele din foaia "Ore": prin Sheets API, altfel prin linkul public.
+    Intoarce ({nume: ore}, {numele tuturor randurilor}) sau None daca foaia nu poate fi citita.
+    """
     rows = None
     try:
         rows = _sheets_service().spreadsheets().values().get(
@@ -2411,17 +2426,22 @@ def read_hours_tab(sid):
                 rows = list(_csv.reader(io.StringIO(body)))
         except Exception:  # noqa: BLE001
             rows = None
-    out = {}
+    if rows is None:
+        return None
+    out, names = {}, set()
     if rows and rows[0] and rows[0][0].strip().casefold() in geo.NAME_COLS:
         for row in rows[1:]:
-            if len(row) >= 2 and row[0].strip():
+            if not row or not row[0].strip():
+                continue
+            names.add(row[0].strip())
+            if len(row) >= 2:
                 try:
                     v = float(str(row[1]).replace(",", ".").strip())
                 except ValueError:
                     continue
                 if 0 < v <= 48:
                     out[row[0].strip()] = round(v, 2)
-    return out
+    return out, names
 
 
 def _house_display_names():
@@ -2464,6 +2484,17 @@ def flush_hours():
             add_log(f"⚠ Ore estimate: {msg}")
         cache["dirty"] = True
         save_cache()
+
+
+@app.route("/api/ore/rescrie", methods=["POST"])
+def api_ore_rescrie():
+    """Rescrie in foaia "Ore" toate orele salvate in aplicatie (ex. dupa ce ai golit foaia)."""
+    ore = settings.get("ore_estimate") or {}
+    if not ore:
+        return jsonify({"ok": False, "error": "Nu există ore salvate în aplicație"}), 400
+    settings["ore_nescrise"] = sorted(k for k, h in ore.items() if h)
+    flush_hours()
+    return jsonify({"ok": True, "n": len(settings.get("ore_estimate") or {}), "status": dict(hours_status)})
 
 
 @app.route("/api/ore", methods=["POST"])
