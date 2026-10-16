@@ -14,6 +14,7 @@ import socket
 import threading
 import time
 import urllib.request
+import urllib.parse
 import urllib.error
 from datetime import datetime, date, timedelta
 
@@ -1050,6 +1051,13 @@ def sync_geo(force_routes=False):
         k = prop_key(c["nume"])
         if c.get("ore") and k not in pending:
             ore[k] = c["ore"]
+    try:
+        for nume, h in read_hours_tab(sid).items():   # foaia separata "Ore" are prioritate
+            k = prop_key(nume)
+            if k not in pending:
+                ore[k] = h
+    except Exception as e:  # noqa: BLE001
+        add_log(f"⚠ Foaia „{ORE_TAB}”: {e}")
     for c in coords:
         c.pop("ore", None)          # in "coords" pastram doar nume/lat/lng
     settings["coords"] = coords
@@ -2283,43 +2291,94 @@ def sheet_row_name(key):
     return next((c["nume"] for c in settings.get("coords") or [] if prop_key(c["nume"]) == key), None)
 
 
-def write_hours_to_sheet(items):
-    """items: [(nume din Sheet, ore)]. Scrie in coloana "ore" (o creeaza daca lipseste)."""
-    sid = sheet_id_from(settings.get("coord_sheet"))
-    if not sid:
-        raise RuntimeError("Sheet-ul cu coordonate nu e configurat")
+ORE_TAB = "Ore"   # foaia separata din acelasi document, doar cu nume + ore
+
+
+def _sheets_service():
     info = json.loads(GOOGLE_CREDENTIALS_JSON)
     creds = service_account.Credentials.from_service_account_info(
         info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
     http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=40))
-    svc = build("sheets", "v4", http=http, cache_discovery=False)
-    meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets.properties(title,index)").execute()
-    title = sorted(meta["sheets"], key=lambda x: x["properties"]["index"])[0]["properties"]["title"]
-    t = "'" + title.replace("'", "''") + "'"
-    vals = svc.spreadsheets().values().get(spreadsheetId=sid, range=f"{t}!A1:ZZ").execute().get("values", [])
-    head = [h.strip().casefold() for h in (vals[0] if vals else [])]
-    i_name = next((i for i, h in enumerate(head) if h in geo.NAME_COLS), None)
-    if i_name is None:
-        raise RuntimeError("nu găsesc coloana cu numele caselor în Sheet")
-    i_ore = next((i for i, h in enumerate(head) if h in geo.ORE_COLS), None)
-    data = []
-    if i_ore is None:
-        i_ore = len(vals[0]) if vals else 0
-        data.append({"range": f"{t}!{_col_letter(i_ore)}1", "values": [["ore"]]})
+    return build("sheets", "v4", http=http, cache_discovery=False)
+
+
+def write_hours_to_sheet(items):
+    """
+    items: [(nume casa, ore)]. Scrie in foaia separata "Ore" (nume | ore) din documentul cu coordonate;
+    o creeaza la final daca nu exista. Foaia cu coordonate si coduri nu e atinsa.
+    """
+    sid = sheet_id_from(settings.get("coord_sheet"))
+    if not sid:
+        raise RuntimeError("Sheet-ul cu coordonate nu e configurat")
+    svc = _sheets_service()
+    meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets.properties(title)").execute()
+    titles = [x["properties"]["title"] for x in meta.get("sheets", [])]
+    tab = next((t for t in titles if t.strip().casefold() == ORE_TAB.casefold()), None)
+    if not tab:
+        svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [
+            {"addSheet": {"properties": {"title": ORE_TAB}}}]}).execute()   # se adauga la final
+        tab = ORE_TAB
+        svc.spreadsheets().values().update(spreadsheetId=sid, range=f"'{tab}'!A1:B1", valueInputOption="RAW",
+                                           body={"values": [["nume", "ore"]]}).execute()
+    t = "'" + tab.replace("'", "''") + "'"
+    vals = svc.spreadsheets().values().get(spreadsheetId=sid, range=f"{t}!A1:B").execute().get("values", [])
     rows = {}
     for r, row in enumerate(vals[1:], start=2):
-        if i_name < len(row) and row[i_name].strip():
-            rows.setdefault(norm_text(row[i_name]), r)
-    missing = []
+        if row and row[0].strip():
+            rows.setdefault(norm_text(row[0]), r)
+    data, new = [], []
     for nume, ore in items:
         r = rows.get(norm_text(nume))
-        if not r:
-            missing.append(nume)
-            continue
-        data.append({"range": f"{t}!{_col_letter(i_ore)}{r}", "values": [[ore if ore else ""]]})
+        if r:
+            data.append({"range": f"{t}!B{r}", "values": [[ore if ore else ""]]})
+        elif ore:
+            new.append([nume, ore])
     if data:
         svc.spreadsheets().values().batchUpdate(spreadsheetId=sid, body={"valueInputOption": "RAW", "data": data}).execute()
-    return missing
+    if new:
+        svc.spreadsheets().values().append(spreadsheetId=sid, range=f"{t}!A:B", valueInputOption="RAW",
+                                           insertDataOption="INSERT_ROWS", body={"values": new}).execute()
+    return []
+
+
+def read_hours_tab(sid):
+    """Orele din foaia "Ore": prin Sheets API, altfel prin linkul public. {nume: ore} sau {}."""
+    rows = None
+    try:
+        rows = _sheets_service().spreadsheets().values().get(
+            spreadsheetId=sid, range=f"'{ORE_TAB}'!A1:B").execute().get("values", [])
+    except Exception:  # noqa: BLE001
+        try:
+            url = (f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet="
+                   + urllib.parse.quote(ORE_TAB))
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=30) as r:
+                body = r.read().decode("utf-8-sig")
+            if not body.lstrip().startswith("<"):
+                import csv as _csv
+                rows = list(_csv.reader(io.StringIO(body)))
+        except Exception:  # noqa: BLE001
+            rows = None
+    out = {}
+    if rows and rows[0] and rows[0][0].strip().casefold() in geo.NAME_COLS:
+        for row in rows[1:]:
+            if len(row) >= 2 and row[0].strip():
+                try:
+                    v = float(str(row[1]).replace(",", ".").strip())
+                except ValueError:
+                    continue
+                if 0 < v <= 48:
+                    out[row[0].strip()] = round(v, 2)
+    return out
+
+
+def _house_display_name(key):
+    with state_lock:
+        ivs = state["interventii"]
+    for iv in ivs:
+        n = re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip())
+        if n and prop_key(n) == key:
+            return n
+    return None
 
 
 def flush_hours():
@@ -2331,19 +2390,22 @@ def flush_hours():
         ore = settings.get("ore_estimate") or {}
         items, no_row = [], []
         for k in pending:
-            nume = sheet_row_name(k)
+            nume = sheet_row_name(k) or _house_display_name(k)
             (items.append((nume, ore.get(k))) if nume else no_row.append(k))
         try:
             missing = write_hours_to_sheet(items) if items else []
             settings["ore_nescrise"] = []        # scrise (sau fara rand in Sheet: raman doar in backup)
             n = len(items) - len(missing)
             extra = len(no_row) + len(missing)
-            hours_status.update(ok=True, msg=f"✓ Scris în Sheet ({n})" + (f" · {extra} doar în backup (casa nu e în Sheet)" if extra else ""))
+            hours_status.update(ok=True, msg=f"✓ Scris în foaia „{ORE_TAB}” ({n})" + (f" · {extra} doar în backup" if extra else ""))
             add_log(f"Ore estimate: {n} scrise în Sheet" + (f", {extra} doar în backup" if extra else ""))
         except Exception as e:  # noqa: BLE001
             msg = str(e)
             if "has not been used" in msg or "disabled" in msg or "accessNotConfigured" in msg:
-                msg = "Google Sheets API nu e activat în proiectul service account-ului"
+                m = re.search(r"project[ =](\d+)", msg)
+                msg = ("Google Sheets API nu e activat în proiectul service account-ului"
+                       + (f" (proiectul nr. {m.group(1)}: activează-l aici → https://console.developers.google.com/apis/api/"
+                          f"sheets.googleapis.com/overview?project={m.group(1)})" if m else ""))
             elif "PERMISSION_DENIED" in msg or "403" in msg or "permission" in msg.lower():
                 msg = "service account-ul nu are drept de Editor pe Sheet"
             hours_status.update(ok=False, msg=f"Salvat în backup; nescris încă în Sheet ({msg}) — se reîncearcă")
@@ -2373,11 +2435,11 @@ def api_ore():
     settings["ore_nescrise"] = sorted(set(settings.get("ore_nescrise") or []) | {key})
     settings["ore_v"] = settings.get("ore_v", 0) + 1
     cache["dirty"] = True
-    if settings.get("coord_sheet") and sheet_row_name(key):
+    if settings.get("coord_sheet"):
         flush_hours()
     else:
         settings["ore_nescrise"] = [k for k in settings["ore_nescrise"] if k != key]
-        hours_status.update(ok=True, msg="Salvat în backup (casa nu e în Sheet-ul cu coordonate)")
+        hours_status.update(ok=True, msg="Salvat în backup (Sheet-ul cu coordonate nu e configurat)")
         _save_async()
     return jsonify({"ok": True, "status": dict(hours_status), "ore": ore.get(key)})
 
@@ -2423,7 +2485,10 @@ def read_calendar():
     except Exception as e:  # noqa: BLE001
         msg = str(e)
         if "accessNotConfigured" in msg or "has not been used" in msg or "disabled" in msg:
-            msg = "Google Calendar API nu e activat în proiectul service account-ului (Google Cloud Console)."
+            m = re.search(r"project[ =](\d+)", msg)
+            msg = ("Google Calendar API nu e activat în proiectul service account-ului"
+                   + (f" (proiectul nr. {m.group(1)}: https://console.developers.google.com/apis/api/"
+                      f"calendar-json.googleapis.com/overview?project={m.group(1)})" if m else "") + ".")
         elif "notFound" in msg or "Not Found" in msg or "404" in msg:
             msg = "Calendarul nu e găsit: verifică ID-ul și că l-ai partajat cu email-ul service account-ului."
         elif "forbidden" in msg.lower() or "403" in msg:

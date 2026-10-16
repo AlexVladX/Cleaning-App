@@ -1,6 +1,6 @@
 # Analizator Facturi Curățenie
 
-Aplicație Python care citește automat facturile PDF x din Google Drive, extrage intervențiile pe fiecare proprietate și afișează un clasament (dashboard + export Excel).
+Aplicație Python care citește automat facturile PDF SimNettoyage din Google Drive, extrage intervențiile pe fiecare proprietate și afișează un clasament (dashboard + export Excel).
 
 ## Cum citește facturile
 
@@ -8,7 +8,7 @@ Aplicație Python care citește automat facturile PDF x din Google Drive, extrag
    - antet: client ("Facture pour"), număr factură, data emiterii, scadența
    - tabelul **Détail des prestations**, rând cu rând: casa, tipul serviciului, **toate datele** de curățenie, cantitate, preț unitar, total
    - totalurile (Subtotal, Ajustements, Total), cu verificare că rândurile dau Subtotalul
-2. **AI doar ca rezervă.** Dacă o factură nu are șablonul x, iar `GROQ_API_KEY` e setat, AI-ul copiază doar datele brute. Calculele se fac tot în cod, iar factura e marcată „de verificat”.
+2. **AI doar ca rezervă.** Dacă o factură nu are șablonul SimNettoyage, iar `GROQ_API_KEY` e setat, AI-ul copiază doar datele brute. Calculele se fac tot în cod, iar factura e marcată „de verificat”.
 
 ### Reguli de calcul (în cod, nu în AI)
 - **Forfait** (preț unitar ≥ `FORFAIT_MIN_PRICE`, implicit 40 €): fiecare dată = o intervenție, la prețul unitar.
@@ -93,6 +93,8 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Verificare prețuri** | prețul fiecărei case, factură după factură: **abatere** (preț diferit izolat → probabil greșeală), **de confirmat** (ultima factură are alt preț), **schimbare de tarif** |
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
+- **Ore / menaj** (Proprietăți): orele estimate pentru o persoană la un menaj forfait, editabile direct în tabel. Se salvează în backup și în foaia separată **„Ore”** (coloanele nume | ore) din același document cu coordonatele; aplicația o creează la final dacă lipsește și nu atinge foaia cu coordonate și coduri. Din ele se calculează **Ore lucru** în perioadă și **€ / oră**. Pentru scriere în Sheet: activează **Google Sheets API** în proiectul service account-ului și partajează Sheet-ul cu service account-ul ca **Editor**. Aplicația scrie doar în foaia „Ore”.
+- **Coloane** (Proprietăți): alegi ce coloane vezi (Selectează tot / Deselectează tot / Implicit); alegerea rămâne salvată în browser.
 - **Produse și alte rânduri care nu sunt case**: butonul ✕ din Proprietăți le scoate din listă (se pot pune înapoi din „Scoase din listă”). Rândurile care conțin cuvintele din **Reguli → Produse** (implicit „produit” și „fourniture”) se scot automat, și din facturile viitoare. Nu intră în venit, intervenții sau clasament. Siguranță: ✕ cere confirmare (cu avertisment dacă rândul pare o casă) și poate fi anulat imediat; cuvintele-cheie nu scot niciodată o casă din Sheet-ul cu coordonate sau una pusă înapoi manual.
 - **Grupuri de clienți** (Reguli): un rând pe grup, `Nume grup: cuvânt, cuvânt`. O factură intră în grup dacă numele clientului sau folderul ei din Drive conține unul din cuvinte (ex. persoane fizice aduse de același colaborator). În Clienți apare un singur rând, cu lista clienților facturați; pe factură clientul rămâne neschimbat. Regula „Clienți facturați doar la oră” se aplică tot după numele de pe factură.
 - O casă e **inactivă** când n-a mai avut menaj de mult mai mult timp decât intervalul ei obișnuit (de 3 ori intervalul tipic, cel puțin 45 de zile).
@@ -136,7 +138,7 @@ Fără fișier, aplicația funcționează ca înainte (doar în memorie).
 ```
 cleaning-app/
 ├── app.py              # Flask, Google Drive, agregări, export Excel
-├── invoice_parser.py   # parserul facturilor x
+├── invoice_parser.py   # parserul facturilor SimNettoyage
 ├── analytics.py        # indicatorii: perioade, clienți, evoluție, calendar, prețuri
 ├── geo.py              # coordonate din Sheet, trasee OSRM, zone
 ├── costs.py            # cheltuieli, motorina estimata, profit
