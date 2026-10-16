@@ -170,7 +170,6 @@
   table.t th.sortable{cursor:pointer;user-select:none}
   .sarr{font-size:.75em;color:var(--brand,#0f766e)}
   table.t th.sortable:hover,table.t th.active{color:var(--ink)}
-  table.t th.active::after{content:' ↓'}
   table.t td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}
   table.t tr:hover td{background:#F4FAF8}
   .num{text-align:right !important;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -279,6 +278,11 @@
   .toast span{overflow-wrap:anywhere}
   .toast button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;flex:none}
   .psub{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vchip{white-space:nowrap}
+  .vsplit{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:5px;font-size:10px;line-height:1;padding:2px 4px;margin-left:3px;cursor:pointer;vertical-align:1px}
+  .vsplit:hover{color:var(--bad);border-color:#FCA5A5}
+  details.mem summary{cursor:pointer;color:var(--brand-2)}
+  body.no-ex .ex{display:none!important}
   .palias{font-size:11px;color:var(--faint);overflow-wrap:anywhere;margin-top:1px}
   .ptypes{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
   .tt{font-size:10px;padding:1px 6px;border-radius:5px;font-weight:500;white-space:nowrap}
@@ -410,6 +414,7 @@
     <button class="btn btn-dark" onclick="scan()">&#x1F504; Scanare manuală</button>
     <button class="btn btn-green" id="btn-monitor-start" onclick="startMonitor()">&#x25B6; Start monitorizare</button>
     <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
+    <button class="btn" type="button" id="ex-toggle" title="Ascunde / arată textele explicative (gri) din pagină">ⓘ Ascunde explicațiile</button>
     <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
     <div class="period"><label for="period">Perioadă</label><select id="period"><option value="all">Toată perioada</option></select></div>
   </div>
@@ -455,7 +460,7 @@
     <section class="panel" id="panel-intrebari" role="tabpanel">
       <div class="q-top">
         <div><h2 class="q-title">Întrebările tale</h2>
-          <div class="hint">Scrii o întrebare, alegi pe ce indicatori răspunde, iar răspunsul se calculează singur din datele perioadei de sus (<b id="q-per"></b>). <b>★</b> = păstrată pentru viitor (în backup).</div></div>
+          <div class="hint ex">Scrii o întrebare, alegi pe ce indicatori răspunde, iar răspunsul se calculează singur din datele perioadei de sus (<b id="q-per"></b>). <b>★</b> = păstrată pentru viitor (în backup).</div></div>
         <button class="btn btn-dark" type="button" id="q-new">+ Întrebare nouă</button>
       </div>
       <div class="q-ideas" id="q-ideas"></div>
@@ -478,7 +483,7 @@
         <div class="toolbar"><div class="colpick" id="colpick">
             <button class="btn btn-sm" type="button" id="colpick-btn" aria-expanded="false">⇅ Coloane <span id="colpick-n"></span></button>
             <div class="colpick-menu" id="colpick-menu" hidden>
-              <div class="hint" style="margin-bottom:6px">Mută coloanele cu ↑ ↓, sau trage titlul lor direct în tabel (pe telefon: ține apăsat pe titlu, apoi trage). Bifele aleg ce indicatori proprii vezi; coloanele de bază rămân mereu.</div>
+              <div class="hint ex" style="margin-bottom:6px">Mută coloanele cu ↑ ↓, sau trage titlul lor direct în tabel (pe telefon: ține apăsat pe titlu, apoi trage). Bifele aleg ce indicatori proprii vezi; coloanele de bază rămân mereu.</div>
               <div class="colpick-acts"><button class="btn btn-sm" type="button" data-cp="all">Selectează tot</button><button class="btn btn-sm" type="button" data-cp="none">Deselectează tot</button><button class="btn btn-sm" type="button" data-cp="reset" title="Ordinea inițială, în Proprietăți și în Clienți">Ordinea inițială</button></div>
               <div id="colpick-list"></div>
             </div>
@@ -497,10 +502,10 @@
           <tbody id="prop-body"><tr><td colspan="9" class="empty">Datele vor apărea după analiză</td></tr></tbody>
         </table>
       </div>
-      <p class="hint" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile). Butonul ✕ scoate din listă un rând care nu e casă (ex. produse de curățenie facturate).</p>
+      <p class="hint ex" style="margin-top:8px">„Inactivă” = fără menaj de mult mai mult timp decât intervalul obișnuit al casei (cel puțin 45 de zile). Butonul ✕ scoate din listă un rând care nu e casă (ex. produse de curățenie facturate).</p>
       <details class="fold" id="ex-box" style="margin-top:12px;display:none">
         <summary><span class="card-title" id="ex-title">Scoase din listă</span></summary>
-        <div class="hint">Nu intră în venit, intervenții sau clasament. Rândurile cu cuvintele din <b>Reguli → Produse</b> se scot automat și din facturile viitoare.</div>
+        <div class="hint ex">Nu intră în venit, intervenții sau clasament. Rândurile cu cuvintele din <b>Reguli → Produse</b> se scot automat și din facturile viitoare.</div>
         <div class="ex-list" id="ex-list"></div>
       </details>
     </section>
@@ -508,7 +513,7 @@
     <!-- CLIENTI -->
     <section class="panel" id="panel-clienti" role="tabpanel">
       <div style="margin-top:14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div class="headline" id="c-headline"></div>
-        <div class="toolbar"><span class="hint">Trage titlurile ca să muți coloanele · click = sortare</span><button class="btn btn-sm" type="button" data-gloss>📖 Glosar</button></div></div>
+        <div class="toolbar"><span class="hint ex">Trage titlurile ca să muți coloanele · click = sortare</span><button class="btn btn-sm" type="button" data-gloss>📖 Glosar</button></div></div>
       <div class="table-wrap">
         <table class="t">
           <thead id="client-head"></thead>
@@ -553,14 +558,14 @@
         <div class="headline" id="inc-head" style="margin:0"></div>
         <label class="hint" style="display:flex;gap:6px;align-items:center">An <select id="inc-an" style="width:auto"></select></label>
       </div>
-      <div class="leg"><span><i style="background:#BBF7D0"></i>încasat</span><span><i style="background:#FDE68A"></i>plată parțială</span><span><i style="background:#FECACA"></i>restant</span><span><i style="background:#fff;border:1px solid #D1D5DB"></i>neîncasat, încă nescadent</span><span class="hint">Click pe o căsuță → facturile din luna aceea</span></div>
+      <div class="leg"><span><i style="background:#BBF7D0"></i>încasat</span><span><i style="background:#FDE68A"></i>plată parțială</span><span><i style="background:#FECACA"></i>restant</span><span><i style="background:#fff;border:1px solid #D1D5DB"></i>neîncasat, încă nescadent</span><span class="hint ex">Click pe o căsuță → facturile din luna aceea</span></div>
       <div style="overflow-x:auto" id="inc-wrap"><table class="pm" id="inc-table"></table></div>
       <details class="fold" style="margin-top:12px">
         <summary><span class="card-title">Pornire rapidă</span></summary>
-        <div class="hint" style="margin:6px 0 8px">La început toate facturile vechi apar neîncasate. Dacă până la o anumită lună totul e plătit, le marchezi dintr-o dată și corectezi apoi doar excepțiile (căsuță cu căsuță).</div>
+        <div class="hint ex" style="margin:6px 0 8px">La început toate facturile vechi apar neîncasate. Dacă până la o anumită lună totul e plătit, le marchezi dintr-o dată și corectezi apoi doar excepțiile (căsuță cu căsuță).</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span>Marchează încasate toate facturile până la</span><select id="inc-pana" style="width:auto"></select><span>inclusiv</span><button class="btn btn-dark btn-sm" id="inc-pana-btn">Marchează</button></div>
       </details>
-      <p class="hint" style="margin-top:8px">Căsuța = facturile clientului pentru luna lucrărilor (luna menajelor de pe factură). Scadența se citește din factură; dacă lipsește, se consideră 30 de zile de la emitere. Clienții grupați apar pe un singur rând. Facturile duplicate sau cu eroare nu apar.</p>
+      <p class="hint ex" style="margin-top:8px">Căsuța = facturile clientului pentru luna lucrărilor (luna menajelor de pe factură). Scadența se citește din factură; dacă lipsește, se consideră 30 de zile de la emitere. Clienții grupați apar pe un singur rând. Facturile duplicate sau cu eroare nu apar.</p>
     </section>
 
     <!-- CHELTUIELI -->
@@ -578,15 +583,15 @@
         <button class="btn btn-dark" type="submit">+ Adaugă cheltuiala</button>
       </form>
       <div style="overflow-x:auto" id="x-wrap"><table class="pm" id="x-table"></table></div>
-      <p class="hint" style="margin-top:6px">Click pe o căsuță → cheltuielile din luna aceea. <i>≈ în gri</i> = motorina estimată din traseele zilnice; când treci bonuri reale de motorină pe o lună, profitul folosește bonurile. Categoriile „personale” (ex. transferuri acasă) nu scad din profitul firmei.</p>
+      <p class="hint ex" style="margin-top:6px">Click pe o căsuță → cheltuielile din luna aceea. <i>≈ în gri</i> = motorina estimată din traseele zilnice; când treci bonuri reale de motorină pe o lună, profitul folosește bonurile. Categoriile „personale” (ex. transferuri acasă) nu scad din profitul firmei.</p>
       <div class="two-col">
-        <div><h3 class="card-title" style="margin-bottom:4px">Unde se duc banii</h3><div class="hint">cheltuielile anului pe categorii</div><div class="catbars" id="x-bars"></div></div>
+        <div><h3 class="card-title" style="margin-bottom:4px">Unde se duc banii</h3><div class="hint ex">cheltuielile anului pe categorii</div><div class="catbars" id="x-bars"></div></div>
         <div><h3 class="card-title" style="margin-bottom:4px">Motorina estimată</h3><div class="hint" id="x-fuel-txt"></div>
           <div class="xform" style="margin-top:8px"><label>Consum (l/100 km)<input id="x-consum" inputmode="decimal" style="width:90px"></label><label>Preț motorină (€/l)<input id="x-pret" inputmode="decimal" style="width:90px"></label><button class="btn btn-sm btn-dark" type="button" id="x-fuel-save">Salvează</button></div></div>
       </div>
       <details class="fold" style="margin-top:14px">
         <summary><span class="card-title">Categorii de cheltuieli</span></summary>
-        <div class="hint" style="margin-bottom:6px">Câte una pe rând. Adaugă „(personal)” la final pentru banii care nu sunt cheltuieli ale firmei (nu scad din profit, apar separat).</div>
+        <div class="hint ex" style="margin-bottom:6px">Câte una pe rând. Adaugă „(personal)” la final pentru banii care nu sunt cheltuieli ale firmei (nu scad din profit, apar separat).</div>
         <textarea id="x-cats" style="width:100%;min-height:150px;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font:inherit;font-size:13px"></textarea>
         <div style="margin-top:8px"><button class="btn btn-dark btn-sm" type="button" id="x-cats-save">Salvează categoriile</button></div>
       </details>
@@ -601,7 +606,7 @@
           <li>În Google Calendar → setările calendarului cu menaje → <b>Distribuie cu anumite persoane</b> → adaugă <b id="g-sa">email-ul service account-ului</b> <button class="btn btn-sm" type="button" id="g-sa-copy">Copiază</button> cu <b>„Vezi toate detaliile evenimentelor”</b>.</li>
           <li>Tot acolo, la „Integrează calendarul”, copiază <b>ID-ul calendarului</b> și lipește-l mai jos.</li>
         </ol>
-        <p class="hint" style="margin-bottom:12px">Recomandat: un calendar separat doar pentru menaje, cu numele casei în titlu (ex. „Villa Emma 45 – Ouverture”). Titlurile evenimentelor nu se salvează nicăieri, se citesc doar pentru comparație.</p>
+        <p class="hint ex" style="margin-bottom:12px">Recomandat: un calendar separat doar pentru menaje, cu numele casei în titlu (ex. „Villa Emma 45 – Ouverture”). Titlurile evenimentelor nu se salvează nicăieri, se citesc doar pentru comparație.</p>
       </div>
       <div class="xform" id="g-form" style="margin-top:14px">
         <label style="flex:3 1 280px">ID-ul calendarului<input id="g-cid" placeholder="abc123…@group.calendar.google.com"></label>
@@ -633,7 +638,7 @@
           </div>
         </div>
         <h3 style="font-size:13px;font-weight:600;margin:4px 0 2px">Case scumpe la drum</h3>
-        <p class="hint" style="margin-bottom:8px">Case la peste 15 km care aduc cei mai puțini € pe km parcurs: candidate pentru un tarif mai mare sau pentru gruparea în aceeași zi.</p>
+        <p class="hint ex" style="margin-bottom:8px">Case la peste 15 km care aduc cei mai puțini € pe km parcurs: candidate pentru un tarif mai mare sau pentru gruparea în aceeași zi.</p>
         <div class="table-wrap" style="max-height:360px">
           <table class="t"><thead><tr><th>Proprietate</th><th class="w-100 num">Distanță</th><th class="w-110 num">€ / int.</th><th class="w-100 num hide-m">Intervenții</th><th class="w-90 num">€ / km</th></tr></thead><tbody id="costly-table"></tbody></table>
         </div>
@@ -674,36 +679,36 @@
     <details class="fold" id="settings-box">
       <summary><span class="card-title" id="settings-title">Reguli de calcul și proprietăți</span></summary>
       <nav class="rules-nav" aria-label="Secțiuni reguli"><a href="#rs-facturi">1 · Facturi</a><a href="#rs-clienti">2 · Clienți și case</a><a href="#rs-dist">3 · Distanțe și ore</a><a href="#rs-fx">4 · Indicatori proprii</a><a href="#rs-backup">5 · Backup</a><button type="button" class="btn btn-sm" data-gloss>📖 Glosar indicatori</button></nav>
-      <div class="hint" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în tab-ul <b>Cheltuieli &amp; profit</b>; calendarul, în <b>✓ Calendar</b> (verificarea calendarului).</div>
+      <div class="hint ex" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în tab-ul <b>Cheltuieli &amp; profit</b>; calendarul, în <b>✓ Calendar</b> (verificarea calendarului).</div>
       <section class="rsec" id="rs-facturi">
         <h3 class="rsec-h"><span class="rnum">1</span>Cum se citesc facturile</h3>
-        <div class="hint rsec-sub">Ce e facturat la oră, ce e forfait și ce rânduri nu sunt menaje.</div>
+        <div class="hint ex rsec-sub">Ce e facturat la oră, ce e forfait și ce rânduri nu sunt menaje.</div>
         <div class="set-grid">
-        <div><label for="s-clienti">Clienți facturați doar la oră</label><div class="hint">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div><textarea id="s-clienti"></textarea></div>
-        <div><label for="s-tipuri">Tipuri de menaj facturate la oră</label><div class="hint">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div><textarea id="s-tipuri"></textarea></div>
-        <div><label for="s-produse">Produse (nu sunt menaje)</label><div class="hint">Câte un cuvânt pe rând. Rândurile din facturi care îl conțin în nume sau tip sunt scoase din listă (ex. „produit”, „savon”).</div><textarea id="s-produse"></textarea></div>
-        <div><label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label><input id="s-prag" type="number" min="0" step="1"><div class="hint">Plasă de siguranță: se folosește doar când din factură nu reiese dacă rândul e forfait sau la oră.</div></div>
+        <div><label for="s-clienti">Clienți facturați doar la oră</label><div class="hint ex">Câte unul pe rând. E suficientă o parte din nume (ex. „Esther”).</div><textarea id="s-clienti"></textarea></div>
+        <div><label for="s-tipuri">Tipuri de menaj facturate la oră</label><div class="hint ex">Câte unul pe rând (ex. „Intermédiaire”). Restul tipurilor sunt forfait.</div><textarea id="s-tipuri"></textarea></div>
+        <div><label for="s-produse">Produse (nu sunt menaje)</label><div class="hint ex">Câte un cuvânt pe rând. Rândurile din facturi care îl conțin în nume sau tip sunt scoase din listă (ex. „produit”, „savon”).</div><textarea id="s-produse"></textarea></div>
+        <div><label for="s-prag">Rezervă: preț unitar sub care un rând e considerat la oră (€)</label><input id="s-prag" type="number" min="0" step="1"><div class="hint ex">Plasă de siguranță: se folosește doar când din factură nu reiese dacă rândul e forfait sau la oră.</div></div>
         </div>
         <div class="rsave"><button class="btn btn-dark" type="button" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved"></span></div>
       </section>
       <section class="rsec" id="rs-clienti">
         <h3 class="rsec-h"><span class="rnum">2</span>Clienți și case</h3>
-        <div class="hint rsec-sub">Cum se adună clienții în grupuri și ce case sunt de fapt aceeași casă.</div>
+        <div class="hint ex rsec-sub">Cum se adună clienții în grupuri și ce case sunt de fapt aceeași casă.</div>
         <div class="set-grid">
-        <div><label for="s-grupuri">Grupuri de clienți</label><div class="hint">Un grup pe rând: <b>Nume grup: cuvânt, cuvânt</b>. O factură intră în grup dacă numele clientului <i>sau</i> folderul din Drive conține unul din cuvinte (ex. „Colaborator X: Dupont, Martin” sau „Colaborator X: NosVillasBois”).</div><textarea id="s-grupuri" placeholder="Colaborator X: Dupont, Martin"></textarea><div class="grp-prev" id="s-grupuri-prev"></div></div>
-        <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor.</div>
+        <div><label for="s-grupuri">Grupuri de clienți</label><div class="hint ex">Un grup pe rând: <b>Nume grup: cuvânt, cuvânt</b>. O factură intră în grup dacă numele clientului <i>sau</i> folderul din Drive conține unul din cuvinte (ex. „Colaborator X: Dupont, Martin” sau „Colaborator X: NosVillasBois”).</div><textarea id="s-grupuri" placeholder="Colaborator X: Dupont, Martin"></textarea><div class="grp-prev" id="s-grupuri-prev"></div></div>
+        <div><label>Unește proprietăți (aceeași casă cu nume diferite)</label><div class="hint ex">„Villa Blue” și „Blue” sunt deja unite automat. Folosește asta pentru restul cazurilor. Dacă două case diferite s-au unit greșit: în Proprietăți, la „apare și ca”, apasă ✂.</div>
           <div class="merge-row"><select id="m-din" aria-label="Proprietatea care se unește"></select><span>→</span><select id="m-in" aria-label="Proprietatea în care se unește"></select><button class="btn" onclick="mergeProps()">Unește</button></div>
           <div class="merge-list" id="m-list"></div></div>
-        <div style="grid-column:1/-1"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
+        <div style="grid-column:1/-1"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint ex">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
         </div>
         <div class="rsave"><button class="btn btn-dark" type="button" onclick="saveSettings()">Salvează regulile</button><span class="saved" id="s-saved2"></span></div>
       </section>
       <section class="rsec" id="rs-dist">
         <h3 class="rsec-h"><span class="rnum">3</span>Distanțe, zone și ore</h3>
-        <div class="hint rsec-sub">Coordonatele se citesc din Sheet-ul tău (doar coloanele nume, lat, lng; restul e ignorat). Partajează Sheet-ul cu service account-ul (Editor, ca să poată scrie orele în foaia „Ore”; nu atinge celelalte foi).</div>
+        <div class="hint ex rsec-sub">Coordonatele se citesc din Sheet-ul tău (doar coloanele nume, lat, lng; restul e ignorat). Partajează Sheet-ul cu service account-ul (Editor, ca să poată scrie orele în foaia „Ore”; nu atinge celelalte foi).</div>
         <div class="set-grid">
-        <div><label for="g-baza">Coordonatele bazei</label><div class="hint">Din Google Maps: click dreapta pe locație → click pe coordonate.</div><input id="g-baza" placeholder="41.5955, 9.2746"></div>
-        <div><label for="g-sheet">Sheet-ul cu coordonatele caselor</label><div class="hint">Linkul sau ID-ul Sheet-ului.</div><input id="g-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+        <div><label for="g-baza">Coordonatele bazei</label><div class="hint ex">Din Google Maps: click dreapta pe locație → click pe coordonate.</div><input id="g-baza" placeholder="41.5955, 9.2746"></div>
+        <div><label for="g-sheet">Sheet-ul cu coordonatele caselor</label><div class="hint ex">Linkul sau ID-ul Sheet-ului.</div><input id="g-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
         <div style="grid-column:1/-1"><button class="btn btn-dark" onclick="saveGeo(false)">Salvează și calculează distanțele</button>
           <button class="btn" onclick="saveGeo(true)" title="Refă toate traseele de la zero">Recalculează toate traseele</button>
           <span class="saved" id="g-saved"></span><div class="hint" id="g-status" style="margin-top:6px"></div>
@@ -714,7 +719,7 @@
         <h3 class="rsec-h"><span class="rnum">4</span>Indicatori proprii (formule)</h3>
         <div class="hint rsec-sub">Coloane noi calculate din indicatorii de bază. Vezi <button type="button" class="linkbtn" data-gloss>glosarul</button> pentru ce înseamnă fiecare variabilă.</div>
         <div id="fx-box"><label for="fx-text">Formulele tale</label>
-          <div class="hint">Un indicator pe rând: <b>Nume = formulă</b>. Apar ca și coloane în Proprietăți (pe fiecare casă) și în Clienți (pe fiecare client, din suma caselor lui). Poți folosi + − × ÷, paranteze, numere și min( ), max( ), round( ), abs( ). Dacă numele conține „€” se afișează în euro, dacă conține „%” ca procent. Click pe o variabilă ca s-o adaugi.</div>
+          <div class="hint ex">Un indicator pe rând: <b>Nume = formulă</b>. Apar ca și coloane în Proprietăți (pe fiecare casă) și în Clienți (pe fiecare client, din suma caselor lui). Poți folosi + − × ÷, paranteze, numere și min( ), max( ), round( ), abs( ). Dacă numele conține „€” se afișează în euro, dacă conține „%” ca procent. Click pe o variabilă ca s-o adaugi.</div>
           <div class="fx-vars" id="fx-vars"></div>
           <textarea id="fx-text" spellcheck="false" style="width:100%;min-height:110px;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font:13px ui-monospace,Menlo,monospace" placeholder="€ / oră = incasari_fara_inter / ore_lucru"></textarea>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px"><button class="btn btn-dark btn-sm" type="button" id="fx-save">Salvează indicatorii</button><span class="hint" id="fx-status"></span></div>
@@ -722,9 +727,9 @@
       </section>
       <section class="rsec" id="rs-backup">
         <h3 class="rsec-h"><span class="rnum">5</span>Backup și recuperare</h3>
-        <div class="hint rsec-sub">Toate setările se salvează automat în Google Drive (cache-facturi.json).</div>
+        <div class="hint ex rsec-sub">Toate setările se salvează automat în Google Drive (cache-facturi.json).</div>
         <div><label>Recuperează setările dintr-un backup vechi</label>
-          <div class="hint">Dacă s-au pierdut setări (grupuri, linkul Sheet-ului, ore, cheltuieli, încasări, uniri de case…): în Google Drive → <b>cache-facturi.json</b> → Gestionează versiunile → descarcă o versiune de dinainte de pierdere și încarc-o aici. Se recuperează doar ce lipsește acum; ce ai deja nu se schimbă, iar facturile nu sunt atinse.</div>
+          <div class="hint ex">Dacă s-au pierdut setări (grupuri, linkul Sheet-ului, ore, cheltuieli, încasări, uniri de case…): în Google Drive → <b>cache-facturi.json</b> → Gestionează versiunile → descarcă o versiune de dinainte de pierdere și încarc-o aici. Se recuperează doar ce lipsește acum; ce ai deja nu se schimbă, iar facturile nu sunt atinse.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><input type="file" id="r-file" accept=".json,application/json"><button class="btn btn-dark btn-sm" type="button" id="r-btn">Recuperează setările</button><span class="hint" id="r-status"></span></div></div>
       </section>
     </details>
@@ -801,6 +806,7 @@ let S = null, A = null;               // /api/state si /api/analytics
 let period = store.get('period', 'all');
 let propClient = store.get('propClient', '');
 let tab = store.get('tab', 'proprietati');
+let ABASE = null;
 let sortBy = store.get('sortBy2', 'total');
 let propFilter = 'all', fileFilter = 'all', priceFilter = 'abatere';
 let lastDataKey = null, lastAnFetch = 0, anLoading = false;
@@ -824,6 +830,8 @@ async function fetchAnalytics() {
   try {
     const key = S ? S.data_key : null;
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
+    // intrebarile raspund mereu pe toate casele, indiferent de filtrul de client din Proprietati
+    ABASE = A.client_sel ? await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json() : A;
     lastDataKey = key;
     renderAnalytics();
     if (tab === 'incasari') fetchPayments(); else if (payKey !== key) fetchPaySummary();
@@ -1258,11 +1266,14 @@ function renderProps() {
     const types = Object.entries(p.tipuri || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
       `<span class="tt ${TL[t] ? 'tt-' + t : 'tt-alt'}">${esc(TL[t] || t)} ${n}</span>`).join('');
     const others = (p.variante || []).filter(x => x !== p.name);
+    const vinfo = Object.fromEntries((p.variante_info || []).map(([v, kind, din]) => [v, {kind, din}]));
+    const vchip = v => vinfo[v] ? `<span class="vchip">${esc(v)}<button type="button" class="vsplit" data-split="${esc(v)}" data-kind="${vinfo[v].kind}" data-din="${esc(vinfo[v].din)}" data-in="${esc(p.name)}" title="${vinfo[v].kind === 'auto' ? 'E altă casă: separ-o (unită automat după nume)' : 'Anulează unirea făcută manual'}" aria-label="Separă ${esc(v)}">✂</button></span>` : esc(v);
+    const splitName = vinfo[p.name] && others.every(v => !vinfo[v]) ? ` <span class="vchip">${esc(p.name)}<button type="button" class="vsplit" data-split="${esc(p.name)}" data-kind="${vinfo[p.name].kind}" data-din="${esc(vinfo[p.name].din)}" data-in="${esc(others[0] || '')}" title="E altă casă: separ-o" aria-label="Separă ${esc(p.name)}">✂</button></span>` : '';
     return `<tr>
       <td class="w-rank"><span class="rk${rank <= 3 && sortBy === 'total' && sortDir === 'desc' ? ' rk-' + rank : ''}">${rank}</span></td>
       <td><div class="pname">${esc(p.name)} ${p.inactiva ? '<span class="tag bad" title="Fără menaj de mult mai mult timp decât de obicei">inactivă</span>' : ''}<button class="x-btn" data-excl="${esc(p.key)}" data-name="${esc(p.name)}" title="Scoate din listă (nu e o casă, ex. produse)" aria-label="Scoate ${esc(p.name)} din listă">✕</button></div>
         <div class="psub" title="${esc(p.client || '')}">${esc(p.client || '')}</div>
-        ${others.length ? `<div class="palias">apare și ca: ${others.map(esc).join(', ')}</div>` : ''}
+        ${others.length ? `<div class="palias">apare și ca: ${others.map(vchip).join(', ')}${splitName}</div>` : ''}
         <div class="ptypes">${types}${p.ore > 0 ? `<span class="tt tt-alt">${num(p.ore)} h${p.pret_ora ? ' · ' + num(p.pret_ora) + ' €/h' : ''}</span>` : ''}</div></td>
       ${cols.map(c => `<td class="${c.left ? '' : 'num '}${c.cls || ''}${c.sort && c.sort === sortBy ? ' hl' : ''}">${c.cell(p)}</td>`).join('')}
     </tr>`;
@@ -1270,6 +1281,19 @@ function renderProps() {
 }
 colDrag($('prop-head'), (from, to, after) => { if (moveCol('props', allPropCols(), from, to, after)) { renderProps(); if (!$('colpick-menu').hidden) renderColPicker(); } });
 $('prop-head').addEventListener('click', e => { const th = e.target.closest('th[data-sort]'); if (th) setSort(th.dataset.sort); });
+// ✂ pe un nume unit gresit: separare (unire automata) sau anularea unirii manuale, cu „Anulează” imediat
+async function splitVariant(v, kind, din, into) {
+  const j = kind === 'auto' ? await post('/api/separa', {nume: v}) : await post('/api/unmerge', {din});
+  if (!j) return;
+  if (j.unite) loadSettings(j);
+  lastDataKey = null; fetchState(); fetchAnalytics();
+  showToast(`„${v}” e acum casă separată`, async () => {
+    const k = kind === 'auto' ? await post('/api/separa', {nume: v, undo: true}) : await post('/api/merge', {din: v, in: into});
+    if (k && k.unite) loadSettings(k);
+    lastDataKey = null; fetchState(); fetchAnalytics();
+  });
+}
+$('prop-body').addEventListener('click', e => { const b = e.target.closest('[data-split]'); if (b) { e.stopPropagation(); splitVariant(b.dataset.split, b.dataset.kind, b.dataset.din, b.dataset.in); } });
 // ore estimate: salvare la Enter / iesire din camp; coloanele derivate se recalculeaza pe loc
 function recalcHours(p) {
   const h = p.ore_est, n = p.menaje_complete || 0;
@@ -1392,7 +1416,7 @@ function renderClients() {
   const max = Math.max(...c.map(x => x.procent), 1);
   // indicatorii proprii pe client = formula aplicata pe suma caselor clientului
   const byClient = {};
-  for (const p of A.props || []) for (const cl of String(p.client || '').split(', ')) (byClient[cl] = byClient[cl] || []).push(p);
+  for (const p of (ABASE || A).props || []) for (const cl of String(p.client || '').split(', ')) (byClient[cl] = byClient[cl] || []).push(p);
   const fnum = (x, f) => { const ps = byClient[x.client]; if (!ps || !ps.length) return null; const ff = FORMS[FORMS.findIndex(g => 'f' + g.i === f.id)]; return ff ? evalFormula(ff.rpn, clientVars(ps)) : null; };
   const cols = allClientCols(), ctx = {max, fnum};
   const CS = {};
@@ -1402,10 +1426,10 @@ function renderClients() {
   const th = col => `<th class="${col.cls}${col.cs ? ' sortable' : ''}${col.cs && cSort.k === col.cs ? ' active' : ''}" data-key="${esc(col.key)}"${col.cs ? ` data-cs="${col.cs}"` : ''} title="${esc((col.hint ? col.hint + ' · ' : '') + (col.cs ? 'click: sortează · click din nou: invers · ' : '') + 'trage ca s-o muți')}">${esc(col.label)}${col.cs && cSort.k === col.cs ? ' ' + sortArrow(cSort.d) : ''}</th>`;
   $('client-head').innerHTML = `<tr><th>Client</th>${cols.map(th).join('')}</tr>`;
   const nf = cols.filter(x => x.formula).length;
-  const tbl = $('client-head').parentElement; tbl.style.minWidth = nf ? (760 + nf * 110) + 'px' : '';
+  const tbl = $('client-head').parentElement; tbl.style.minWidth = ((innerWidth <= 760 ? 330 : 900) + nf * 110) + 'px';
   $('client-body').innerHTML = c.length ? c.map(x => `<tr>
     <td><div class="pname"><button class="cl-link" data-cl="${esc(x.client)}" title="Vezi clasamentul caselor acestui client">${esc(x.client)}</button>${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
-      ${(x.membri || []).length ? `<div class="palias" title="${esc(x.membri.join(', '))}">${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}: ${x.membri.slice(0, 6).map(esc).join(', ')}${x.membri.length > 6 ? ` și încă ${x.membri.length - 6}` : ''}</div>` : ''}</td>
+      ${(x.membri || []).length ? `<details class="palias mem"><summary>${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}</summary>${x.membri.map(esc).join(', ')}</details>` : ''}</td>
     ${cols.map(col => col.td(x, ctx)).join('')}</tr>`).join('')
     : `<tr><td colspan="${1 + cols.length}" class="empty">Nicio intervenție în perioada aleasă</td></tr>`;
 }
@@ -2039,19 +2063,20 @@ function qFmt(f, v) {
 }
 let qRowsCache = {key: null, forms: null};
 function qRows(level) {
-  if (!A) return [];
-  if (qRowsCache.key !== A || qRowsCache.forms !== FORMS) qRowsCache = {key: A, forms: FORMS};
+  const D = ABASE || A;
+  if (!D) return [];
+  if (qRowsCache.key !== D || qRowsCache.forms !== FORMS) qRowsCache = {key: D, forms: FORMS};
   if (qRowsCache[level]) return qRowsCache[level];
   const fx = v => Object.fromEntries(FORMS.map(fm => ['fx:' + fm.nume, evalFormula(fm.rpn, v)]));
   const ratio = (a, b) => (a != null && b) ? a / b : null;
   let rows;
   if (level === 'case') {
-    rows = (A.props || []).map(p => { const v = houseVars(p); return {...v, ...fx(v), nume: p.name, client: p.client || '', zona: p.zona || '', inactiva: !!p.inactiva,
+    rows = (D.props || []).map(p => { const v = houseVars(p); return {...v, ...fx(v), nume: p.name, client: p.client || '', zona: p.zona || '', inactiva: !!p.inactiva,
       medie: p.medie, eur_ora: ratio(v.incasari_fara_inter, v.ore_lucru), marja: p.profit_est != null && p.total ? p.profit_est / p.total * 100 : null}; });
   } else {
     const by = {};
-    for (const p of A.props || []) for (const cl of String(p.client || '').split(', ')) (by[cl] = by[cl] || []).push(p);
-    rows = (A.clients || []).map(x => { const ps = by[x.client] || [], v = ps.length ? clientVars(ps) : {};
+    for (const p of D.props || []) for (const cl of String(p.client || '').split(', ')) (by[cl] = by[cl] || []).push(p);
+    rows = (D.clients || []).map(x => { const ps = by[x.client] || [], v = ps.length ? clientVars(ps) : {};
       return {...v, ...(ps.length ? fx(v) : {}), nume: x.client, procent: x.procent, incasari: x.venit, interventii: x.interventii, case: x.case, medie: x.medie,
         eur_ora: ratio(v.incasari_fara_inter, v.ore_lucru), marja: v.profit != null && x.venit ? v.profit / x.venit * 100 : null}; });
   }
@@ -2190,7 +2215,7 @@ function renderQuestions() {
   const ae = document.activeElement;
   if (ae && ae.matches && ae.matches('.qcard textarea')) { qPending = true; return; }
   qPending = false;
-  $('q-per').textContent = (A.period && A.period.label || '') + (A.client_sel ? ' · doar ' + A.client_sel : '');
+  $('q-per').textContent = (A.period && A.period.label || '');
   $('n-q').textContent = QS.filter(q => q.pastrata).length || '';
   const used = new Set(QS.map(q => q.q));
   const ideas = Q_IDEAS.filter(x => !used.has(x.q));
@@ -2323,6 +2348,11 @@ document.addEventListener('change', e => {
   showToast(q.pastrata ? 'Concluzie salvată' : 'Concluzie salvată în browser · ☆ ca s-o păstrezi', null);
 });
 
+// ---- explicatiile (textele gri) se pot ascunde; alegerea ramane in browser
+function applyEx() { const off = store.get('faraExplicatii', '0') === '1'; document.body.classList.toggle('no-ex', off); $('ex-toggle').textContent = off ? 'ⓘ Arată explicațiile' : 'ⓘ Ascunde explicațiile'; }
+$('ex-toggle').addEventListener('click', () => { store.set('faraExplicatii', store.get('faraExplicatii', '0') === '1' ? '0' : '1'); applyEx(); });
+applyEx();
+
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
   tab = t; store.set('tab', t);
@@ -2377,9 +2407,14 @@ async function loadSettings(data) {
   $('fx-vars').innerHTML = Object.entries(s.formule_vars || {}).map(([k, d]) => `<button type="button" data-fx="${esc(k)}" title="${esc(d)}">${esc(k)}</button>`).join('');
   fxPreview();
   $('o-status').textContent = `Ore pe casă salvate în aplicație: ${s.n_ore || 0}` + (s.ore_status && s.ore_status.msg ? ` · ${s.ore_status.msg}` : '');
-  $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
+  $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('')
+    + ((s.separate || []).length ? `<div class="hint" style="margin-top:8px">Separate (nu se mai unesc automat):</div>` + s.separate.map(n => `<div class="merge-item"><span>✂ ${esc(n)}</span><button class="link-btn" data-unsep="${esc(n)}">unește la loc</button></div>`).join('') : '');
 }
-$('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
+$('m-list').addEventListener('click', async e => {
+  const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge);
+  const u = e.target.closest('[data-unsep]');
+  if (u) { const j = await post('/api/separa', {nume: u.dataset.unsep, undo: true}); if (j) { loadSettings(j); lastDataKey = null; fetchState(); fetchAnalytics(); } }
+});
 function fxPreview() {   // verificare pe loc: arata greselile si valoarea pe prima casa din clasament
   const lines = $('fx-text').value.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
   const p0 = A && A.props && A.props.slice().sort((a, b) => b.total - a.total)[0];
