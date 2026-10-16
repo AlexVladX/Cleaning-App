@@ -646,8 +646,12 @@ let lastDataKey = null, lastAnFetch = 0, anLoading = false;
 
 async function fetchState() {
   try {
-    S = await (await fetch('/api/state')).json();
-    renderState();
+    const prev = S;
+    const nS = await (await fetch('/api/state' + (prev && prev.files_v ? '?files_v=' + encodeURIComponent(prev.files_v) : ''))).json();
+    const filesChanged = !!nS.files || !prev;
+    if (!nS.files) nS.files = prev ? prev.files : [];
+    S = nS;
+    renderState(filesChanged);
     // indicatorii se recalculeaza doar cand se schimba datele (in timpul scanarii: cel mult la 10 s)
     const throttle = S.scan && S.scan.active ? 10000 : 0;
     if (S.data_key !== lastDataKey && Date.now() - lastAnFetch >= throttle) fetchAnalytics();
@@ -661,14 +665,14 @@ async function fetchAnalytics() {
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
     lastDataKey = key;
     renderAnalytics();
-    if (!P || payKey !== key) fetchPayments();
+    if (tab === 'incasari') fetchPayments(); else if (payKey !== key) fetchPaySummary();
     if (tab === 'cheltuieli') fetchExpenses();
-    fetchGcal();
+    if (tab === 'gcal' || !G || G.configurat) fetchGcal();
   } finally { anLoading = false; }
 }
 
 // ------------------------------------------------------------ stare server (progres, facturi, jurnal)
-function renderState() {
+function renderState(filesChanged = true) {
   const s = S, dot = $('dot'), stxt = $('status-txt');
   dot.className = s.monitoring ? 'dot live' : 'dot';
   stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
@@ -703,7 +707,7 @@ function renderState() {
   $('m-warn').textContent = m.warnings ?? '—';
   $('m-warn-box').classList.toggle('alert', !!m.warnings);
   $('m-files-sub').textContent = m.files ? `${m.analyzed} din ${m.files} facturi citite` : '';
-  renderFiles();
+  if (filesChanged) renderFiles();
   if (s.last_scan) $('last-scan').textContent = 'Ultima scanare: ' + new Date(s.last_scan).toLocaleTimeString('ro-RO');
   const lb = $('log-box');
   if (s.log && s.log.length) {
@@ -1244,6 +1248,20 @@ document.addEventListener('click', e => {
 
 // ------------------------------------------------------------ incasari (matrice client x luna)
 let P = null, payYear = store.get('payYear', ''), payOpen = null, payPartial = null, payKey = null;
+async function fetchPaySummary() {
+  try {
+    const j = await (await fetch('/api/incasari?sumar=1')).json();
+    payKey = S ? S.data_key : null;
+    renderPayTile(j.sumar);
+  } catch (e) { console.error(e); }
+}
+function renderPayTile(sm) {
+  const nb = $('n-inc');
+  nb.textContent = sm.restant > 0 ? eur(sm.restant) : ''; nb.classList.toggle('alert', sm.restant > 0);
+  $('m-due').textContent = eur(sm.de_incasat);
+  $('m-due-sub').textContent = sm.restant > 0 ? `${eur(sm.restant)} restanți (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură' : 'facturi'})` : 'nimic restant';
+  $('m-due-box').classList.toggle('alert', sm.restant > 0);
+}
 async function fetchPayments() {
   try {
     P = await (await fetch('/api/incasari' + (payYear ? '?an=' + encodeURIComponent(payYear) : ''))).json();
@@ -1295,11 +1313,8 @@ function payDetailHtml(c, mkey, cols) {
 }
 function renderPayments() {
   if (!P) return;
-  const sm = P.sumar, nb = $('n-inc');
-  $('m-due').textContent = eur(sm.de_incasat);
-  $('m-due-sub').textContent = sm.restant > 0 ? `${eur(sm.restant)} restanți (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură' : 'facturi'})` : 'nimic restant';
-  $('m-due-box').classList.toggle('alert', sm.restant > 0);
-  nb.textContent = sm.restant > 0 ? eur(sm.restant) : ''; nb.classList.toggle('alert', sm.restant > 0);
+  const sm = P.sumar;
+  renderPayTile(sm);
   $('inc-head').innerHTML = sm.de_incasat > 0
     ? `Ai de încasat <b>${eur(sm.de_incasat)}</b>` + (sm.restant > 0 ? `, din care <b style="color:var(--bad-ink)">${eur(sm.restant)} restanți</b> (${sm.facturi_restante} ${sm.facturi_restante === 1 ? 'factură trecută' : 'facturi trecute'} de scadență).` : ', nimic restant.')
     : (P.clienti.length ? 'Toate facturile sunt încasate.' : 'Nicio factură citită încă.');
