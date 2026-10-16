@@ -283,6 +283,8 @@
   .vsplit:hover{color:var(--bad);border-color:#FCA5A5}
   details.mem summary{cursor:pointer;color:var(--brand-2)}
   body.no-ex .ex{display:none!important}
+  .bk-warn{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--warn-bg);color:var(--warn-ink);border:1px solid #FCD34D;border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:13px;line-height:1.5}
+  .bk-warn[hidden]{display:none}
   .palias{font-size:11px;color:var(--faint);overflow-wrap:anywhere;margin-top:1px}
   .ptypes{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
   .tt{font-size:10px;padding:1px 6px;border-radius:5px;font-weight:500;white-space:nowrap}
@@ -409,6 +411,11 @@
 </div>
 
 <div class="main">
+  <div class="bk-warn" id="bk-warn" role="alert" hidden>
+    <div><b>⚠ Regulile și setările tale nu sunt încărcate încă din backup-ul din Drive.</b> <span id="bk-msg"></span><br>
+      Până se încarcă vezi regulile implicite — nu le modifica acum (orice schimbare ar fi înlocuită de backup).</div>
+    <button class="btn btn-dark btn-sm" type="button" id="bk-retry">↻ Reîncearcă acum</button>
+  </div>
 
   <div class="controls">
     <button class="btn btn-dark" onclick="scan()">&#x1F504; Scanare manuală</button>
@@ -843,6 +850,8 @@ async function fetchAnalytics() {
 // ------------------------------------------------------------ stare server (progres, facturi, jurnal)
 function renderState(filesChanged = true) {
   const s = S, dot = $('dot'), stxt = $('status-txt');
+  const bk = s.backup || {ok: true};
+  $('bk-warn').hidden = !!bk.ok; $('bk-msg').textContent = bk.msg ? `Motiv: ${bk.msg}.` : '';
   dot.className = s.monitoring ? 'dot live' : 'dot';
   stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
   const sc = s.scan || {}, pf = $('p-fill');
@@ -2348,6 +2357,7 @@ document.addEventListener('change', e => {
   showToast(q.pastrata ? 'Concluzie salvată' : 'Concluzie salvată în browser · ☆ ca s-o păstrezi', null);
 });
 
+$('bk-retry').addEventListener('click', async () => { const j = await post('/api/backup/reincarca', {}); if (j) showToast(j.msg, null); setTimeout(fetchState, 1500); });
 // ---- explicatiile (textele gri) se pot ascunde; alegerea ramane in browser
 function applyEx() { const off = store.get('faraExplicatii', '0') === '1'; document.body.classList.toggle('no-ex', off); $('ex-toggle').textContent = off ? 'ⓘ Arată explicațiile' : 'ⓘ Ascunde explicațiile'; }
 $('ex-toggle').addEventListener('click', () => { store.set('faraExplicatii', store.get('faraExplicatii', '0') === '1' ? '0' : '1'); applyEx(); });
