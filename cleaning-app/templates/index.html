@@ -113,7 +113,17 @@
   .q-ideas button:hover{background:var(--brand-bg)}
   .q-sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 8px;font-weight:600}
   .q-sec span{text-transform:none;letter-spacing:0;font-weight:400}
-  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px}
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:12px;align-items:start}
+  .qcard.compact{cursor:pointer;padding:12px 14px;gap:6px;transition:border-color .15s,box-shadow .15s}
+  .qcard.compact:hover{border-color:var(--brand);box-shadow:0 4px 14px rgba(15,118,110,.10)}
+  .qcard.compact .qbody,.qcard.compact .qmeta{display:none}
+  .qcard.compact .qhead h3{font-size:14px}
+  .qcard.compact .qans{font-size:12.5px;padding:7px 9px}
+  .qcard.compact .qans-t{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .qcard.open{grid-column:1/-1;border-width:2px;border-color:var(--brand)}
+  .qtog{border:0;background:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 4px;white-space:nowrap}
+  .qcard.compact .qfoot{display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
+  .qcard.open .qfoot{display:none}
   .qcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:0}
   .qcard.kept{border-color:#9ED6CC;box-shadow:0 1px 0 #9ED6CC inset,0 6px 18px rgba(15,118,110,.07)}
   .qhead{display:flex;gap:8px;align-items:flex-start}
@@ -737,7 +747,11 @@
         <div class="hint ex rsec-sub">Toate setările se salvează automat în Google Drive (cache-facturi.json).</div>
         <div><label>Recuperează setările dintr-un backup vechi</label>
           <div class="hint ex">Dacă s-au pierdut setări (grupuri, linkul Sheet-ului, ore, cheltuieli, încasări, uniri de case…): în Google Drive → <b>cache-facturi.json</b> → Gestionează versiunile → descarcă o versiune de dinainte de pierdere și încarc-o aici. Se recuperează doar ce lipsește acum; ce ai deja nu se schimbă, iar facturile nu sunt atinse.</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><input type="file" id="r-file" accept=".json,application/json"><button class="btn btn-dark btn-sm" type="button" id="r-btn">Recuperează setările</button><span class="hint" id="r-status"></span></div></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><b style="font-size:13px">Direct din Drive:</b>
+            <select id="rv-sel" aria-label="Versiunea backup-ului" style="max-width:100%"><option value="">— apasă „Arată versiunile” —</option></select>
+            <button class="btn btn-sm" type="button" id="rv-load">Arată versiunile</button>
+            <button class="btn btn-dark btn-sm" type="button" id="rv-btn">Recuperează din versiunea aleasă</button><span class="hint" id="rv-status"></span></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><b style="font-size:13px">Sau dintr-un fișier descărcat:</b><input type="file" id="r-file" accept=".json,application/json"><button class="btn btn-dark btn-sm" type="button" id="r-btn">Recuperează setările</button><span class="hint" id="r-status"></span></div></div>
       </section>
     </details>
   </div>
@@ -2167,6 +2181,7 @@ function qTable(q, R) {
 }
 
 // ---- stare: pastrate (backup) + incercari (browser)
+const QOPEN = new Set();
 let QS = [], qLoaded = false, qSaveT = null, qDirty = false, QE = null;
 const qClean = q => ({id: q.id, q: String(q.q || '').slice(0, 200), nivel: q.nivel === 'clienti' ? 'clienti' : 'case',
   filtre: (q.filtre || []).slice(0, 8).map(c => ({k: String(c.k), op: String(c.op), v: String(c.v ?? '').slice(0, 40)})),
@@ -2202,12 +2217,15 @@ const qNewId = () => 'q' + Date.now().toString(36) + Math.random().toString(36).
 function qCard(q) {
   const R = qRun(q);
   const hist = q.istoric || [];
-  return `<article class="qcard${q.pastrata ? ' kept' : ''}" data-q="${esc(q.id)}">
+  const open = QOPEN.has(q.id);
+  return `<article class="qcard${q.pastrata ? ' kept' : ''}${open ? ' open' : ' compact'}" data-q="${esc(q.id)}"${open ? '' : ' tabindex="0" role="button" aria-label="Deschide întrebarea"'}>
     <div class="qhead"><h3>${esc(q.q || 'Întrebare fără titlu')}</h3>
+      <button class="qtog" type="button" data-qa="toggle" aria-expanded="${QOPEN.has(q.id)}">${QOPEN.has(q.id) ? '▴ Închide' : ''}</button>
       <button class="qstar${q.pastrata ? '' : ' off'}" type="button" data-qa="star" title="${q.pastrata ? 'Păstrată în backup · click ca s-o scoți' : 'Păstreaz-o pentru viitor'}" aria-label="${q.pastrata ? 'Nu mai păstra' : 'Păstrează'}">${q.pastrata ? '★' : '☆'}</button></div>
     <div class="qmeta">${qDescribe(q, R)}</div>
-    <div class="qans">${qAnswer(q, R)}</div>
-    ${qTable(q, R)}
+    <div class="qans"><div class="qans-t">${qAnswer(q, R)}</div></div>
+    <div class="qfoot"><span>${R.res.length} ${q.nivel === 'case' ? 'case' : 'clienți'}${q.nota ? ' · 📝' : ''}${(q.istoric || []).length ? ' · 🕓 ' + q.istoric.length : ''}</span><span>click pentru detalii ▾</span></div>
+    <div class="qbody">${qTable(q, R)}
     <details class="qnote"${q.nota ? ' open' : ''}><summary>📝 Concluzia mea${q.nota ? '' : ' (opțional)'}</summary><textarea data-qa="nota" placeholder="Ce decid de aici? (se salvează singur)">${esc(q.nota || '')}</textarea></details>
     ${hist.length ? `<details><summary>🕓 Istoric răspunsuri (${hist.length})</summary>${hist.slice().reverse().map(x => `<div class="qhist-i"><b>${esc(fmtDate(x.data))}</b><span>${esc(x.perioada || '')} — ${esc(x.text || '')}</span></div>`).join('')}</details>` : ''}
     <div class="qacts">
@@ -2215,7 +2233,7 @@ function qCard(q) {
       <button class="btn btn-sm" type="button" data-qa="snap" title="Salvează răspunsul de azi, ca să-l compari mai târziu">📌 Notează răspunsul de azi</button>
       <button class="btn btn-sm" type="button" data-qa="dup">⧉ Copiază</button>
       <button class="btn btn-sm" type="button" data-qa="del" aria-label="Șterge">🗑</button>
-    </div></article>`;
+    </div></div></article>`;
 }
 let qPending = false;
 function renderQuestions() {
@@ -2293,6 +2311,7 @@ function qSaveEditor(keep) {
   const i = QS.findIndex(x => x.id === q.id);
   if (i >= 0) QS[i] = {...QS[i], ...q, nota: QS[i].nota, istoric: QS[i].istoric}; else QS.unshift(q);
   qPersist(q.pastrata || i >= 0);
+  QOPEN.clear(); QOPEN.add(q.id);
   qCloseEditor(); renderQuestions();
   showToast(q.pastrata ? '★ Păstrată pentru viitor' : 'Salvată ca încercare', null);
 }
@@ -2328,13 +2347,27 @@ $('q-new').addEventListener('click', () => qOpenEditor(null));
 $('q-ideas').addEventListener('click', e => {
   const b = e.target.closest('[data-idea]'); if (!b) return;
   const idea = Q_IDEAS.find(x => x.q === b.dataset.idea); if (!idea) return;
-  QS.unshift(qClean({...idea, id: qNewId(), pastrata: false})); qPersist(false); renderQuestions();
+  const nq = qClean({...idea, id: qNewId(), pastrata: false});
+  QS.unshift(nq); qPersist(false); QOPEN.clear(); QOPEN.add(nq.id); renderQuestions();
 });
+function qToggle(id) {
+  if (QOPEN.has(id)) QOPEN.delete(id); else { QOPEN.clear(); QOPEN.add(id); }   // una deschisa o data
+  renderQuestions();
+  const el = document.querySelector(`.qcard[data-q="${CSS.escape(id)}"]`);
+  if (el && QOPEN.has(id)) el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+// click oriunde pe o caseta mica -> se deschide mare
+document.addEventListener('click', e => {
+  const c = e.target.closest('.qcard.compact'); if (!c || e.target.closest('button,textarea,summary,input,a,select')) return;
+  qToggle(c.dataset.q);
+});
+document.addEventListener('keydown', e => { const c = e.target.closest && e.target.closest('.qcard.compact'); if (c && (e.key === 'Enter' || e.key === ' ') && e.target === c) { e.preventDefault(); qToggle(c.dataset.q); } });
 function qById(el) { const c = el.closest('[data-q]'); return c && QS.find(q => q.id === c.dataset.q); }
 document.addEventListener('click', e => {
   const b = e.target.closest('.qcard [data-qa]'); if (!b || b.tagName === 'TEXTAREA') return;
   const q = qById(b); if (!q) return;
   const a = b.dataset.qa;
+  if (a === 'toggle') { qToggle(q.id); return; }
   if (a === 'star') { q.pastrata = !q.pastrata; qPersist(true); renderQuestions(); showToast(q.pastrata ? '★ Păstrată pentru viitor (în backup)' : 'Nu mai e păstrată — rămâne ca încercare în acest browser', null); }
   else if (a === 'edit') qOpenEditor(q);
   else if (a === 'dup') { QS.splice(QS.indexOf(q) + 1, 0, qClean({...q, id: qNewId(), q: q.q + ' (copie)', pastrata: false, istoric: [], nota: ''})); qPersist(false); renderQuestions(); }
@@ -2456,6 +2489,24 @@ $('r-btn').addEventListener('click', async () => {
   const r = await fetch('/api/restaureaza-setari', {method: 'POST', body: fd}); const j = await r.json();
   if (!r.ok) { $('r-status').textContent = '⚠ ' + (j.error || 'Eroare'); return; }
   $('r-status').textContent = j.recuperat.length ? `✓ Recuperat (backup din ${j.salvat_la || '?'}): ${j.recuperat.join(', ')}` : (j.msg || 'Nimic nou de recuperat');
+  lastDataKey = null; loadSettings(); fetchState(); fetchAnalytics();
+});
+// versiunile backup-ului pastrate de Google Drive (fara descarcare manuala)
+$('rv-load').addEventListener('click', async () => {
+  $('rv-status').textContent = 'Citesc versiunile din Drive…';
+  const r = await fetch('/api/backup/versiuni'); const j = await r.json();
+  if (!r.ok) { $('rv-status').textContent = '⚠ ' + (j.error || 'Eroare'); return; }
+  const fmt = iso => new Date(iso).toLocaleString('ro-RO', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+  $('rv-sel').innerHTML = j.versiuni.map((v, i) => `<option value="${esc(v.id)}">${fmt(v.data)} · ${v.kb} KB${i === 0 ? ' (actuală)' : ''}</option>`).join('');
+  if (j.versiuni.length > 1) $('rv-sel').selectedIndex = 1;
+  $('rv-status').textContent = `${j.versiuni.length} versiuni · alege una de dinainte să dispară regulile`;
+});
+$('rv-btn').addEventListener('click', async () => {
+  const id = $('rv-sel').value; if (!id) { $('rv-status').textContent = 'Apasă întâi „Arată versiunile”.'; return; }
+  $('rv-status').textContent = 'Recuperez…';
+  const r = await fetch('/api/backup/versiuni', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})}); const j = await r.json();
+  if (!r.ok) { $('rv-status').textContent = '⚠ ' + (j.error || 'Eroare'); return; }
+  $('rv-status').textContent = j.recuperat && j.recuperat.length ? `✓ Recuperat: ${j.recuperat.join(', ')}` : (j.msg || 'Nimic nou de recuperat') + ' — încearcă o versiune mai veche';
   lastDataKey = null; loadSettings(); fetchState(); fetchAnalytics();
 });
 $('o-rewrite').addEventListener('click', async () => {
