@@ -727,6 +727,21 @@ def entry_dup_key(f):
                        f.get("data_emitere"))
 
 
+MAX_PDF_MB = 12        # PDF-uri mai mari sunt aproape sigur scanari/imagini: nu le deschidem
+MEM_LIMIT_MB = 400     # serverul gratuit are 512 MB; peste prag oprim citirea si continuam data viitoare
+
+
+def rss_mb():
+    try:
+        with open("/proc/self/status") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        pass
+    return 0
+
+
 def process_file(file_info, idx=None, total=None):
     file_id, name = file_info["id"], file_info["name"]
     pre = f"[{idx}/{total}] " if idx else ""
@@ -742,6 +757,10 @@ def process_file(file_info, idx=None, total=None):
         entry.setdefault("interventii", [])
     used_ai = False
     try:
+        size_mb = int(file_info.get("size") or 0) / 1024 / 1024
+        if size_mb > MAX_PDF_MB:
+            raise ValueError(f"PDF prea mare ({size_mb:.0f} MB) — probabil scanat; nu îl deschid ca să nu "
+                             f"blochez serverul (limita {MAX_PDF_MB} MB)")
         set_stage(f"descarc {name}")
         pdf_bytes = download_pdf(file_id)
         set_stage(f"citesc {name}")
@@ -817,15 +836,28 @@ def process_queue_background(new_files):
     add_log(f"Incep citirea a {n} facturi...")
     with state_lock:
         state["scan"].update({"done": 0, "total": n, "eta": None})
+    import gc
     for i, f in enumerate(new_files):
+        if rss_mb() > MEM_LIMIT_MB:
+            gc.collect()
+            if rss_mb() > MEM_LIMIT_MB:
+                add_log(f"⚠ Memorie aproape plină ({rss_mb()} MB din 512) — mă opresc aici ca serverul să nu "
+                        f"cadă; continui cu restul de {n - i} facturi la următoarea scanare")
+                with state_lock:
+                    for g in new_files[i:]:
+                        e = state["files"].get(g["id"])
+                        if e and e.get("status") == "new":
+                            e["sig"] = None     # ramane "de citit" la scanarea urmatoare
+                break
         used_ai = process_file(f, i + 1, n)
+        gc.collect()
         elapsed = time.time() - t0
         eta = round(elapsed / (i + 1) * (n - i - 1))
         with state_lock:
             state["scan"].update({"done": i + 1, "total": n, "eta": eta})
         if (i + 1) % 10 == 0 and i + 1 < n:
             add_log(f"— Progres {i + 1}/{n} · mai sunt {n - i - 1} · "
-                    f"{elapsed / (i + 1):.1f}s per factura · ~{max(1, round(eta / 60))} min ramase")
+                    f"{elapsed / (i + 1):.1f}s per factura · ~{max(1, round(eta / 60))} min ramase · memorie {rss_mb()} MB")
         if (i + 1) % CACHE_SAVE_EVERY == 0 and i + 1 < n:
             save_cache()  # daca serverul adoarme in mijlocul scanarii, nu pierdem progresul
         if used_ai and i < n - 1:
@@ -977,7 +1009,7 @@ def boot_scan(attempt=0):
     Scanarea de la pornire (dupa somnul Render sau un deploy). Daca Google nu raspunde,
     reincearca singura — inainte ramaneai cu 0 peste tot pana dadeai Scanare manuala.
     """
-    ok = scan_folder(retry_errors=(attempt == 0))
+    ok = scan_folder(retry_errors=False)   # facturile cu eroare se reincearca doar la Scanare manuala
     if ok or (ok is None and cache["loaded"]):
         return
     delay = BOOT_RETRY[attempt] if attempt < len(BOOT_RETRY) else 900
@@ -1801,25 +1833,39 @@ def index():
 
 @app.route("/api/state")
 def api_state():
+    """
+    Cerut de dashboard la cateva secunde. Lista de facturi se trimite doar cand s-a schimbat
+    (files_v) — pe serverul gratuit (0,1 CPU) asta conteaza mult.
+    """
+    client_v = request.args.get("files_v")
     with state_lock:
-        interventii = split_ivs(list(state["interventii"]))[0]
+        sig = hash((tuple((fid, f.get("status"), f.get("processed_at"), f.get("name"), len(f.get("avertismente") or []))
+                          for fid, f in state["files"].items()),
+                    json.dumps(settings.get("verificate") or {}, sort_keys=True), state["scan"].get("active")))
+        files_v = f"{len(state['files'])}-{sig}"
+        send_files = client_v != files_v
         files = sorted((_public_file(f, light=True) for f in state["files"].values()),
-                       key=_file_sort_key)
+                       key=_file_sort_key) if send_files else None
+        counts = {
+            "files": len(state["files"]),
+            "analyzed": sum(1 for f in state["files"].values() if f.get("status") in ("done", "warning", "duplicate")),
+        }
+        warn_files = [f for f in state["files"].values() if f.get("status") in ("warning", "error")]
+        interventii = state["interventii"]
         s = {
-            "files": files,
+            "files_v": files_v,
             "now": time.time(),
             "last_scan": state["last_scan"],
             "monitoring": state["monitoring"],
             "log": state["log"][-50:],
             "scan": dict(state["scan"]),
         }
-    s["metrics"] = {
-        "files": len(files),
-        "analyzed": sum(1 for f in files if f["status"] in ("done", "warning", "duplicate")),
-        "warnings": sum(1 for f in files if f["status"] in ("warning", "error") and not f.get("verificat")),
-        "interventii": len(interventii),
-        "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2),
-    }
+    if send_files:
+        s["files"] = files
+    s["metrics"] = {**counts,
+                    "warnings": sum(1 for f in warn_files if not is_verified(f)),
+                    "interventii": len(interventii),
+                    "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2)}
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
     return jsonify(s)
 
@@ -2148,6 +2194,11 @@ def payments_matrix(an=None):
 
 @app.route("/api/incasari")
 def api_incasari():
+    if request.args.get("sumar"):          # doar pentru patratul "De incasat" (tab-ul inchis)
+        led = invoice_ledger()
+        return jsonify({"sumar": {"de_incasat": round(sum(x["rest"] for x in led), 2),
+                                  "restant": round(sum(x["rest"] for x in led if x["zile_intarziere"] > 0), 2),
+                                  "facturi_restante": sum(1 for x in led if x["zile_intarziere"] > 0)}, "doar_sumar": True})
     return jsonify(payments_matrix(request.args.get("an")))
 
 
@@ -2584,6 +2635,11 @@ def read_calendar():
 
 
 def calendar_report():
+    if not settings.get("calendar_id"):
+        return {"configurat": False, "calendar_id": "", "de_la_setat": settings.get("calendar_de_la"), "citit": None,
+                "eroare": None, "service_account": service_account_email(), "de_verificat": 0, "evenimente": 0,
+                "nefacturat": [], "data_diferita": [], "fara_eveniment": [], "de_facturat": [], "neidentificate": [],
+                "potrivite": 0, "facturat_pana_la": None, "de_la": None}
     with state_lock:
         cal = dict(state["calendar"])
         ivs_raw = state["interventii"]

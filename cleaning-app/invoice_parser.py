@@ -566,12 +566,15 @@ def compute_interventions(rows, header, rules=None):
 
 # --------------------------------------------------------------------------- intrare
 
+MAX_PAGES = 6   # o factura are 1-3 pagini; peste atat e alt document (si ar consuma prea multa memorie)
+
+
 def layout_text(pdf_source):
     """Text cu aspectul paginii pastrat (folosit doar pentru rezerva AI)."""
     if hasattr(pdf_source, "seek"):
         pdf_source.seek(0)
     with pdfplumber.open(pdf_source) as pdf:
-        return "\n\n".join((p.extract_text(layout=True) or "") for p in pdf.pages).strip()
+        return "\n\n".join((p.extract_text(layout=True) or "") for p in pdf.pages[:MAX_PAGES]).strip()
 
 
 def invoice_warnings(rows, totals):
@@ -594,15 +597,16 @@ def parse_invoice(pdf_source, rules=None):
     if hasattr(pdf_source, "seek"):
         pdf_source.seek(0)
     with pdfplumber.open(pdf_source) as pdf:
-        pages_words = [p.extract_words() for p in pdf.pages]
-        full_text = "\n".join(_clean(p.extract_text() or "") for p in pdf.pages)
+        pages = pdf.pages[:MAX_PAGES]
+        pages_words = [p.extract_words() for p in pages]
+        full_text = "\n".join(_clean(p.extract_text() or "") for p in pages)
         if len(full_text.strip()) < 20:
             raise ParseError("PDF fara text (probabil scanat)")
 
         header = _parse_header(pages_words, full_text)
 
         rows, totals = None, None
-        for page in pdf.pages:
+        for page in pages:
             found, words, y0 = _detail_rows(page)
             if found is not None:
                 rows = found
