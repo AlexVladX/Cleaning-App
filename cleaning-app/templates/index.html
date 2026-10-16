@@ -570,6 +570,9 @@
           <button class="btn" onclick="saveGeo(true)" title="Refă toate traseele de la zero">Recalculează toate traseele</button>
           <span class="saved" id="g-saved"></span><div class="hint" id="g-status" style="margin-top:6px"></div>
           <div class="hint" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="o-status"></span><button class="btn btn-sm" type="button" id="o-rewrite">↻ Rescrie toate orele în foaia „Ore”</button></div></div>
+        <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><label>Recuperează setările dintr-un backup vechi</label>
+          <div class="hint">Dacă s-au pierdut setări (grupuri, linkul Sheet-ului, ore, cheltuieli, încasări, uniri de case…): în Google Drive → <b>cache-facturi.json</b> → Gestionează versiunile → descarcă o versiune de dinainte de pierdere și încarc-o aici. Se recuperează doar ce lipsește acum; ce ai deja nu se schimbă, iar facturile nu sunt atinse.</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><input type="file" id="r-file" accept=".json,application/json"><button class="btn btn-dark btn-sm" type="button" id="r-btn">Recuperează setările</button><span class="hint" id="r-status"></span></div></div>
         <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
       </div>
     </details>
@@ -1605,6 +1608,15 @@ async function loadSettings(data) {
   $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
 }
 $('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
+$('r-btn').addEventListener('click', async () => {
+  const f = $('r-file').files[0]; if (!f) { $('r-status').textContent = 'Alege întâi fișierul cache-facturi.json descărcat din Drive.'; return; }
+  $('r-status').textContent = 'Citesc backup-ul…';
+  const fd = new FormData(); fd.append('fisier', f);
+  const r = await fetch('/api/restaureaza-setari', {method: 'POST', body: fd}); const j = await r.json();
+  if (!r.ok) { $('r-status').textContent = '⚠ ' + (j.error || 'Eroare'); return; }
+  $('r-status').textContent = j.recuperat.length ? `✓ Recuperat (backup din ${j.salvat_la || '?'}): ${j.recuperat.join(', ')}` : (j.msg || 'Nimic nou de recuperat');
+  lastDataKey = null; loadSettings(); fetchState(); fetchAnalytics();
+});
 $('o-rewrite').addEventListener('click', async () => {
   $('o-status').textContent = 'Scriu orele în Sheet…';
   const j = await post('/api/ore/rescrie', {});
