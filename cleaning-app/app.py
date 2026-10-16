@@ -97,6 +97,9 @@ settings = {
     "ore_nescrise": [],        # case modificate in aplicatie dar inca nescrise in Sheet (se reincearca)
     # indicatori proprii: [{"nume": "€ / oră", "expr": "incasari_fara_inter / ore_lucru"}]
     "formule": [dict(f) for f in formulas.DEFAULT_FORMULAS],
+    # ordinea coloanelor aleasa de utilizator (trase cu mouse-ul) + indicatorii ascunsi
+    # {"props": ["profit", "fx:€ / oră", ...], "clienti": [...], "ascunse": ["Marjă %"]}
+    "coloane": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -466,7 +469,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -529,7 +532,7 @@ def merge_old_settings(old):
 
     for k in ("coord_sheet", "baza", "calendar_id", "calendar_de_la", "consum", "pret_motorina",
               "prag_forfait", "tipuri_la_ora", "clienti_la_ora", "categorii_cheltuieli", "grupuri_clienti",
-              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule"):
+              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule", "coloane"):
         if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
             settings[k] = old[k]
             got.append(k)
@@ -1671,6 +1674,7 @@ def _compute_analytics_base(period_key="all"):
         "profit": profit,
         "ore_status": dict(hours_status), "ore_sheet": bool(settings.get("coord_sheet")),
         "formule": settings.get("formule") or [],
+        "coloane": settings.get("coloane") or {},
         "excluse": excluse,
         "props": props,
         "clients": clients, "top3": top3,
@@ -1942,7 +1946,9 @@ def api_state():
 
 @app.route("/api/analytics")
 def api_analytics():
-    return jsonify(compute_analytics(request.args.get("period", "all"), request.args.get("client")))
+    val = compute_analytics(request.args.get("period", "all"), request.args.get("client"))
+    # formulele si ordinea coloanelor se iau mereu din setarile curente (rezultatul de mai sus e tinut in memorie)
+    return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {}})
 
 
 @app.route("/api/factura/<file_id>")
@@ -2644,6 +2650,24 @@ def flush_hours():
             add_log(f"⚠ Ore estimate: {msg}")
         cache["dirty"] = True
         save_cache()
+
+
+@app.route("/api/coloane", methods=["POST"])
+def api_coloane():
+    """Ordinea coloanelor (Proprietati / Clienti) si indicatorii ascunsi. Doar liste scurte de nume."""
+    d = request.json or {}
+    cur = dict(settings.get("coloane") or {})
+    for k in ("props", "clienti", "ascunse"):
+        if k in d:
+            v = d.get(k)
+            if not isinstance(v, list):
+                return jsonify({"ok": False, "error": "Format greșit"}), 400
+            cur[k] = [str(x)[:60] for x in v if isinstance(x, (str, int, float))][:80]
+    if cur != settings.get("coloane"):
+        settings["coloane"] = cur
+        cache["dirty"] = True
+        _save_async()
+    return jsonify({"ok": True, "coloane": cur})
 
 
 @app.route("/api/formule", methods=["POST"])
