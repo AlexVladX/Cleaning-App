@@ -69,6 +69,9 @@
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   .count{font-weight:500;color:var(--faint);text-transform:none;letter-spacing:0}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cl-link{border:none;background:none;padding:0;font:inherit;font-weight:600;color:var(--brand-2);cursor:pointer;text-align:left;text-decoration:underline;text-decoration-color:#A7DCD5;text-underline-offset:3px}
+  .cl-link:hover{color:var(--brand)}
+  select.search.on{border-color:var(--brand);background:var(--brand-bg);font-weight:600;color:var(--brand-2)}
   .search{border:1px solid #D1D5DB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;width:220px;max-width:100%}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
   .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink-2);border-right:1px solid var(--line)}
@@ -337,6 +340,7 @@
       <div class="headline" id="p-headline" style="margin-top:14px"></div>
       <div class="card-head">
         <div class="toolbar">
+          <select id="p-client" class="search" style="width:auto;max-width:240px" aria-label="Filtrează după client"><option value="">Toți clienții</option></select>
           <input class="search" id="p-search" type="search" placeholder="Caută proprietate sau client…" aria-label="Caută proprietate">
           <div class="seg" id="p-filter"><button data-f="all" class="on">Toate</button><button data-f="inactive">Inactive</button></div>
         </div>
@@ -625,6 +629,7 @@ const hideTip = () => { tip.style.display = 'none'; };
 // ------------------------------------------------------------ stare
 let S = null, A = null;               // /api/state si /api/analytics
 let period = store.get('period', 'all');
+let propClient = store.get('propClient', '');
 let tab = store.get('tab', 'proprietati');
 let sortBy = store.get('sortBy2', 'total');
 let propFilter = 'all', fileFilter = 'all', priceFilter = 'abatere';
@@ -644,7 +649,7 @@ async function fetchAnalytics() {
   anLoading = true; lastAnFetch = Date.now();
   try {
     const key = S ? S.data_key : null;
-    A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json();
+    A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
     lastDataKey = key;
     renderAnalytics();
     if (!P || payKey !== key) fetchPayments();
@@ -719,7 +724,7 @@ function renderAnalytics() {
   $('m-inactive').textContent = m.inactive;
   $('m-inactive-sub').textContent = m.inactive ? `aduceau ${eur(m.venit_inactive)} în perioadă` : 'toate casele sunt active';
   $('m-inactive-box').classList.toggle('alert', !!m.inactive);
-  const ib = document.querySelector('#p-filter button[data-f=inactive]'); if (ib) ib.textContent = `Inactive (${m.inactive})`;
+  const ib = document.querySelector('#p-filter button[data-f=inactive]'); if (ib) ib.textContent = `Inactive (${A.client_sel ? (A.client_info || {}).inactive || 0 : m.inactive})`;
   $('m-prices').textContent = m.abateri;
   $('m-prices-box').classList.toggle('alert', !!m.abateri);
   $('n-props').textContent = A.props.length || '';
@@ -737,8 +742,27 @@ const SORTS = {
   distanta_km: p => [p.distanta_km ?? -1, p.total],
   profit_est: p => [p.profit_est ?? -1e9, p.total],
 };
+function renderClientSelect() {
+  const sel = $('p-client'), names = (A.clients || []).map(c => c.client);
+  if (propClient && !names.includes(propClient)) names.unshift(propClient);
+  sel.innerHTML = '<option value="">Toți clienții</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = A.client_sel || '';
+  sel.classList.toggle('on', !!A.client_sel);
+}
 function renderPropsHeadline() {
+  renderClientSelect();
   const ps = A.props || [], tot = ps.reduce((a, p) => a + p.total, 0);
+  if (A.client_sel) {
+    const ci = A.client_info || {}, byT = ps.slice().sort((a, b) => b.total - a.total);
+    const best = ps.filter(p => p.interventii >= 3).sort((a, b) => b.medie - a.medie)[0];
+    $('p-headline').innerHTML = ps.length
+      ? `<b>${esc(A.client_sel)}</b>: ${ci.case} ${ci.case === 1 ? 'casă' : 'case'}, <span class="money">${eur(ci.venit)}</span> (${num(ci.procent)}% din venitul tău), ${ci.interventii} intervenții.`
+        + ` Casa de top: <b>${esc(byT[0].name)}</b> cu <span class="money">${eur(byT[0].total)}</span>.`
+        + (best ? ` Cel mai bun preț pe menaj: <b>${esc(best.name)}</b> (${eur2(best.medie)}).` : '')
+        + (ci.inactive ? ` <b style="color:var(--bad-ink)">${ci.inactive} ${ci.inactive === 1 ? 'casă inactivă' : 'case inactive'}</b>.` : '')
+      : `<b>${esc(A.client_sel)}</b> nu are intervenții în perioada aleasă.`;
+    return;
+  }
   if (!ps.length || !tot) { $('p-headline').innerHTML = ''; return; }
   const byT = ps.slice().sort((a, b) => b.total - a.total), top3 = byT.slice(0, 3).reduce((a, p) => a + p.total, 0);
   const best = ps.filter(p => p.interventii >= 3).sort((a, b) => b.medie - a.medie)[0];
@@ -778,7 +802,7 @@ function renderProps() {
       <td class="num money${hl('total')}">${eur(p.total)}</td>
       <td class="num hide-m${hl('medie')}">${eur2(p.medie)}</td>
       <td class="num hide-m${hl('distanta_km')}">${p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'}</td>
-      <td class="num hide-m${hl('profit_est')}">${p.profit_est != null ? `<span class="${p.profit_est >= 0 ? 'pos' : 'negv'}" style="font-weight:700">${eur(p.profit_est)}</span><span class="sub-num">${p.distanta_km == null ? 'fără drum (lipsesc coordonatele)' : p.marja_est != null ? num(p.marja_est) + '% marjă' : ''}</span>` : '—'}</td>
+      <td class="num hide-m${hl('profit_est')}">${p.profit_est != null ? `<span class="${p.profit_est >= 0 ? 'pos' : 'negv'}" style="font-weight:700">${eur(p.profit_est)}</span><span class="sub-num">${p.distanta_km == null ? '<span title="Lipsesc coordonatele casei: drumul nu e scăzut din profit">fără drum</span>' : p.marja_est != null ? num(p.marja_est) + '% marjă' : ''}</span>` : '—'}</td>
       <td class="hide-m${hl('zile_de_la_ultima')}">${last}</td>
     </tr>`;
   }).join('');
@@ -840,6 +864,10 @@ function setSort(k) { if (SORTS[k]) { sortBy = k; store.set('sortBy2', k); rende
 $('sort-bar').addEventListener('click', e => { const b = e.target.closest('button[data-sort]'); if (b) setSort(b.dataset.sort); });
 document.querySelectorAll('#panel-proprietati th.sortable').forEach(th => th.addEventListener('click', () => setSort(th.dataset.sort)));
 $('p-search').addEventListener('input', renderProps);
+$('client-body').addEventListener('click', e => { const b = e.target.closest('[data-cl]'); if (!b) return;
+  propClient = b.dataset.cl; store.set('propClient', propClient); lastDataKey = null; showTab('proprietati'); fetchAnalytics();
+  document.getElementById('panel-proprietati').scrollIntoView({behavior: 'smooth', block: 'start'}); });
+$('p-client').addEventListener('change', e => { propClient = e.target.value; store.set('propClient', propClient); lastDataKey = null; fetchAnalytics(); });
 $('p-filter').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) { propFilter = b.dataset.f; renderProps(); } });
 
 function showInactive() {
@@ -856,7 +884,7 @@ function renderClients() {
     : '';
   const max = Math.max(...c.map(x => x.procent), 1);
   $('client-body').innerHTML = c.length ? c.map(x => `<tr>
-    <td><div class="pname">${esc(x.client)}${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
+    <td><div class="pname"><button class="cl-link" data-cl="${esc(x.client)}" title="Vezi clasamentul caselor acestui client">${esc(x.client)}</button>${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
       ${(x.membri || []).length ? `<div class="palias" title="${esc(x.membri.join(', '))}">${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}: ${x.membri.slice(0, 6).map(esc).join(', ')}${x.membri.length > 6 ? ` și încă ${x.membri.length - 6}` : ''}</div>` : ''}</td>
     <td class="num money">${eur(x.venit)}</td>
     <td class="hide-m"><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>
@@ -1437,7 +1465,7 @@ let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() 
 async function scan() { await fetch('/api/scan', {method: 'POST'}); setTimeout(fetchState, 500); }
 async function startMonitor() { await post('/api/monitor', {active: true}); fetchState(); }
 async function stopMonitor() { await post('/api/monitor', {active: false}); fetchState(); }
-function exportExcel() { location.href = `/api/export?sort=${encodeURIComponent(['total', 'interventii', 'medie'].includes(sortBy) ? sortBy : 'total')}&period=${encodeURIComponent(period)}`; }
+function exportExcel() { location.href = `/api/export?sort=${encodeURIComponent(['total', 'interventii', 'medie'].includes(sortBy) ? sortBy : 'total')}&period=${encodeURIComponent(period)}` + (propClient ? '&client=' + encodeURIComponent(propClient) : ''); }
 async function resetAll() {
   if (!confirm('Reset șterge toate datele și backup-ul. Toate facturile vor fi recitite la următoarea scanare. Continui?')) return;
   try { await fetch('/api/reset', {method: 'POST'}); fetchState(); } catch (e) { console.error(e); }
