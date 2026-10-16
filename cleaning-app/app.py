@@ -599,7 +599,7 @@ def find_cache_file():
     set_stage(f"caut fisierul de backup '{CACHE_FILE_NAME}'")
     res = svc.files().list(
         q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
-        fields="files(id, name, capabilities/canEdit)",
+        fields="files(id, name, size, capabilities/canEdit)",
         supportsAllDrives=True, includeItemsFromAllDrives=True,
     ).execute(num_retries=DRIVE_RETRIES)
     found = res.get("files", [])
@@ -608,6 +608,7 @@ def find_cache_file():
     if not found[0].get("capabilities", {}).get("canEdit"):
         cache["msg"] = f"{CACHE_FILE_NAME} există, dar service account-ul nu e Editor pe el"
         return None
+    cache["file_size"] = int(found[0].get("size") or 0)
     return found[0]["id"]
 
 
@@ -638,10 +639,19 @@ def load_cache():
         raise RuntimeError(cache["msg"]) from e
     try:
         data = json.loads(raw) if raw else {}
+        if not isinstance(data, dict):
+            raise ValueError("format neasteptat")
     except ValueError as e:
-        add_log(f"⚠ Backup ilizibil ({e}) — il refac de la zero")
-        cache["dirty"] = True
-        return
+        if raw or cache.get("file_size"):
+            # fisierul are continut, dar l-am primit stricat: reincercam, NU il suprascriem
+            cache["loaded"] = cache["enabled"] = False
+            cache["msg"] = f"backup-ul s-a descărcat incomplet ({e}) — reîncerc automat"
+            raise RuntimeError(cache["msg"]) from e
+        data = {}
+    if not data and cache.get("file_size"):
+        cache["loaded"] = cache["enabled"] = False
+        cache["msg"] = "backup-ul a venit gol din Drive, deși fișierul are conținut — reîncerc automat"
+        raise RuntimeError(cache["msg"])
     apply_saved_settings(data.get("setari"))  # setarile raman valabile si cand se schimba parserul
     cache["msg"] = ""
     add_log(f"Reguli și setări încărcate din backup ({len(data.get('setari') or {})} chei)")
@@ -2749,6 +2759,40 @@ def api_formule():
     return jsonify({"ok": True, "formule": lst})
 
 
+@app.route("/api/backup/versiuni")
+def api_backup_versions():
+    """Versiunile backup-ului pastrate de Google Drive (cele mai noi primele), ca sa recuperezi regulile."""
+    if not cache.get("file_id"):
+        return jsonify({"ok": False, "error": "Backup-ul nu e găsit încă în Drive"}), 400
+    try:
+        res = get_drive_service().revisions().list(
+            fileId=cache["file_id"], fields="revisions(id, modifiedTime, size)", pageSize=200).execute(num_retries=DRIVE_RETRIES)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"Nu pot citi versiunile din Drive: {e}"}), 502
+    revs = sorted(res.get("revisions") or [], key=lambda r: r.get("modifiedTime") or "", reverse=True)
+    return jsonify({"ok": True, "versiuni": [{"id": r["id"], "data": r.get("modifiedTime"), "kb": round(int(r.get("size") or 0) / 1024)}
+                                             for r in revs[:60]]})
+
+
+@app.route("/api/backup/versiuni", methods=["POST"])
+def api_backup_version_restore():
+    """Recupereaza SETARILE dintr-o versiune din Drive (doar ce lipseste acum; facturile nu se ating)."""
+    rid = str((request.json or {}).get("id") or "")
+    if not cache.get("file_id") or not rid:
+        return jsonify({"ok": False, "error": "Alege o versiune"}), 400
+    try:
+        req = get_drive_service().revisions().get_media(fileId=cache["file_id"], revisionId=rid)
+        buf = io.BytesIO()
+        dl = MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            _, done = dl.next_chunk(num_retries=DRIVE_RETRIES)
+        data = json.loads(buf.getvalue().decode("utf-8-sig"))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"Nu pot citi versiunea: {e}"}), 502
+    return _restore_settings_from(data)
+
+
 @app.route("/api/restaureaza-setari", methods=["POST"])
 def api_restore_settings():
     """Incarci un cache-facturi.json vechi (din istoricul Drive) -> se recupereaza doar SETARILE."""
@@ -2758,6 +2802,10 @@ def api_restore_settings():
         data = json.loads(raw)
     except Exception:  # noqa: BLE001
         return jsonify({"ok": False, "error": "Fișierul nu e un backup valid (cache-facturi.json)"}), 400
+    return _restore_settings_from(data)
+
+
+def _restore_settings_from(data):
     old = data.get("setari") if isinstance(data, dict) else None
     if not isinstance(old, dict):
         return jsonify({"ok": False, "error": "Backup-ul nu conține setări"}), 400
