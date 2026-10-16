@@ -63,7 +63,7 @@ CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 # Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
 PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
 
-cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False}
+cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False, "msg": "se încarcă"}
 
 # Reguli de calcul + unificari de proprietati. Se editeaza din dashboard si se salveaza in backup.
 settings = {
@@ -424,6 +424,10 @@ def get_drive_service():
     return svc
 
 
+# erorile de moment ale Google (500 "Internal Error", 503, 429) se reincearca singure, cu pauze crescatoare
+DRIVE_RETRIES = 4
+
+
 def list_pdf_files(folder_id):
     service = get_drive_service()
     all_files = []
@@ -443,7 +447,7 @@ def list_pdf_files(folder_id):
                 pageToken=page_token,
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
-            ).execute()
+            ).execute(num_retries=DRIVE_RETRIES)
             for f in results.get("files", []):
                 if f["mimeType"] == "application/pdf":
                     f["folder"] = "" if label == "." else label
@@ -476,7 +480,7 @@ def download_pdf(file_id):
     downloader = MediaIoBaseDownload(buf, req)
     done = False
     while not done:
-        _, done = downloader.next_chunk()
+        _, done = downloader.next_chunk(num_retries=DRIVE_RETRIES)
     buf.seek(0)
     return buf
 
@@ -597,12 +601,12 @@ def find_cache_file():
         q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
         fields="files(id, name, capabilities/canEdit)",
         supportsAllDrives=True, includeItemsFromAllDrives=True,
-    ).execute()
+    ).execute(num_retries=DRIVE_RETRIES)
     found = res.get("files", [])
     if not found:
         return None
     if not found[0].get("capabilities", {}).get("canEdit"):
-        add_log(f"⚠ Backup: {CACHE_FILE_NAME} exista, dar service account-ul nu e Editor pe el")
+        cache["msg"] = f"{CACHE_FILE_NAME} există, dar service account-ul nu e Editor pe el"
         return None
     return found[0]["id"]
 
@@ -612,14 +616,16 @@ def load_cache():
     cache["loaded"] = True
     try:
         fid = find_cache_file()
-    except TimeoutError:
-        cache["loaded"] = False  # problema de retea, nu de backup: oprim scanarea, reincercam data viitoare
-        raise
     except Exception as e:
-        add_log(f"⚠ Backup indisponibil ({e}) — continui fara backup")
-        return
+        # retea / Google: NU continuam cu regulile implicite (s-ar pierde setarile), reincercam
+        cache["loaded"] = False
+        cache["msg"] = f"nu am putut căuta backup-ul în Drive ({e}) — reîncerc automat"
+        raise RuntimeError(cache["msg"]) from e
     if not fid:
-        add_log(f"Backup dezactivat: nu gasesc '{CACHE_FILE_NAME}' (editabil) in folderul facturilor")
+        msg = cache["msg"] if "Editor" in (cache.get("msg") or "") else f"nu găsesc '{CACHE_FILE_NAME}' în folderul facturilor"
+        if msg != cache.get("msg"):
+            add_log(f"⚠ Backup dezactivat: {msg} — reîncerc la fiecare scanare")
+        cache["msg"] = msg
         return
     cache.update({"file_id": fid, "enabled": True})
     try:
@@ -627,8 +633,9 @@ def load_cache():
         raw = download_pdf(fid).read().decode("utf-8").strip()
     except Exception as e:
         # problema de retea / Google: NU refacem backup-ul de la zero (s-ar pierde tot), reincercam
-        cache["loaded"] = False
-        raise RuntimeError(f"nu am putut descarca backup-ul ({e}) — reincerc automat") from e
+        cache["loaded"] = cache["enabled"] = False
+        cache["msg"] = f"nu am putut descărca backup-ul ({e}) — reîncerc automat"
+        raise RuntimeError(cache["msg"]) from e
     try:
         data = json.loads(raw) if raw else {}
     except ValueError as e:
@@ -636,6 +643,8 @@ def load_cache():
         cache["dirty"] = True
         return
     apply_saved_settings(data.get("setari"))  # setarile raman valabile si cand se schimba parserul
+    cache["msg"] = ""
+    add_log(f"Reguli și setări încărcate din backup ({len(data.get('setari') or {})} chei)")
     if data.get("parser_version") != PARSER_VERSION:
         if data.get("files"):
             add_log("Parserul s-a actualizat — recitesc toate facturile o singura data")
@@ -680,7 +689,7 @@ def save_cache(force=False, allow_empty=False):
             media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
                                          mimetype="application/json", resumable=False),
             supportsAllDrives=True,
-        ).execute()
+        ).execute(num_retries=DRIVE_RETRIES)
     except Exception as e:
         cache["dirty"] = True
         add_log(f"⚠ Nu am putut salva backup-ul: {e}")
@@ -966,8 +975,8 @@ def scan_folder(retry_errors=False):
     threading.Thread(target=_watchdog, args=(scan_id,), daemon=True).start()
     add_log("Pornesc scanarea...")
     try:
-        if not cache["loaded"]:
-            load_cache()
+        if not cache["loaded"] or not cache["enabled"]:
+            load_cache()      # si cand backup-ul lipsea: il cautam din nou la fiecare scanare
         files = list_pdf_files(FOLDER_ID)
         with state_lock:
             state["scan"]["phase"] = "procesare"
@@ -1094,8 +1103,8 @@ def boot_scan(attempt=0):
     reincearca singura — inainte ramaneai cu 0 peste tot pana dadeai Scanare manuala.
     """
     ok = scan_folder(retry_errors=False)   # facturile cu eroare se reincearca doar la Scanare manuala
-    if ok or (ok is None and cache["loaded"]):
-        return
+    if (ok or (ok is None and cache["loaded"])) and cache["enabled"]:
+        return      # facturile si backup-ul (regulile) sunt incarcate
     delay = BOOT_RETRY[attempt] if attempt < len(BOOT_RETRY) else 900
     add_log(f"Datele nu s-au putut încărca — reîncerc automat în {delay // 60 or delay} "
             f"{'min' if delay >= 60 else 's'} (încercarea {attempt + 2})")
@@ -1189,7 +1198,7 @@ def sheet_id_from(text):
 def read_coords_sheet(sheet_id):
     """CSV-ul Sheet-ului: intai prin service account; daca nu are acces, prin linkul public (daca exista)."""
     try:
-        data = get_drive_service().files().export_media(fileId=sheet_id, mimeType="text/csv").execute()
+        data = get_drive_service().files().export_media(fileId=sheet_id, mimeType="text/csv").execute(num_retries=DRIVE_RETRIES)
         return data.decode("utf-8-sig"), "service account"
     except Exception as e:  # noqa: BLE001
         first_err = e
@@ -1975,6 +1984,7 @@ def api_state():
                     "interventii": len(interventii),
                     "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2)}
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
+    s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or ""}
     return jsonify(s)
 
 
@@ -3033,6 +3043,15 @@ def api_ignore_suggestion():
         cache["dirty"] = True
         _save_async()
     return jsonify(_settings_payload())
+
+
+@app.route("/api/backup/reincarca", methods=["POST"])
+def api_backup_reload():
+    """Reincearca acum citirea backup-ului (reguli + facturi) din Drive."""
+    if cache["loaded"] and cache["enabled"]:
+        return jsonify({"ok": True, "msg": "Backup-ul e deja încărcat"})
+    threading.Thread(target=scan_folder, daemon=True).start()
+    return jsonify({"ok": True, "msg": "Caut backup-ul în Drive…"})
 
 
 @app.route("/api/separa", methods=["POST"])
