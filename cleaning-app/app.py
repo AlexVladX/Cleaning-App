@@ -100,6 +100,8 @@ settings = {
     # ordinea coloanelor aleasa de utilizator (trase cu mouse-ul) + indicatorii ascunsi
     # {"props": ["profit", "fx:€ / oră", ...], "clienti": [...], "ascunse": ["Marjă %"]}
     "coloane": {},
+    # nume unite automat ("Appartement Marina" = "Marina") pe care utilizatorul le-a separat (case diferite)
+    "separate": [],
     # intrebarile pastrate din tab-ul "Intrebari" (filtre/sortare pe indicatori + concluzii si istoric)
     "intrebari": [],
     # --- etapa 2: distante (salvate in backup, NU in cod)
@@ -119,12 +121,32 @@ GENERIC_PROP_WORDS = {"villa", "maison", "appartement", "appart", "appt", "apt",
 
 
 @lru_cache(maxsize=20000)
-def base_prop_key(name):
-    """Cheia automata (fara unirile manuale): 'Villa Blue' -> 'blue'."""
+def _auto_prop_key(name):
     words = norm_text(name).split()
     while len(words) > 1 and words[0] in GENERIC_PROP_WORDS:
         words = words[1:]
     return " ".join(words) or norm_text(name)
+
+
+_sep_memo = [None, frozenset()]
+
+
+def _separated():
+    """Numele (normalizate) pe care utilizatorul le-a separat: nu se mai unesc automat."""
+    lst = settings.get("separate")
+    if lst is not _sep_memo[0]:
+        _sep_memo[0], _sep_memo[1] = lst, frozenset(lst or [])
+    return _sep_memo[1]
+
+
+def base_prop_key(name):
+    """Cheia automata (fara unirile manuale): 'Villa Blue' -> 'blue'. Numele separate isi pastreaza cheia intreaga."""
+    sep = _separated()
+    if sep:
+        n = norm_text(name)
+        if n in sep:
+            return n
+    return _auto_prop_key(name)
 
 
 def prop_key(name):
@@ -471,7 +493,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "separate", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -534,7 +556,7 @@ def merge_old_settings(old):
 
     for k in ("coord_sheet", "baza", "calendar_id", "calendar_de_la", "consum", "pret_motorina",
               "prag_forfait", "tipuri_la_ora", "clienti_la_ora", "categorii_cheltuieli", "grupuri_clienti",
-              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule", "coloane", "intrebari"):
+              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule", "coloane", "intrebari", "separate"):
         if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
             settings[k] = old[k]
             got.append(k)
@@ -1122,6 +1144,16 @@ def aggregate_props(interventii):
         # apoi cea mai des intalnita, apoi cea mai lunga
         p["name"] = max(p["variante"], key=lambda v: (base_prop_key(v) == p["key"], p["variante"][v], len(v)))
         p["variante"] = sorted(p["variante"])
+        if len(p["variante"]) > 1:
+            # cum a ajuns fiecare nume aici: unire manuala (se anuleaza) sau automata (se separa)
+            info = []
+            for v in p["variante"]:
+                bk = base_prop_key(v)
+                if bk != p["key"]:
+                    info.append([v, "manual", bk])
+                elif norm_text(v) != p["key"]:
+                    info.append([v, "auto", ""])
+            p["variante_info"] = info
         p["client"] = ", ".join(sorted(p.pop("clients")))
         p["ore"] = round(p["ore"], 2)
         p["total"] = round(p["total"], 2)
@@ -1337,7 +1369,7 @@ def data_key():
                tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or [])),
                json.dumps(settings.get("grupuri_clienti") or [], sort_keys=True), settings.get("folder_v"),
                settings.get("cost_v"), settings.get("consum"), settings.get("pret_motorina"), settings.get("ore_v"),
-               json.dumps(settings.get("ore_estimate") or {}, sort_keys=True)))
+               json.dumps(settings.get("ore_estimate") or {}, sort_keys=True), tuple(settings.get("separate") or [])))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
     return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
@@ -2078,6 +2110,7 @@ def _settings_payload():
         "cuvinte_produse": settings.get("cuvinte_produse") or [],
         "grupuri_clienti": settings.get("grupuri_clienti") or [],
         "grupuri_preview": _groups_preview(interventii),
+        "separate": settings.get("separate") or [],
         "unite": [{"din": k, "din_nume": variant_name.get(k, k), "in": v,
                    "in_nume": names.get(prop_key(v), v)} for k, v in sorted(alias.items())],
         "proprietati": sorted(({"key": p["key"], "name": p["name"], "variante": p["variante"]}
@@ -3000,6 +3033,23 @@ def api_ignore_suggestion():
         cache["dirty"] = True
         _save_async()
     return jsonify(_settings_payload())
+
+
+@app.route("/api/separa", methods=["POST"])
+def api_separa():
+    """Separa un nume unit automat ('Appartement Marina' de 'Marina'); undo=true il uneste la loc."""
+    d = request.json or {}
+    n = norm_text(d.get("nume") or "")
+    if not n:
+        return jsonify({"ok": False, "error": "Lipsește numele"}), 400
+    cur = [x for x in (settings.get("separate") or []) if x != n]
+    if not d.get("undo"):
+        cur.append(n)
+    settings["separate"] = sorted(cur)
+    cache["dirty"] = True
+    add_log(("Unit la loc: '" if d.get("undo") else "Separat (altă casă): '") + (d.get("nume") or "") + "'")
+    _save_async()
+    return jsonify({**_settings_payload(), "ok": True})
 
 
 @app.route("/api/unmerge", methods=["POST"])

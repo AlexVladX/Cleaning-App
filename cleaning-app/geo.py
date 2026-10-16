@@ -126,18 +126,44 @@ def zone_of(km):
 MAX_TABLE = 100             # cate puncte accepta serverul public intr-o matrice
 
 
-def osrm_matrix(points, timeout=60):
-    """
-    Distantele pe drum intre TOATE punctele (baza + case), intr-o singura cerere.
-    Intoarce matricea km [i][j] (None unde nu exista traseu). Ridica exceptie daca nu merge.
-    """
-    if len(points) > MAX_TABLE:
-        raise RuntimeError(f"prea multe puncte pentru o matrice ({len(points)} > {MAX_TABLE})")
+def _osrm_table(points, sources=None, destinations=None, timeout=60):
     coords = ";".join(f"{lng:.6f},{lat:.6f}" for lat, lng in points)
     url = f"{OSRM_URL}{coords}?annotations=distance"
+    if sources is not None:
+        url += "&sources=" + ";".join(map(str, sources)) + "&destinations=" + ";".join(map(str, destinations))
     req = urllib.request.Request(url, headers={"User-Agent": "SimNettoyage-Facturi/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         data = json.loads(r.read())
     if data.get("code") != "Ok":
         raise RuntimeError(f"serviciul de rute: {data.get('code')} {data.get('message', '')}")
     return [[round(d / 1000, 1) if d is not None else None for d in row] for row in data["distances"]]
+
+
+def osrm_matrix(points, timeout=60, pause=1.0):
+    """
+    Distantele pe drum intre TOATE punctele (baza + case). Intoarce matricea km [i][j]
+    (None unde nu exista traseu). Ridica exceptie daca nu merge.
+    Serverul public accepta ~100 de puncte pe cerere: peste atat, matricea se face pe bucati
+    (cate 50 x 50 de puncte, o cerere pe secunda).
+    """
+    n = len(points)
+    if n <= MAX_TABLE:
+        return _osrm_table(points, timeout=timeout)
+    half = MAX_TABLE // 2
+    blocks = [list(range(i, min(i + half, n))) for i in range(0, n, half)]
+    km = [[None] * n for _ in range(n)]
+    first = True
+    for a in blocks:
+        for b in blocks:
+            if not first:
+                time.sleep(pause)
+            first = False
+            if a == b:
+                sub = _osrm_table([points[i] for i in a], timeout=timeout)
+            else:
+                pts = [points[i] for i in a] + [points[j] for j in b]
+                sub = _osrm_table(pts, list(range(len(a))), list(range(len(a), len(a) + len(b))), timeout=timeout)
+            for x, i in enumerate(a):
+                for y, j in enumerate(b):
+                    km[i][j] = sub[x][y]
+    return km
