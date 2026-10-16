@@ -42,7 +42,9 @@ app = Flask(__name__)
 # ---------------------------------------------------------------- configurare
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "120"))
+# monitorizarea (facturi noi din Drive) porneste singura; MONITOR=0 o opreste
+MONITOR_ON = os.environ.get("MONITOR", "1") != "0"
 
 # AI folosit DOAR ca rezerva, cand o factura nu are sablonul SimNettoyage.
 # Implicit: Groq (gratuit), model openai/gpt-oss-120b. Orice API compatibil OpenAI merge.
@@ -253,7 +255,7 @@ state = {
     "files": {},
     "interventii": [],
     "last_scan": None,
-    "monitoring": False,
+    "monitoring": MONITOR_ON,
     "log": [],
     "scan": {"active": False, "phase": None, "done": 0, "total": 0, "eta": None},
     "calendar": {"events": [], "citit": None, "eroare": None},   # doar in memorie
@@ -2746,6 +2748,17 @@ def api_coloane():
         if not isinstance(v, dict):
             return jsonify({"ok": False, "error": "Format greșit"}), 400
         cur["culori"] = {str(k)[:60]: str(c) for k, c in list(v.items())[:80] if str(c) in COL_COLORS}
+    if "nume" in d:            # nume date de tine coloanelor: {cheie: "Nume nou"}
+        v = d.get("nume")
+        if not isinstance(v, dict):
+            return jsonify({"ok": False, "error": "Format greșit"}), 400
+        cur["nume"] = {str(k)[:60]: str(n).strip()[:40] for k, n in list(v.items())[:80] if str(n).strip()}
+    if "latimi" in d:          # latimea fiecarei coloane, in pixeli
+        v = d.get("latimi")
+        if not isinstance(v, dict):
+            return jsonify({"ok": False, "error": "Format greșit"}), 400
+        cur["latimi"] = {str(k)[:60]: max(50, min(420, int(w))) for k, w in list(v.items())[:80]
+                         if isinstance(w, (int, float))}
     if cur != settings.get("coloane"):
         settings["coloane"] = cur
         cache["dirty"] = True
@@ -3206,7 +3219,7 @@ def api_reset():
     try:
         with state_lock:
             state.update({"files": {}, "interventii": [], "last_scan": None,
-                          "monitoring": False, "log": []})
+                          "monitoring": MONITOR_ON, "log": []})
             state["scan"].update({"done": 0, "total": 0, "eta": None})
         save_cache(force=True, allow_empty=True)
     finally:
