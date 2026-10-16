@@ -2727,6 +2727,9 @@ def api_intrebari():
     return jsonify({"ok": True, "n": len(lst)})
 
 
+COL_COLORS = {"verde", "albastru", "galben", "mov", "roz", "gri", "scala", "scala_inv"}
+
+
 @app.route("/api/coloane", methods=["POST"])
 def api_coloane():
     """Ordinea coloanelor (Proprietati / Clienti) si indicatorii ascunsi. Doar liste scurte de nume."""
@@ -2738,6 +2741,11 @@ def api_coloane():
             if not isinstance(v, list):
                 return jsonify({"ok": False, "error": "Format greșit"}), 400
             cur[k] = [str(x)[:60] for x in v if isinstance(x, (str, int, float))][:80]
+    if "culori" in d:          # culoarea aleasa pentru fiecare coloana: {cheie coloana: culoare}
+        v = d.get("culori")
+        if not isinstance(v, dict):
+            return jsonify({"ok": False, "error": "Format greșit"}), 400
+        cur["culori"] = {str(k)[:60]: str(c) for k, c in list(v.items())[:80] if str(c) in COL_COLORS}
     if cur != settings.get("coloane"):
         settings["coloane"] = cur
         cache["dirty"] = True
