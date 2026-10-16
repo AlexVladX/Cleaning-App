@@ -100,6 +100,8 @@ settings = {
     # ordinea coloanelor aleasa de utilizator (trase cu mouse-ul) + indicatorii ascunsi
     # {"props": ["profit", "fx:€ / oră", ...], "clienti": [...], "ascunse": ["Marjă %"]}
     "coloane": {},
+    # intrebarile pastrate din tab-ul "Intrebari" (filtre/sortare pe indicatori + concluzii si istoric)
+    "intrebari": [],
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -469,7 +471,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -532,7 +534,7 @@ def merge_old_settings(old):
 
     for k in ("coord_sheet", "baza", "calendar_id", "calendar_de_la", "consum", "pret_motorina",
               "prag_forfait", "tipuri_la_ora", "clienti_la_ora", "categorii_cheltuieli", "grupuri_clienti",
-              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule", "coloane"):
+              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule", "coloane", "intrebari"):
         if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
             settings[k] = old[k]
             got.append(k)
@@ -1948,7 +1950,8 @@ def api_state():
 def api_analytics():
     val = compute_analytics(request.args.get("period", "all"), request.args.get("client"))
     # formulele si ordinea coloanelor se iau mereu din setarile curente (rezultatul de mai sus e tinut in memorie)
-    return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {}})
+    return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {},
+                    "intrebari": settings.get("intrebari") or []})
 
 
 @app.route("/api/factura/<file_id>")
@@ -2650,6 +2653,25 @@ def flush_hours():
             add_log(f"⚠ Ore estimate: {msg}")
         cache["dirty"] = True
         save_cache()
+
+
+MAX_INTREBARI = 60
+
+
+@app.route("/api/intrebari", methods=["POST"])
+def api_intrebari():
+    """Intrebarile pastrate (lista intreaga). Doar date simple, cu limite de marime."""
+    lst = (request.json or {}).get("lista")
+    if not isinstance(lst, list) or len(lst) > MAX_INTREBARI or not all(isinstance(q, dict) for q in lst):
+        return jsonify({"ok": False, "error": f"Format greșit (cel mult {MAX_INTREBARI} întrebări)"}), 400
+    for q in lst:
+        if len(json.dumps(q, ensure_ascii=False)) > 12000:
+            return jsonify({"ok": False, "error": "O întrebare e prea mare (concluzia sau istoricul)"}), 400
+    if lst != settings.get("intrebari"):
+        settings["intrebari"] = lst
+        cache["dirty"] = True
+        _save_async()
+    return jsonify({"ok": True, "n": len(lst)})
 
 
 @app.route("/api/coloane", methods=["POST"])

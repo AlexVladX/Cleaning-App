@@ -82,6 +82,7 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 
 | Tab | Ce arată |
 |---|---|
+| **✦ Întrebări** | locul tău de joacă: scrii o întrebare („Pe ce case pierd bani?”), alegi despre ce e (case / clienți), condițiile (orice indicator, inclusiv formulele tale; „media” = media tuturor), ordonarea și câte rezultate; răspunsul se calculează singur, cu o frază și un clasament. ★ păstrează întrebarea în backup (cu concluzia ta și istoricul răspunsurilor notate cu 📌); restul rămân ca încercări în browser. |
 | **Proprietăți** | clasament după încasări, intervenții, frecvență (intervenții/lună), € / intervenție, inactivitate; căutare și filtru „Inactive” |
 | **Clienți** | venit, % din venit (concentrare: cât aduc primii 3), case, intervenții, € / intervenție |
 | **Evoluție** | grafice lunare (venit, intervenții) și tabel cu comparația față de luna și anul trecut; luna curentă e marcată „în curs” |
