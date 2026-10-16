@@ -1631,6 +1631,10 @@ def compute_analytics(period_key="all", client=None):
         p.update(activity.get(p["key"], {}))
         f = full.get(p["key"]) or {}
         # profitul estimat al casei, proportional cu partea clientului din incasarile casei
+        # motorina / km ai casei: aceeasi parte ca la incasari (o casa poate avea mai multi clienti)
+        share = p["total"] / f["total"] if f.get("total") else 0
+        p["motorina_est"] = round(f["motorina_est"] * share, 2) if f.get("motorina_est") is not None else None
+        p["km_drum"] = round(f["km_drum"] * share, 1) if f.get("km_drum") is not None else None
         if f.get("cost_est") is not None and f.get("total"):
             cost = f["cost_est"] * p["total"] / f["total"]
             p.update({"profit_est": round(p["total"] - cost, 2), "cost_est": round(cost, 2),
