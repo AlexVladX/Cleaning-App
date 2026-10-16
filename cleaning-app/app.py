@@ -1439,7 +1439,7 @@ def fuel_routes(ivs):
     if not base or not settings.get("coords"):
         return {}, {}, 0
     key = (id(ivs), len(ivs), settings.get("geo_v"), json.dumps(settings.get("coord_alias") or {}, sort_keys=True),
-           tuple(sorted(settings.get("alias", {}).items())))
+           tuple(sorted(settings.get("alias", {}).items())), tuple(settings.get("separate") or []))
     hit = _fuel_cache.get("k")
     if hit == key:
         return _fuel_cache["v"]
@@ -1525,8 +1525,12 @@ def profit_block(ivs_period, ivs_all, period, props):
         else:
             gen += sm
     hp = costs.house_profit(props, km_house, fkm, {"per_menaj": pm, "general": gen, "motorina_scalare": scale})
+    known = house_points() if settings.get("coords") else {}
     for p in props:
         p.update(hp.get(p["key"], {}))
+        if p["key"] not in known:
+            # fara coordonate nu stim drumul: nu afisam 0 € (ar parea gratis), ci „necunoscut”
+            p["motorina_est"] = p["km_drum"] = None
     venit, chelt = tot("venit"), tot("cheltuieli")
     personal = tot("personal")
     tip = {c["nume"]: c.get("tip", "firma") for c in cats}

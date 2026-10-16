@@ -79,7 +79,7 @@ def daily_routes(ivs, house_point, base, dist):
     """
     Pe fiecare zi: baza -> casele zilei (cea mai apropiata urmatoare) -> baza.
     house_point(iv) -> (cheie casa, punct) sau None; dist(a, b) -> km.
-    Intoarce: km pe zi, km pe casa (drumul pana la ea + o parte din intoarcere), zile fara coordonate.
+    Intoarce: km pe zi, km pe casa (km-ii zilei impartiti dupa distanta casei de la baza), zile fara coordonate.
     """
     days = defaultdict(dict)
     missing = set()
@@ -103,8 +103,13 @@ def daily_routes(ivs, house_point, base, dist):
             cur = left.pop(k)
         back = dist(cur, base)
         total += back
-        for k, leg in legs:
-            km_house[k] += leg + back / len(legs)
+        # km-ii zilei se impart intre casele zilei proportional cu distanta fiecareia de la baza
+        # (o casa departe "cere" mai mult drum). Nu depinde de ordinea in care le-ai facut:
+        # inainte, casa din mijlocul unui grup de case apropiate primea doar 1-2 km.
+        w = {k: max(dist(base, houses[k]), 0.5) for k, _ in legs}
+        sw = sum(w.values()) or 1.0
+        for k in w:
+            km_house[k] += total * w[k] / sw
         km_day[d] = round(total, 1)
     return km_day, dict(km_house), len(missing - set(days))
 
