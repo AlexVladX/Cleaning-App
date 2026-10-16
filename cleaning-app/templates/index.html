@@ -96,10 +96,70 @@
   /* tab-uri */
   .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
-  .tab{border:none;background:none;padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+  .tab{border:none;background:none;padding:10px 11px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
   .tab:hover{color:var(--brand)}
   .tab.on{color:var(--brand);border-bottom:3px solid var(--brand);font-weight:700}
+  .tab-sep{flex:none;width:1px;background:var(--line);margin:9px 3px}
+  .tab.tab-q{color:var(--brand-2);font-weight:600;background:linear-gradient(180deg,transparent 0 6px,var(--brand-bg) 6px calc(100% - 6px),transparent calc(100% - 6px));border-radius:0;padding:10px 14px}
+  .tab.tab-q.on{color:#fff;background:linear-gradient(180deg,transparent 0 6px,var(--brand) 6px calc(100% - 6px),transparent calc(100% - 6px));border-bottom-color:transparent}
+  .tab.tab-q.on .n{background:rgba(255,255,255,.25);color:#fff}
+  /* intrebari */
+  .q-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin:16px 0 10px}
+  .q-title{font-size:18px;margin-bottom:4px}
+  .q-top .hint{max-width:640px}
+  .q-ideas{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px}
+  .q-ideas .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+  .q-ideas button{border:1px dashed var(--brand);background:#fff;color:var(--brand-2);border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .q-ideas button:hover{background:var(--brand-bg)}
+  .q-sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 8px;font-weight:600}
+  .q-sec span{text-transform:none;letter-spacing:0;font-weight:400}
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px}
+  .qcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .qcard.kept{border-color:#9ED6CC;box-shadow:0 1px 0 #9ED6CC inset,0 6px 18px rgba(15,118,110,.07)}
+  .qhead{display:flex;gap:8px;align-items:flex-start}
+  .qhead h3{font-size:15px;line-height:1.35;flex:1;min-width:0;overflow-wrap:anywhere}
+  .qstar{border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:#C9A227;padding:0 2px}
+  .qstar.off{color:#B8C4C2}
+  .qmeta{font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px}
+  .qmeta span{background:var(--line-2);border-radius:5px;padding:1px 6px}
+  .qans{font-size:14px;line-height:1.5;background:var(--brand-bg);border-radius:10px;padding:10px 12px;color:var(--brand-deep)}
+  .qans .money{color:var(--money)}
+  .qtw{overflow-x:auto;margin:0 -4px}
+  table.qt{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.qt th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:right;padding:4px 6px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--line)}
+  table.qt th:first-child,table.qt td:first-child{text-align:left}
+  table.qt td{padding:5px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line-2);font-variant-numeric:tabular-nums}
+  table.qt td:first-child{white-space:normal;min-width:120px}
+  table.qt td.qs{font-weight:700;position:relative}
+  .qbar{display:block;height:3px;border-radius:2px;background:var(--series);margin-top:3px;margin-left:auto}
+  .qbar.neg{background:var(--bad)}
+  .qrk{display:inline-block;width:18px;color:var(--faint);font-size:11px}
+  .qcard details summary{cursor:pointer;font-size:12px;color:var(--brand-2)}
+  .qcard textarea{width:100%;min-height:60px;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;font:13px inherit;font-family:inherit}
+  .qhist-i{font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+  .qhist-i b{white-space:nowrap;color:var(--ink-2)}
+  .qacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .qacts .btn{font-size:12px}
+  .q-empty{border:1px dashed var(--line);border-radius:12px;padding:16px;color:var(--muted);font-size:13px;text-align:center}
+  .q-editor{border:2px solid var(--brand);border-radius:14px;padding:16px;background:#FBFEFD;margin-bottom:8px}
+  .q-editor .seg{display:inline-flex;width:fit-content;max-width:100%}
+  .q-editor h3{font-size:15px;margin-bottom:10px}
+  .q-editor input[type=text],.q-editor select,.q-editor input:not([type]){border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font-size:13px;background:#fff;max-width:100%}
+  #qe-q{width:100%;font-size:15px;padding:9px 11px}
+  .qe-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-top:12px}
+  .qe-lab{width:120px;flex:none;font-size:12px;font-weight:600;color:var(--ink-2);padding-top:8px}
+  .qe-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .qf{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .qf input{width:130px}
+  .qf .x{border:1px solid var(--line);background:#fff;border-radius:6px;width:28px;height:30px;cursor:pointer;color:var(--muted)}
+  .qcols{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .qcols label{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 9px;cursor:pointer;display:inline-flex;gap:5px;align-items:center;background:#fff}
+  .qcols label:has(input:checked){background:var(--brand-bg);border-color:var(--brand)}
+  .qe-prev{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .qe-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
+  @media(max-width:600px){.qe-lab{width:100%;padding-top:0}.qcard{padding:12px}}
   .tab .n{font-size:11px;padding:0 6px;border-radius:999px;background:var(--line-2);color:var(--ink-2);font-weight:500}
+  .tab .n:empty{display:none}
   .tab .n.alert{background:var(--bad-bg);color:var(--bad-ink)}
   .panel{display:none}.panel.on{display:block}
 
@@ -375,17 +435,36 @@
 
   <div class="card" style="padding-top:4px">
     <nav class="tabs" role="tablist" id="tabs">
+      <button class="tab tab-q" role="tab" data-tab="intrebari" title="Pune întrebări și răspunde-le cu indicatorii"><span aria-hidden="true">✦</span> Întrebări <span class="n" id="n-q"></span></button>
+      <span class="tab-sep" aria-hidden="true"></span>
       <button class="tab" role="tab" data-tab="proprietati">Proprietăți <span class="n" id="n-props"></span></button>
       <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
       <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
       <button class="tab" role="tab" data-tab="calendar">Calendar</button>
       <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
+      <span class="tab-sep" aria-hidden="true"></span>
       <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
-      <button class="tab" role="tab" data-tab="cheltuieli">Cheltuieli &amp; profit</button>
-      <button class="tab" role="tab" data-tab="gcal">Verificare calendar <span class="n" id="n-gcal"></span></button>
-      <button class="tab" role="tab" data-tab="preturi">Verificare prețuri <span class="n" id="n-prices"></span></button>
+      <button class="tab" role="tab" data-tab="cheltuieli" title="Cheltuieli și profit">Cheltuieli &amp; profit</button>
+      <span class="tab-sep" aria-hidden="true"></span>
+      <button class="tab" role="tab" data-tab="gcal" title="Verificare: calendarul cu menaje comparat cu facturile">✓ Calendar <span class="n" id="n-gcal"></span></button>
+      <button class="tab" role="tab" data-tab="preturi" title="Verificare: prețurile fiecărei case, factură după factură">✓ Prețuri <span class="n" id="n-prices"></span></button>
       <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span></button>
     </nav>
+
+    <!-- INTREBARI -->
+    <section class="panel" id="panel-intrebari" role="tabpanel">
+      <div class="q-top">
+        <div><h2 class="q-title">Întrebările tale</h2>
+          <div class="hint">Scrii o întrebare, alegi pe ce indicatori răspunde, iar răspunsul se calculează singur din datele perioadei de sus (<b id="q-per"></b>). <b>★</b> = păstrată pentru viitor (în backup).</div></div>
+        <button class="btn btn-dark" type="button" id="q-new">+ Întrebare nouă</button>
+      </div>
+      <div class="q-ideas" id="q-ideas"></div>
+      <div id="q-editor" class="q-editor" hidden></div>
+      <div class="q-sec" id="q-kept-h">★ Păstrate</div>
+      <div class="qgrid" id="q-kept"></div>
+      <div class="q-sec" id="q-temp-h">Încercări <span>· doar în acest browser; apasă ☆ ca s-o păstrezi</span></div>
+      <div class="qgrid" id="q-temp"></div>
+    </section>
 
     <!-- PROPRIETATI -->
     <section class="panel" id="panel-proprietati" role="tabpanel">
@@ -595,7 +674,7 @@
     <details class="fold" id="settings-box">
       <summary><span class="card-title" id="settings-title">Reguli de calcul și proprietăți</span></summary>
       <nav class="rules-nav" aria-label="Secțiuni reguli"><a href="#rs-facturi">1 · Facturi</a><a href="#rs-clienti">2 · Clienți și case</a><a href="#rs-dist">3 · Distanțe și ore</a><a href="#rs-fx">4 · Indicatori proprii</a><a href="#rs-backup">5 · Backup</a><button type="button" class="btn btn-sm" data-gloss>📖 Glosar indicatori</button></nav>
-      <div class="hint" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în tab-ul <b>Cheltuieli &amp; profit</b>; calendarul, în <b>Verificare calendar</b>.</div>
+      <div class="hint" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în tab-ul <b>Cheltuieli &amp; profit</b>; calendarul, în <b>✓ Calendar</b> (verificarea calendarului).</div>
       <section class="rsec" id="rs-facturi">
         <h3 class="rsec-h"><span class="rnum">1</span>Cum se citesc facturile</h3>
         <div class="hint rsec-sub">Ce e facturat la oră, ce e forfait și ce rânduri nu sunt menaje.</div>
@@ -830,6 +909,7 @@ function renderAnalytics() {
   const np = $('n-prices'); np.textContent = m.abateri || ''; np.classList.toggle('alert', !!m.abateri);
   adoptLayout(A.coloane); prepareFormulas(); renderColPicker();
   renderProps(); renderExcluded(); renderClients(); renderMonthly(); renderCalendar(); renderPrices(); renderZones();
+  qAdopt(A.intrebari); renderQuestions(); if (QE && !$('q-editor').hidden) renderQPreview();
 }
 
 // ---- proprietati
@@ -1895,6 +1975,353 @@ $('g-save').addEventListener('click', async () => {
   if (j) { G = j; renderGcal(); }
 });
 $('g-sa-copy').addEventListener('click', () => { try { navigator.clipboard.writeText($('g-sa').textContent); showToast('Email copiat', null); } catch (e) {} });
+
+// ------------------------------------------------------------ intrebari (loc de joaca pe indicatori)
+// O intrebare = filtre + ordonare + cate rezultate, pe case sau pe clienti. Raspunsul se calculeaza mereu din datele perioadei.
+// Pastrate (★) -> in backup; restul (incercari) -> doar in browser.
+const Q_OPS = {
+  num: [['>', '>'], ['≥', '≥'], ['<', '<'], ['≤', '≤'], ['=', '='], ['≠', '≠'], ['plin', 'are valoare'], ['gol', 'lipsește']],
+  text: [['conține', 'conține'], ['nu conține', 'nu conține'], ['=', 'este exact'], ['plin', 'are valoare'], ['gol', 'lipsește']],
+  bool: [['da', 'da'], ['nu', 'nu']],
+};
+const Q_IDEAS = [
+  {q: 'Care case îmi aduc cei mai mulți bani pe oră?', nivel: 'case', filtre: [{k: 'eur_ora', op: 'plin', v: ''}], sort: {k: 'eur_ora', d: 'desc'}, n: 10, cols: ['eur_ora', 'incasari_fara_inter', 'ore_lucru']},
+  {q: 'Pe ce case pierd bani?', nivel: 'case', filtre: [{k: 'profit', op: '<', v: '0'}], sort: {k: 'profit', d: 'asc'}, n: 10, cols: ['profit', 'incasari', 'motorina', 'distanta']},
+  {q: 'Ce case sunt departe și aduc puțin pe intervenție?', nivel: 'case', filtre: [{k: 'distanta', op: '>', v: '25'}, {k: 'medie', op: '<', v: 'media'}], sort: {k: 'distanta', d: 'desc'}, n: 10, cols: ['distanta', 'medie', 'profit']},
+  {q: 'Ce client merită cel mai mult?', nivel: 'clienti', filtre: [], sort: {k: 'marja', d: 'desc'}, n: 10, cols: ['marja', 'profit', 'incasari', 'eur_ora']},
+  {q: 'Cât mă costă drumul la fiecare client?', nivel: 'clienti', filtre: [], sort: {k: 'motorina', d: 'desc'}, n: 0, cols: ['motorina', 'km_drum', 'incasari']},
+  {q: 'Ce case am pierdut?', nivel: 'case', filtre: [{k: 'inactiva', op: 'da', v: ''}], sort: {k: 'zile_ultima', d: 'desc'}, n: 0, cols: ['zile_ultima', 'incasari', 'client']},
+  {q: 'La ce case nu am trecut încă orele?', nivel: 'case', filtre: [{k: 'ore', op: 'gol', v: ''}, {k: 'menaje', op: '>', v: '0'}], sort: {k: 'menaje', d: 'desc'}, n: 0, cols: ['menaje', 'incasari_fara_inter']},
+];
+function qFields(level) {
+  const F = [
+    {k: 'nume', label: level === 'case' ? 'Casa' : 'Client', t: 'text'},
+    ...(level === 'case' ? [{k: 'client', label: 'Client', t: 'text'}, {k: 'zona', label: 'Zonă', t: 'text'}, {k: 'inactiva', label: 'Inactivă', t: 'bool'}]
+      : [{k: 'case', label: 'Case', f: 'n'}, {k: 'procent', label: '% din venit', f: 'pct'}]),
+    {k: 'incasari', label: 'Încasări totale', f: 'eur'},
+    {k: 'incasari_fara_inter', label: 'Încasări fără inter.', f: 'eur'},
+    {k: 'incasari_inter', label: 'Încasări inter.', f: 'eur'},
+    {k: 'interventii', label: 'Intervenții', f: 'n'},
+    {k: 'menaje', label: 'Menaje complete', f: 'n'},
+    {k: 'interm', label: 'Intermédiaire (nr.)', f: 'n'},
+    {k: 'medie', label: '€ / intervenție', f: 'eur'},
+    {k: 'eur_ora', label: '€ / oră', f: 'eur'},
+    {k: 'ore', label: 'Ore estimate / menaj', f: 'h'},
+    {k: 'ore_lucru', label: 'Ore de lucru', f: 'h'},
+    {k: 'ore_facturate', label: 'Ore facturate', f: 'h'},
+    {k: 'distanta', label: 'Distanță', f: 'km'},
+    {k: 'timp_drum', label: 'Timp de drum', f: 'min'},
+    {k: 'km_drum', label: 'Km de drum', f: 'km'},
+    {k: 'motorina', label: 'Motorină', f: 'eur'},
+    {k: 'profit', label: 'Profit estimat', f: 'eur'},
+    {k: 'marja', label: 'Marjă', f: 'pct'},
+    {k: 'pe_luna', label: 'Intervenții / lună', f: 'n'},
+    {k: 'zile_ultima', label: 'Zile de la ultima', f: 'zile'},
+    ...FORMS.map(fm => ({k: 'fx:' + fm.nume, label: fm.nume, f: 'fx', fx: fm.nume, mine: true})),
+  ];
+  F.forEach(x => { x.t = x.t || 'num'; });
+  return F;
+}
+function qFmt(f, v) {
+  if (v == null || v === '') return '—';
+  if (f.t === 'bool') return v ? 'da' : 'nu';
+  if (f.t === 'text') return esc(v);
+  switch (f.f) {
+    case 'eur': return eur(v);
+    case 'pct': return num(v) + '%';
+    case 'km': return num(v) + ' km';
+    case 'h': return num(v) + ' h';
+    case 'min': return Math.round(v) + ' min';
+    case 'zile': return Math.round(v) + ' zile';
+    case 'fx': return fmtFormula(f.fx, v);
+    default: return num(v);
+  }
+}
+let qRowsCache = {key: null, forms: null};
+function qRows(level) {
+  if (!A) return [];
+  if (qRowsCache.key !== A || qRowsCache.forms !== FORMS) qRowsCache = {key: A, forms: FORMS};
+  if (qRowsCache[level]) return qRowsCache[level];
+  const fx = v => Object.fromEntries(FORMS.map(fm => ['fx:' + fm.nume, evalFormula(fm.rpn, v)]));
+  const ratio = (a, b) => (a != null && b) ? a / b : null;
+  let rows;
+  if (level === 'case') {
+    rows = (A.props || []).map(p => { const v = houseVars(p); return {...v, ...fx(v), nume: p.name, client: p.client || '', zona: p.zona || '', inactiva: !!p.inactiva,
+      medie: p.medie, eur_ora: ratio(v.incasari_fara_inter, v.ore_lucru), marja: p.profit_est != null && p.total ? p.profit_est / p.total * 100 : null}; });
+  } else {
+    const by = {};
+    for (const p of A.props || []) for (const cl of String(p.client || '').split(', ')) (by[cl] = by[cl] || []).push(p);
+    rows = (A.clients || []).map(x => { const ps = by[x.client] || [], v = ps.length ? clientVars(ps) : {};
+      return {...v, ...(ps.length ? fx(v) : {}), nume: x.client, procent: x.procent, incasari: x.venit, interventii: x.interventii, case: x.case, medie: x.medie,
+        eur_ora: ratio(v.incasari_fara_inter, v.ore_lucru), marja: v.profit != null && x.venit ? v.profit / x.venit * 100 : null}; });
+  }
+  return (qRowsCache[level] = rows);
+}
+function qRun(q) {
+  const rows = qRows(q.nivel), F = qFields(q.nivel), fm = Object.fromEntries(F.map(f => [f.k, f]));
+  const avgC = {};
+  const avg = k => { if (k in avgC) return avgC[k]; const xs = rows.map(r => r[k]).filter(x => typeof x === 'number' && isFinite(x)); return (avgC[k] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null); };
+  const errs = [];
+  const conds = (q.filtre || []).filter(c => fm[c.k]).map(c => {
+    const f = fm[c.k]; let val = null;
+    if (f.t === 'num' && !['gol', 'plin'].includes(c.op)) {
+      const s = String(c.v ?? '').trim().toLowerCase();
+      val = s === 'media' ? avg(c.k) : parseFloat(s.replace(/\s/g, '').replace(',', '.'));
+      if (s === '' || val == null || isNaN(val)) errs.push(`„${f.label}”: scrie un număr sau „media”`);
+    }
+    return {...c, f, val};
+  });
+  const test = (r, c) => {
+    const x = r[c.k];
+    if (c.op === 'gol') return x == null || x === '';
+    if (c.op === 'plin') return !(x == null || x === '');
+    if (c.f.t === 'bool') return !!x === (c.op !== 'nu');
+    if (c.f.t === 'text') { const a = norm(String(x || '')), b = norm(String(c.v || '').trim()); return c.op === 'nu conține' ? !a.includes(b) : c.op === '=' ? a === b : a.includes(b); }
+    if (x == null || c.val == null || isNaN(c.val)) return false;
+    switch (c.op) { case '>': return x > c.val; case '≥': return x >= c.val; case '<': return x < c.val; case '≤': return x <= c.val;
+      case '=': return Math.abs(x - c.val) < 1e-9; case '≠': return Math.abs(x - c.val) >= 1e-9; }
+    return true;
+  };
+  const res = errs.length ? [] : rows.filter(r => conds.every(c => test(r, c)));
+  const sk = q.sort && fm[q.sort.k] ? q.sort.k : null, dir = (q.sort && q.sort.d) || 'desc';
+  if (sk) {
+    const f = fm[sk];
+    if (f.t === 'text') res.sort((a, b) => String(a[sk] || '').localeCompare(String(b[sk] || ''), 'fr') * (dir === 'asc' ? 1 : -1));
+    else res.sort((a, b) => cmpKeys([f.t === 'bool' ? +!!a[sk] : a[sk], a.incasari || 0], [f.t === 'bool' ? +!!b[sk] : b[sk], b.incasari || 0], dir));
+  } else res.sort((a, b) => (b.incasari || 0) - (a.incasari || 0));
+  const shown = q.n ? res.slice(0, q.n) : res;
+  let cols = (q.cols || []).filter(k => fm[k] && k !== 'nume');
+  if (!cols.length) cols = [...new Set([sk, ...conds.map(c => c.k), 'incasari'].filter(k => k && k !== 'nume' && fm[k]))];
+  return {rows, res, shown, fm, sk, dir, avg, errs, cols, conds};
+}
+function qDescribe(q, R) {
+  const tags = [q.nivel === 'case' ? 'Case' : 'Clienți'];
+  for (const c of R.conds) {
+    const op = (Q_OPS[c.f.t].find(o => o[0] === c.op) || [c.op, c.op])[1];
+    tags.push(c.f.t === 'bool' ? `${c.f.label}: ${op}` : ['gol', 'plin'].includes(c.op) ? `${c.f.label} ${op}` : `${c.f.label} ${op} ${c.v}`);
+  }
+  if (R.sk) tags.push(`după ${R.fm[R.sk].label} ${R.dir === 'asc' ? '↑' : '↓'}`);
+  tags.push(q.n ? `primele ${q.n}` : 'toate');
+  return tags.map(t => `<span>${esc(t)}</span>`).join('');
+}
+function qAnswer(q, R) {
+  if (R.errs.length) return '⚠ ' + esc(R.errs.join(' · '));
+  const lv = q.nivel === 'case' ? 'case' : 'clienți', parts = [];
+  const tot = R.rows.reduce((a, r) => a + (r.incasari || 0), 0), s = R.res.reduce((a, r) => a + (r.incasari || 0), 0);
+  if (R.conds.length) {
+    parts.push(`<b>${R.res.length}</b> din ${R.rows.length} ${lv} se potrivesc`);
+    if (R.res.length) parts.push(`împreună aduc <b class="money">${eur(s)}</b> (${num(tot ? s / tot * 100 : 0)}% din încasări)`);
+  } else parts.push(`${R.rows.length} ${lv} în perioadă`);
+  if (R.sk && R.res[0]) {
+    const f = R.fm[R.sk], a = f.t === 'num' ? R.avg(R.sk) : null;
+    parts.push(`${R.dir === 'asc' ? 'cel mai jos' : 'pe primul loc'}: <b>${esc(R.res[0].nume)}</b> — <b>${qFmt(f, R.res[0][R.sk])}</b>` + (a != null ? ` (media: ${qFmt(f, a)})` : ''));
+  }
+  if (!R.res.length) parts.push('niciun rezultat — încearcă alte condiții');
+  const t = parts.join(' · ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function qTable(q, R) {
+  if (!R.shown.length) return '';
+  const sk = R.sk, f = sk ? R.fm[sk] : null;
+  const mx = f && f.t === 'num' ? Math.max(...R.shown.map(r => Math.abs(r[sk] || 0)), 1e-9) : 0;
+  const head = `<tr><th>${esc(R.fm.nume.label)}</th>${R.cols.map(k => `<th>${esc(R.fm[k].label)}</th>`).join('')}</tr>`;
+  const body = R.shown.map((r, i) => `<tr><td><span class="qrk">${i + 1}</span>${esc(r.nume)}</td>${R.cols.map(k => {
+    const v = r[k], isS = k === sk && mx;
+    return `<td${k === sk ? ' class="qs"' : ''}>${qFmt(R.fm[k], v)}${isS && typeof v === 'number' ? `<span class="qbar${v < 0 ? ' neg' : ''}" style="width:${Math.max(4, Math.abs(v) / mx * 100)}%"></span>` : ''}</td>`; }).join('')}</tr>`).join('');
+  return `<div class="qtw"><table class="qt"><thead>${head}</thead><tbody>${body}</tbody></table></div>` +
+    (R.res.length > R.shown.length ? `<div class="hint">+ încă ${R.res.length - R.shown.length}</div>` : '');
+}
+
+// ---- stare: pastrate (backup) + incercari (browser)
+let QS = [], qLoaded = false, qSaveT = null, qDirty = false, QE = null;
+const qClean = q => ({id: q.id, q: String(q.q || '').slice(0, 200), nivel: q.nivel === 'clienti' ? 'clienti' : 'case',
+  filtre: (q.filtre || []).slice(0, 8).map(c => ({k: String(c.k), op: String(c.op), v: String(c.v ?? '').slice(0, 40)})),
+  sort: q.sort && q.sort.k ? {k: String(q.sort.k), d: q.sort.d === 'asc' ? 'asc' : 'desc'} : null, n: Number(q.n) || 0,
+  cols: (q.cols || []).slice(0, 8).map(String), nota: String(q.nota || '').slice(0, 3000), pastrata: !!q.pastrata,
+  istoric: (q.istoric || []).slice(-25), creat: q.creat || new Date().toISOString().slice(0, 10)});
+function qAdopt(srv) {
+  if (qDirty) return;
+  let temp = [];
+  try { temp = JSON.parse(store.get('intrebariLocal', '[]')); } catch (e) {}
+  if (!Array.isArray(temp)) temp = [];
+  const kept = Array.isArray(srv) ? srv : [];
+  const ids = new Set(kept.map(q => q.id));
+  QS = [...kept.map(q => ({...q, pastrata: true})), ...temp.filter(q => q && !ids.has(q.id)).map(q => ({...q, pastrata: false}))];
+  qLoaded = true;
+}
+function qPersist(serverToo = true) {
+  try { store.set('intrebariLocal', JSON.stringify(QS.filter(q => !q.pastrata).map(qClean))); } catch (e) {}
+  if (!serverToo) return;
+  qDirty = true; clearTimeout(qSaveT);
+  qSaveT = setTimeout(async () => {
+    const lista = QS.filter(q => q.pastrata).map(qClean);
+    try {
+      const r = await fetch('/api/intrebari', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lista})});
+      if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Nu s-au putut salva întrebările'), null); }
+      else if (A) A.intrebari = lista;
+    } catch (e) { showToast('⚠ Fără conexiune: întrebările păstrate nu s-au salvat încă', null); }
+    qDirty = false;
+  }, 600);
+}
+const qNewId = () => 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function qCard(q) {
+  const R = qRun(q);
+  const hist = q.istoric || [];
+  return `<article class="qcard${q.pastrata ? ' kept' : ''}" data-q="${esc(q.id)}">
+    <div class="qhead"><h3>${esc(q.q || 'Întrebare fără titlu')}</h3>
+      <button class="qstar${q.pastrata ? '' : ' off'}" type="button" data-qa="star" title="${q.pastrata ? 'Păstrată în backup · click ca s-o scoți' : 'Păstreaz-o pentru viitor'}" aria-label="${q.pastrata ? 'Nu mai păstra' : 'Păstrează'}">${q.pastrata ? '★' : '☆'}</button></div>
+    <div class="qmeta">${qDescribe(q, R)}</div>
+    <div class="qans">${qAnswer(q, R)}</div>
+    ${qTable(q, R)}
+    <details class="qnote"${q.nota ? ' open' : ''}><summary>📝 Concluzia mea${q.nota ? '' : ' (opțional)'}</summary><textarea data-qa="nota" placeholder="Ce decid de aici? (se salvează singur)">${esc(q.nota || '')}</textarea></details>
+    ${hist.length ? `<details><summary>🕓 Istoric răspunsuri (${hist.length})</summary>${hist.slice().reverse().map(x => `<div class="qhist-i"><b>${esc(fmtDate(x.data))}</b><span>${esc(x.perioada || '')} — ${esc(x.text || '')}</span></div>`).join('')}</details>` : ''}
+    <div class="qacts">
+      <button class="btn btn-sm" type="button" data-qa="edit">✎ Modifică</button>
+      <button class="btn btn-sm" type="button" data-qa="snap" title="Salvează răspunsul de azi, ca să-l compari mai târziu">📌 Notează răspunsul de azi</button>
+      <button class="btn btn-sm" type="button" data-qa="dup">⧉ Copiază</button>
+      <button class="btn btn-sm" type="button" data-qa="del" aria-label="Șterge">🗑</button>
+    </div></article>`;
+}
+let qPending = false;
+function renderQuestions() {
+  if (!A) return;
+  // nu redesenam cat timp scrii o concluzie (s-ar pierde textul); se reia la iesirea din camp
+  const ae = document.activeElement;
+  if (ae && ae.matches && ae.matches('.qcard textarea')) { qPending = true; return; }
+  qPending = false;
+  $('q-per').textContent = (A.period && A.period.label || '') + (A.client_sel ? ' · doar ' + A.client_sel : '');
+  $('n-q').textContent = QS.filter(q => q.pastrata).length || '';
+  const used = new Set(QS.map(q => q.q));
+  const ideas = Q_IDEAS.filter(x => !used.has(x.q));
+  $('q-ideas').innerHTML = ideas.length ? '<span class="lbl">Idei:</span>' + ideas.map(x => `<button type="button" data-idea="${esc(x.q)}">${esc(x.q)}</button>`).join('') : '';
+  const kept = QS.filter(q => q.pastrata), temp = QS.filter(q => !q.pastrata);
+  $('q-kept-h').hidden = !kept.length;
+  $('q-kept').innerHTML = kept.map(qCard).join('');
+  $('q-temp-h').hidden = !temp.length;
+  $('q-temp').innerHTML = temp.map(qCard).join('');
+  if (!QS.length) $('q-temp').innerHTML = '<div class="q-empty">Nicio întrebare încă. Alege o idee de mai sus sau apasă „+ Întrebare nouă”.</div>';
+}
+
+// ---- editorul
+function qOpenEditor(q) {
+  QE = JSON.parse(JSON.stringify(q || {id: null, q: '', nivel: 'case', filtre: [], sort: {k: 'incasari', d: 'desc'}, n: 10, cols: []}));
+  renderQEditor(); $('q-editor').hidden = false;
+  $('q-editor').scrollIntoView({behavior: 'smooth', block: 'start'});
+  setTimeout(() => $('qe-q').focus({preventScroll: true}), 250);
+}
+function qFieldOpts(F, sel, withNone) {
+  const base = F.filter(f => !f.mine), mine = F.filter(f => f.mine);
+  const o = f => `<option value="${esc(f.k)}"${f.k === sel ? ' selected' : ''}>${f.mine ? 'ƒ ' : ''}${esc(f.label)}</option>`;
+  return (withNone ? `<option value=""${!sel ? ' selected' : ''}>— fără ordonare —</option>` : '') +
+    `<optgroup label="Indicatori">${base.map(o).join('')}</optgroup>` + (mine.length ? `<optgroup label="Formulele tale">${mine.map(o).join('')}</optgroup>` : '');
+}
+function renderQEditor() {
+  const F = qFields(QE.nivel), fm = Object.fromEntries(F.map(f => [f.k, f]));
+  QE.filtre = (QE.filtre || []).filter(c => fm[c.k]);
+  if (QE.sort && QE.sort.k && !fm[QE.sort.k]) QE.sort = {k: 'incasari', d: 'desc'};
+  const frow = (c, i) => {
+    const f = fm[c.k], ops = Q_OPS[f.t];
+    if (!ops.some(o => o[0] === c.op)) c.op = ops[0][0];
+    const needV = f.t !== 'bool' && !['gol', 'plin'].includes(c.op);
+    return `<div class="qf" data-i="${i}"><select data-ff aria-label="Indicator">${qFieldOpts(F, c.k)}</select>
+      <select data-fo aria-label="Condiție">${ops.map(o => `<option value="${esc(o[0])}"${o[0] === c.op ? ' selected' : ''}>${esc(o[1])}</option>`).join('')}</select>
+      ${needV ? `<input data-fv value="${esc(c.v ?? '')}" placeholder="${f.t === 'num' ? 'număr sau media' : 'text'}" aria-label="Valoare"${f.t === 'num' ? ' inputmode="decimal" list="qe-dl"' : ''}>` : ''}
+      <button type="button" class="x" data-fx aria-label="Scoate condiția">✕</button></div>`;
+  };
+  const sel = QE.sort && QE.sort.k || '';
+  const colsSet = new Set(QE.cols || []);
+  $('q-editor').innerHTML = `<h3>${QE.id ? 'Modifică întrebarea' : 'Întrebare nouă'}</h3>
+    <input type="text" id="qe-q" value="${esc(QE.q || '')}" placeholder="ex. Care case îmi aduc cei mai mulți bani pe oră?" maxlength="200">
+    <datalist id="qe-dl"><option value="media"></option></datalist>
+    <div class="qe-row"><div class="qe-lab">Despre</div><div class="qe-body"><div class="seg" id="qe-lvl"><button type="button" data-v="case" class="${QE.nivel === 'case' ? 'on' : ''}">Case</button><button type="button" data-v="clienti" class="${QE.nivel === 'clienti' ? 'on' : ''}">Clienți</button></div></div></div>
+    <div class="qe-row"><div class="qe-lab">Doar unde</div><div class="qe-body">${QE.filtre.map(frow).join('')}
+      <div><button type="button" class="btn btn-sm" id="qe-addf">+ condiție</button> <span class="hint">„media” = media tuturor ${QE.nivel === 'case' ? 'caselor' : 'clienților'}</span></div></div></div>
+    <div class="qe-row"><div class="qe-lab">Ordonează după</div><div class="qe-body"><div class="qf"><select id="qe-sort" aria-label="Ordonează după">${qFieldOpts(F, sel, true)}</select>
+      <div class="seg" id="qe-dir"><button type="button" data-v="desc" class="${!QE.sort || QE.sort.d !== 'asc' ? 'on' : ''}">mare → mic</button><button type="button" data-v="asc" class="${QE.sort && QE.sort.d === 'asc' ? 'on' : ''}">mic → mare</button></div></div></div></div>
+    <div class="qe-row"><div class="qe-lab">Arată</div><div class="qe-body"><div class="qf"><select id="qe-n" aria-label="Câte rezultate">${[[5, 'primele 5'], [10, 'primele 10'], [20, 'primele 20'], [50, 'primele 50'], [0, 'toate']].map(([v, l]) => `<option value="${v}"${(QE.n || 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></div></div>
+    <div class="qe-row"><div class="qe-lab">Coloane în răspuns</div><div class="qe-body"><div class="hint">Dacă nu alegi nimic: indicatorul după care ordonezi, cei din condiții și încasările.</div>
+      <div class="qcols" id="qe-cols">${F.filter(f => f.k !== 'nume').map(f => `<label${f.mine ? ' title="formula ta"' : ''}><input type="checkbox" value="${esc(f.k)}"${colsSet.has(f.k) ? ' checked' : ''}>${f.mine ? 'ƒ ' : ''}${esc(f.label)}</label>`).join('')}</div></div></div>
+    <div class="qe-prev" id="qe-prev"></div>
+    <div class="qe-acts"><button type="button" class="btn" id="qe-cancel">Renunță</button><button type="button" class="btn" id="qe-save">Salvează ca încercare</button><button type="button" class="btn btn-dark" id="qe-keep">★ Salvează și păstrează</button></div>`;
+  renderQPreview();
+}
+function renderQPreview() {
+  const R = qRun(QE);
+  $('qe-prev').innerHTML = `<div class="hint" style="margin-bottom:6px">Previzualizare</div><div class="qans">${qAnswer(QE, R)}</div><div style="margin-top:8px">${qTable(QE, R)}</div>`;
+}
+function qCloseEditor() { QE = null; $('q-editor').hidden = true; $('q-editor').innerHTML = ''; }
+function qSaveEditor(keep) {
+  const R = qRun(QE);
+  if (R.errs.length) { showToast('⚠ ' + R.errs[0], null); return; }
+  if (!String(QE.q || '').trim()) QE.q = 'Întrebare fără titlu';
+  const q = qClean({...QE, id: QE.id || qNewId(), pastrata: keep || (QE.id && (QS.find(x => x.id === QE.id) || {}).pastrata)});
+  const i = QS.findIndex(x => x.id === q.id);
+  if (i >= 0) QS[i] = {...QS[i], ...q, nota: QS[i].nota, istoric: QS[i].istoric}; else QS.unshift(q);
+  qPersist(q.pastrata || i >= 0);
+  qCloseEditor(); renderQuestions();
+  showToast(q.pastrata ? '★ Păstrată pentru viitor' : 'Salvată ca încercare', null);
+}
+$('q-editor').addEventListener('input', e => {
+  if (!QE) return;
+  if (e.target.id === 'qe-q') { QE.q = e.target.value; return; }
+  const row = e.target.closest('.qf[data-i]');
+  if (row && e.target.matches('[data-fv]')) { QE.filtre[+row.dataset.i].v = e.target.value; renderQPreview(); }
+});
+$('q-editor').addEventListener('change', e => {
+  if (!QE) return;
+  const row = e.target.closest('.qf[data-i]');
+  if (row && e.target.matches('[data-ff]')) { QE.filtre[+row.dataset.i] = {k: e.target.value, op: '', v: ''}; renderQEditor(); return; }
+  if (row && e.target.matches('[data-fo]')) { QE.filtre[+row.dataset.i].op = e.target.value; renderQEditor(); return; }
+  if (e.target.id === 'qe-sort') { QE.sort = e.target.value ? {k: e.target.value, d: (QE.sort && QE.sort.d) || 'desc'} : null; renderQPreview(); return; }
+  if (e.target.id === 'qe-n') { QE.n = +e.target.value; renderQPreview(); return; }
+  if (e.target.closest('#qe-cols')) { QE.cols = [...document.querySelectorAll('#qe-cols input:checked')].map(x => x.value); renderQPreview(); }
+});
+$('q-editor').addEventListener('click', e => {
+  if (!QE) return;
+  const lv = e.target.closest('#qe-lvl [data-v]');
+  if (lv && lv.dataset.v !== QE.nivel) { QE.nivel = lv.dataset.v; QE.cols = []; renderQEditor(); return; }
+  const dr = e.target.closest('#qe-dir [data-v]');
+  if (dr) { QE.sort = {k: (QE.sort && QE.sort.k) || 'incasari', d: dr.dataset.v}; document.querySelectorAll('#qe-dir button').forEach(b => b.classList.toggle('on', b === dr)); if (!$('qe-sort').value) $('qe-sort').value = QE.sort.k; renderQPreview(); return; }
+  if (e.target.closest('#qe-addf')) { QE.filtre.push({k: 'incasari', op: '>', v: ''}); renderQEditor(); const ins = document.querySelectorAll('#q-editor [data-fv]'); if (ins.length) ins[ins.length - 1].focus(); return; }
+  const fx = e.target.closest('[data-fx]');
+  if (fx) { QE.filtre.splice(+fx.closest('.qf').dataset.i, 1); renderQEditor(); return; }
+  if (e.target.closest('#qe-cancel')) qCloseEditor();
+  else if (e.target.closest('#qe-save')) qSaveEditor(false);
+  else if (e.target.closest('#qe-keep')) qSaveEditor(true);
+});
+$('q-new').addEventListener('click', () => qOpenEditor(null));
+$('q-ideas').addEventListener('click', e => {
+  const b = e.target.closest('[data-idea]'); if (!b) return;
+  const idea = Q_IDEAS.find(x => x.q === b.dataset.idea); if (!idea) return;
+  QS.unshift(qClean({...idea, id: qNewId(), pastrata: false})); qPersist(false); renderQuestions();
+});
+function qById(el) { const c = el.closest('[data-q]'); return c && QS.find(q => q.id === c.dataset.q); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('.qcard [data-qa]'); if (!b || b.tagName === 'TEXTAREA') return;
+  const q = qById(b); if (!q) return;
+  const a = b.dataset.qa;
+  if (a === 'star') { q.pastrata = !q.pastrata; qPersist(true); renderQuestions(); showToast(q.pastrata ? '★ Păstrată pentru viitor (în backup)' : 'Nu mai e păstrată — rămâne ca încercare în acest browser', null); }
+  else if (a === 'edit') qOpenEditor(q);
+  else if (a === 'dup') { QS.splice(QS.indexOf(q) + 1, 0, qClean({...q, id: qNewId(), q: q.q + ' (copie)', pastrata: false, istoric: [], nota: ''})); qPersist(false); renderQuestions(); }
+  else if (a === 'snap') {
+    const R = qRun(q), txt = qAnswer(q, R).replace(/<[^>]+>/g, '');
+    q.istoric = [...(q.istoric || []), {data: new Date().toISOString().slice(0, 10), perioada: A.period.label, text: txt}].slice(-25);
+    const wasKept = q.pastrata; q.pastrata = true; qPersist(true); renderQuestions();
+    showToast('📌 Răspuns notat' + (wasKept ? '' : ' · întrebarea e acum păstrată'), null);
+  } else if (a === 'del') {
+    const i = QS.indexOf(q), copy = {...q};
+    QS.splice(i, 1); qPersist(copy.pastrata); renderQuestions();
+    showToast('Întrebare ștearsă', () => { QS.splice(Math.min(i, QS.length), 0, copy); qPersist(copy.pastrata); renderQuestions(); });
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target.closest('.qcard textarea[data-qa=nota]'); if (!t) return;
+  const q = qById(t); if (!q) return;
+  q.nota = t.value.slice(0, 3000); qPersist(q.pastrata);
+  if (qPending) setTimeout(renderQuestions, 0);
+  showToast(q.pastrata ? 'Concluzie salvată' : 'Concluzie salvată în browser · ☆ ca s-o păstrezi', null);
+});
 
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
