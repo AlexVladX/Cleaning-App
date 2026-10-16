@@ -216,6 +216,9 @@ def analysis_ivs(ivs):
     return group_clients(keep), ex
 
 
+import copy as _copy
+DEFAULT_SETTINGS = _copy.deepcopy(settings)   # setarile implicite (pentru restaurarea din backup vechi)
+
 state = {
     "files": {},
     "interventii": [],
@@ -506,6 +509,52 @@ def apply_saved_settings(saved):
     for k in RULE_KEYS + PERSIST_KEYS:
         if k in saved:
             settings[k] = saved[k]
+
+
+def merge_old_settings(old):
+    """
+    Pune inapoi setarile dintr-un backup vechi FARA sa strice ce ai acum:
+    ce e gol / implicit acum se ia din backup-ul vechi; listele si dictionarele se UNESC
+    (la conflict castiga valoarea de acum). Intoarce ce s-a recuperat, pe scurt.
+    """
+    defaults = DEFAULT_SETTINGS or {}
+    got = []
+
+    def empty_or_default(k):
+        v = settings.get(k)
+        return v in (None, "", [], {}) or (k in defaults and v == defaults[k])
+
+    for k in ("coord_sheet", "baza", "calendar_id", "calendar_de_la", "consum", "pret_motorina",
+              "prag_forfait", "tipuri_la_ora", "clienti_la_ora", "categorii_cheltuieli", "grupuri_clienti",
+              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse"):
+        if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
+            settings[k] = old[k]
+            got.append(k)
+    for k in ("alias", "coord_alias", "verificate", "incasari", "ore_estimate", "distante"):
+        o = old.get(k)
+        if isinstance(o, dict) and o:
+            cur = settings.get(k) or {}
+            new = {**o, **cur}
+            if len(new) > len(cur):
+                got.append(f"{k} (+{len(new) - len(cur)})")
+            settings[k] = new
+    for k in ("ignorate", "preturi_ok", "excluse", "pastrate", "calendar_ok"):
+        o = old.get(k)
+        if isinstance(o, list) and o:
+            cur = list(settings.get(k) or [])
+            add = [x for x in o if x not in cur]
+            if add:
+                settings[k] = cur + add
+                got.append(f"{k} (+{len(add)})")
+    o = old.get("cheltuieli")
+    if isinstance(o, list) and o:
+        cur = list(settings.get("cheltuieli") or [])
+        ids = {e.get("id") for e in cur}
+        add = [e for e in o if isinstance(e, dict) and e.get("id") not in ids]
+        if add:
+            settings["cheltuieli"] = cur + add
+            got.append(f"cheltuieli (+{len(add)})")
+    return got
 
 
 def find_cache_file():
@@ -975,8 +1024,13 @@ def scan_folder(retry_errors=False):
 
 
 def monitor_loop():
+    import gc
     while True:
         time.sleep(POLL_INTERVAL)
+        mem = rss_mb()
+        if mem > 300:
+            gc.collect()
+            add_log(f"⚠ Memorie folosită: {mem} MB din 512 (după curățare: {rss_mb()} MB)")
         with state_lock:
             monitoring = state["monitoring"]
         if monitoring:
@@ -1151,7 +1205,7 @@ def sync_geo(force_routes=False):
         c.pop("ore", None)          # in "coords" pastram doar nume/lat/lng
     settings["coords"] = coords
     if pending:
-        threading.Thread(target=flush_hours, daemon=True).start()
+        _save_async()
     settings["geo_sync"] = datetime.now().strftime("%d/%m/%Y %H:%M")
     base_k = geo.coord_key(*base)
     if settings.get("distante_baza") != base_k or force_routes:
@@ -1911,8 +1965,39 @@ def api_export():
 
 
 # ---------------------------------------------------------------- setari & unire proprietati
+_save_event = threading.Event()
+_saver_started = False
+_saver_lock = threading.Lock()
+
+
+def _saver_loop():
+    """
+    UN singur fir pentru toate salvarile (backup + orele din Sheet), grupate la cateva secunde.
+    Inainte fiecare modificare pornea un fir nou cu propria conexiune Google -> memoria crestea
+    pana la limita de 512 MB cand se introduceau multe ore una dupa alta.
+    """
+    import gc
+    while True:
+        _save_event.wait()
+        time.sleep(3)                 # grupam modificarile facute una dupa alta
+        _save_event.clear()
+        try:
+            if settings.get("ore_nescrise") and settings.get("coord_sheet"):
+                flush_hours()         # scrie orele si salveaza backup-ul
+            else:
+                save_cache()
+        except Exception as e:  # noqa: BLE001
+            add_log(f"⚠ Salvare: {e}")
+        gc.collect()
+
+
 def _save_async():
-    threading.Thread(target=save_cache, daemon=True).start()
+    global _saver_started
+    with _saver_lock:
+        if not _saver_started:
+            _saver_started = True
+            threading.Thread(target=_saver_loop, daemon=True).start()
+    _save_event.set()
 
 
 def merge_suggestions(props, limit=20):
@@ -2410,12 +2495,19 @@ def _col_letter(i):
 ORE_TAB = "Ore"   # foaia separata din acelasi document, doar cu nume + ore
 
 
+_sheets_local = threading.local()
+
+
 def _sheets_service():
-    info = json.loads(GOOGLE_CREDENTIALS_JSON)
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
-    http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=40))
-    return build("sheets", "v4", http=http, cache_discovery=False)
+    """Conexiunea la Sheets se creeaza o data pe fir si se refoloseste (nu la fiecare scriere)."""
+    svc = getattr(_sheets_local, "service", None)
+    if svc is None:
+        info = json.loads(GOOGLE_CREDENTIALS_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=40))
+        svc = _sheets_local.service = build("sheets", "v4", http=http, cache_discovery=False)
+    return svc
 
 
 def write_hours_to_sheet(items):
@@ -2537,6 +2629,31 @@ def flush_hours():
         save_cache()
 
 
+@app.route("/api/restaureaza-setari", methods=["POST"])
+def api_restore_settings():
+    """Incarci un cache-facturi.json vechi (din istoricul Drive) -> se recupereaza doar SETARILE."""
+    f = request.files.get("fisier")
+    try:
+        raw = (f.read() if f else request.get_data()).decode("utf-8-sig")
+        data = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return jsonify({"ok": False, "error": "Fișierul nu e un backup valid (cache-facturi.json)"}), 400
+    old = data.get("setari") if isinstance(data, dict) else None
+    if not isinstance(old, dict):
+        return jsonify({"ok": False, "error": "Backup-ul nu conține setări"}), 400
+    got = merge_old_settings(old)
+    if not got:
+        return jsonify({"ok": True, "recuperat": [], "msg": "Nimic nou de recuperat din fișierul ăsta"})
+    for k in ("geo_v", "cost_v", "ore_v", "folder_v"):
+        settings[k] = settings.get(k, 0) + 1
+    recompute_all()
+    add_log(f"Setări recuperate din backup-ul vechi ({data.get('saved_at', '?')}): {', '.join(got)}")
+    _save_async()
+    if settings.get("coord_sheet") and "coord_sheet" in got:
+        run_geo_async()
+    return jsonify({"ok": True, "recuperat": got, "salvat_la": data.get("saved_at")})
+
+
 @app.route("/api/ore/rescrie", methods=["POST"])
 def api_ore_rescrie():
     """Rescrie in foaia "Ore" toate orele salvate in aplicatie (ex. dupa ce ai golit foaia)."""
@@ -2570,11 +2687,11 @@ def api_ore():
     settings["ore_v"] = settings.get("ore_v", 0) + 1
     cache["dirty"] = True
     if settings.get("coord_sheet"):
-        flush_hours()
+        hours_status.update(ok=None, msg="Salvat · se scrie în foaia „Ore” în câteva secunde")
     else:
         settings["ore_nescrise"] = [k for k in settings["ore_nescrise"] if k != key]
         hours_status.update(ok=True, msg="Salvat în backup (Sheet-ul cu coordonate nu e configurat)")
-        _save_async()
+    _save_async()     # orele introduse una dupa alta se scriu impreuna, intr-o singura cerere
     return jsonify({"ok": True, "status": dict(hours_status), "ore": ore.get(key)})
 
 
