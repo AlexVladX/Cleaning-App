@@ -24,6 +24,7 @@ ZONES = [(10, "sub 10 km"), (20, "10–20 km"), (35, "20–35 km"), (None, "pest
 NAME_COLS = ("nume", "name", "nom", "casa", "proprietate", "propriete")
 LAT_COLS = ("lat", "latitude", "latitudine")
 LNG_COLS = ("lng", "lon", "long", "longitude", "longitudine")
+ORE_COLS = ("ore", "ore estimate", "ore_estimate", "ore estimat", "ore/persoana", "ore persoana")
 
 
 def parse_latlng(text):
@@ -46,7 +47,8 @@ def _num(v):
 
 def parse_coords_csv(text):
     """
-    Citeste CSV-ul exportat din Sheet. Intoarce lista [{nume, lat, lng}] - nimic altceva.
+    Citeste CSV-ul exportat din Sheet. Intoarce lista [{nume, lat, lng}] (+ "ore" daca exista coloana)
+    - nimic altceva (codurile de acces si restul coloanelor sunt ignorate).
     Coloanele sunt gasite dupa titlu (nume/lat/lng sau echivalente).
     """
     rows = list(csv.reader(io.StringIO(text)))
@@ -56,7 +58,7 @@ def parse_coords_csv(text):
 
     def col(options):
         return next((i for i, h in enumerate(head) if h in options), None)
-    i_name, i_lat, i_lng = col(NAME_COLS), col(LAT_COLS), col(LNG_COLS)
+    i_name, i_lat, i_lng, i_ore = col(NAME_COLS), col(LAT_COLS), col(LNG_COLS), col(ORE_COLS)
     if i_name is None or i_lat is None or i_lng is None:
         return [], f"Nu gasesc coloanele nume/lat/lng (am gasit: {', '.join(rows[0][:8])})"
     out = []
@@ -65,7 +67,11 @@ def parse_coords_csv(text):
             continue
         name, lat, lng = r[i_name].strip(), _num(r[i_lat]), _num(r[i_lng])
         if name and lat is not None and lng is not None and -90 <= lat <= 90 and -180 <= lng <= 180:
-            out.append({"nume": name, "lat": round(lat, 6), "lng": round(lng, 6)})
+            item = {"nume": name, "lat": round(lat, 6), "lng": round(lng, 6)}
+            ore = _num(r[i_ore]) if i_ore is not None and i_ore < len(r) else None
+            if ore is not None and 0 < ore <= 48:
+                item["ore"] = round(ore, 2)
+            out.append(item)
     return out, None
 
 

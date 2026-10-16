@@ -90,6 +90,9 @@ settings = {
     "calendar_id": "",
     "calendar_de_la": "",      # verificarea incepe de la data asta (optional)
     "calendar_ok": [],         # semnalari marcate "E corect"
+    # ore estimate pe casa, pentru O persoana (salvate si in Sheet-ul cu coordonate, coloana "ore")
+    "ore_estimate": {},
+    "ore_nescrise": [],        # case modificate in aplicatie dar inca nescrise in Sheet (se reincearca)
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -456,7 +459,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -1040,7 +1043,18 @@ def sync_geo(force_routes=False):
     del text  # CSV-ul complet (cu eventuale coduri) nu e pastrat nicaieri
     if err:
         raise RuntimeError(err)
+    # orele din Sheet (coloana "ore") sunt sursa de adevar, mai putin cele modificate acum in aplicatie
+    pending = set(settings.get("ore_nescrise") or [])
+    ore = settings.setdefault("ore_estimate", {})
+    for c in coords:
+        k = prop_key(c["nume"])
+        if c.get("ore") and k not in pending:
+            ore[k] = c["ore"]
+    for c in coords:
+        c.pop("ore", None)          # in "coords" pastram doar nume/lat/lng
     settings["coords"] = coords
+    if pending:
+        threading.Thread(target=flush_hours, daemon=True).start()
     settings["geo_sync"] = datetime.now().strftime("%d/%m/%Y %H:%M")
     base_k = geo.coord_key(*base)
     if settings.get("distante_baza") != base_k or force_routes:
@@ -1163,7 +1177,8 @@ def data_key():
     ok = hash((tuple(sorted(settings.get("preturi_ok") or [])), tuple(sorted(settings.get("excluse") or [])),
                tuple(settings.get("cuvinte_produse") or []), tuple(sorted(settings.get("pastrate") or [])),
                json.dumps(settings.get("grupuri_clienti") or [], sort_keys=True), settings.get("folder_v"),
-               settings.get("cost_v"), settings.get("consum"), settings.get("pret_motorina")))
+               settings.get("cost_v"), settings.get("consum"), settings.get("pret_motorina"), settings.get("ore_v"),
+               json.dumps(settings.get("ore_estimate") or {}, sort_keys=True)))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
     return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
@@ -1348,6 +1363,21 @@ def with_monthly_profit(rows, ivs_all):
     return rows
 
 
+def add_hours(props):
+    """Ore estimate (1 persoana) -> ore de lucru in perioada si € pe ora de lucru."""
+    ore = settings.get("ore_estimate") or {}
+    for p in props:
+        h = ore.get(p["key"])
+        p["ore_est"] = h
+        p["ore_lipsa"] = bool(p.get("forfait")) and not h
+        if p["ore_lipsa"]:          # fara orele estimate, calculul ar iesi umflat: nu-l afisam
+            p["ore_lucru"] = p["eur_ora_lucru"] = None
+            continue
+        lucru = (p.get("forfait", 0) * (h or 0)) + (p.get("ore") or 0)
+        p["ore_lucru"] = round(lucru, 1) if lucru else None
+        p["eur_ora_lucru"] = round(p["total"] / lucru, 2) if lucru else None
+
+
 def compute_analytics(period_key="all", client=None):
     """Indicatorii perioadei; cu `client`, clasamentul caselor e doar pentru clientul acela."""
     base = _compute_analytics_base(period_key)
@@ -1378,6 +1408,7 @@ def compute_analytics(period_key="all", client=None):
             p.update({"profit_est": round(p["total"] - cost, 2), "cost_est": round(cost, 2),
                       "marja_est": round((p["total"] - cost) / p["total"] * 100, 1) if p["total"] else None})
     geo_for_props(props)
+    add_hours(props)
     tot = round(sum(p["total"] for p in props), 2)
     val = {**base, "props": props, "client_sel": client,
            "client_info": {"venit": tot, "interventii": sum(p["interventii"] for p in props), "case": len(props),
@@ -1440,6 +1471,7 @@ def _compute_analytics_base(period_key="all"):
         p.update(activity.get(p["key"], {}))
     missing = geo_for_props(props)
     profit = profit_block(ivs, ivs_all, period, props)
+    add_hours(props)
     sheet_names = sorted({c["nume"] for c in settings.get("coords") or []}, key=str.casefold)
 
     clients, top3 = analytics.clients_table(ivs, norm_text)
@@ -1471,6 +1503,7 @@ def _compute_analytics_base(period_key="all"):
             "cheltuieli": profit["cheltuieli"], "profit": profit["profit"], "marja": profit["marja"],
         },
         "profit": profit,
+        "ore_status": dict(hours_status), "ore_sheet": bool(settings.get("coord_sheet")),
         "excluse": excluse,
         "props": props,
         "clients": clients, "top3": top3,
@@ -1530,8 +1563,9 @@ def build_excel(sort="interventii", period_key="all", client=None):
                 "Ouverture", "Ore (la ora)", "€/ora", "Venit (EUR)", "Medie / interventie",
                 "Interventii / luna", "Ultima interventie", "Zile de la ultima", "Inactiva",
                 "Distanta (km)", "Timp drum (min)", "Zona",
-                "Performanta", "Apare in facturi ca", "Profit estimat (EUR)", "Marja estimata %"],
-          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14])
+                "Performanta", "Apare in facturi ca", "Profit estimat (EUR)", "Marja estimata %",
+                "Ore estimate (1 pers.)", "Ore de lucru", "EUR / ora de lucru"],
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14, 14, 12, 14])
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
@@ -1541,9 +1575,9 @@ def build_excel(sort="interventii", period_key="all", client=None):
                     p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "",
                     p.get("distanta_km"), p.get("timp_min"), p.get("zona") or "", p["perf"],
                     ", ".join(p["variante"]) if len(p["variante"]) > 1 else "",
-                    p.get("profit_est"), p.get("marja_est")])
+                    p.get("profit_est"), p.get("marja_est"), p.get("ore_est"), p.get("ore_lucru"), p.get("eur_ora_lucru")])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 23):
+        for col in range(1, 26):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
@@ -2225,6 +2259,127 @@ def api_cheltuieli_settings():
         settings["categorii_cheltuieli"] = cats
     _cost_changed()
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------- ore estimate -> Google Sheet
+_hours_lock = threading.Lock()
+hours_status = {"ok": None, "msg": ""}
+
+
+def _col_letter(i):
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def sheet_row_name(key):
+    """Numele din Sheet al casei (dupa aceleasi reguli ca distantele), sau None."""
+    alias = (settings.get("coord_alias") or {}).get(key)
+    if alias:
+        return alias
+    return next((c["nume"] for c in settings.get("coords") or [] if prop_key(c["nume"]) == key), None)
+
+
+def write_hours_to_sheet(items):
+    """items: [(nume din Sheet, ore)]. Scrie in coloana "ore" (o creeaza daca lipseste)."""
+    sid = sheet_id_from(settings.get("coord_sheet"))
+    if not sid:
+        raise RuntimeError("Sheet-ul cu coordonate nu e configurat")
+    info = json.loads(GOOGLE_CREDENTIALS_JSON)
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=40))
+    svc = build("sheets", "v4", http=http, cache_discovery=False)
+    meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets.properties(title,index)").execute()
+    title = sorted(meta["sheets"], key=lambda x: x["properties"]["index"])[0]["properties"]["title"]
+    t = "'" + title.replace("'", "''") + "'"
+    vals = svc.spreadsheets().values().get(spreadsheetId=sid, range=f"{t}!A1:ZZ").execute().get("values", [])
+    head = [h.strip().casefold() for h in (vals[0] if vals else [])]
+    i_name = next((i for i, h in enumerate(head) if h in geo.NAME_COLS), None)
+    if i_name is None:
+        raise RuntimeError("nu găsesc coloana cu numele caselor în Sheet")
+    i_ore = next((i for i, h in enumerate(head) if h in geo.ORE_COLS), None)
+    data = []
+    if i_ore is None:
+        i_ore = len(vals[0]) if vals else 0
+        data.append({"range": f"{t}!{_col_letter(i_ore)}1", "values": [["ore"]]})
+    rows = {}
+    for r, row in enumerate(vals[1:], start=2):
+        if i_name < len(row) and row[i_name].strip():
+            rows.setdefault(norm_text(row[i_name]), r)
+    missing = []
+    for nume, ore in items:
+        r = rows.get(norm_text(nume))
+        if not r:
+            missing.append(nume)
+            continue
+        data.append({"range": f"{t}!{_col_letter(i_ore)}{r}", "values": [[ore if ore else ""]]})
+    if data:
+        svc.spreadsheets().values().batchUpdate(spreadsheetId=sid, body={"valueInputOption": "RAW", "data": data}).execute()
+    return missing
+
+
+def flush_hours():
+    """Scrie in Sheet orele modificate in aplicatie (si reincearca ce nu s-a putut scrie)."""
+    with _hours_lock:
+        pending = list(settings.get("ore_nescrise") or [])
+        if not pending:
+            return
+        ore = settings.get("ore_estimate") or {}
+        items, no_row = [], []
+        for k in pending:
+            nume = sheet_row_name(k)
+            (items.append((nume, ore.get(k))) if nume else no_row.append(k))
+        try:
+            missing = write_hours_to_sheet(items) if items else []
+            settings["ore_nescrise"] = []        # scrise (sau fara rand in Sheet: raman doar in backup)
+            n = len(items) - len(missing)
+            extra = len(no_row) + len(missing)
+            hours_status.update(ok=True, msg=f"✓ Scris în Sheet ({n})" + (f" · {extra} doar în backup (casa nu e în Sheet)" if extra else ""))
+            add_log(f"Ore estimate: {n} scrise în Sheet" + (f", {extra} doar în backup" if extra else ""))
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if "has not been used" in msg or "disabled" in msg or "accessNotConfigured" in msg:
+                msg = "Google Sheets API nu e activat în proiectul service account-ului"
+            elif "PERMISSION_DENIED" in msg or "403" in msg or "permission" in msg.lower():
+                msg = "service account-ul nu are drept de Editor pe Sheet"
+            hours_status.update(ok=False, msg=f"Salvat în backup; nescris încă în Sheet ({msg}) — se reîncearcă")
+            add_log(f"⚠ Ore estimate: {msg}")
+        cache["dirty"] = True
+        save_cache()
+
+
+@app.route("/api/ore", methods=["POST"])
+def api_ore():
+    d = request.json or {}
+    key = (d.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "Lipsește casa"}), 400
+    raw = str(d.get("ore") if d.get("ore") is not None else "").replace(",", ".").strip()
+    ore = settings.setdefault("ore_estimate", {})
+    if raw == "":
+        ore.pop(key, None)
+    else:
+        try:
+            v = float(raw)
+        except ValueError:
+            return jsonify({"ok": False, "error": "Număr de ore invalid"}), 400
+        if not 0 < v <= 48:
+            return jsonify({"ok": False, "error": "Orele trebuie să fie între 0 și 48"}), 400
+        ore[key] = round(v, 2)
+    settings["ore_nescrise"] = sorted(set(settings.get("ore_nescrise") or []) | {key})
+    settings["ore_v"] = settings.get("ore_v", 0) + 1
+    cache["dirty"] = True
+    if settings.get("coord_sheet") and sheet_row_name(key):
+        flush_hours()
+    else:
+        settings["ore_nescrise"] = [k for k in settings["ore_nescrise"] if k != key]
+        hours_status.update(ok=True, msg="Salvat în backup (casa nu e în Sheet-ul cu coordonate)")
+        _save_async()
+    return jsonify({"ok": True, "status": dict(hours_status), "ore": ore.get(key)})
 
 
 # ---------------------------------------------------------------- Google Calendar
