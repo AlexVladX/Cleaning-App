@@ -1348,7 +1348,49 @@ def with_monthly_profit(rows, ivs_all):
     return rows
 
 
-def compute_analytics(period_key="all"):
+def compute_analytics(period_key="all", client=None):
+    """Indicatorii perioadei; cu `client`, clasamentul caselor e doar pentru clientul acela."""
+    base = _compute_analytics_base(period_key)
+    client = (client or "").strip()
+    if not client:
+        return base
+    key = (data_key(), period_key, date.today().isoformat(), "client", norm_text(client))
+    with _an_lock:
+        hit = _an_cache.get(key)
+        if hit:
+            return hit[1]
+    with state_lock:
+        ivs_raw = state["interventii"]
+    ivs_all = analysis_ivs(ivs_raw)[0]
+    ck = norm_text(client)
+    ivs_all_c = [iv for iv in ivs_all if norm_text(iv.get("client") or "") == ck]
+    ivs_c = analytics.filter_ivs(ivs_all_c, base["period"])
+    months = analytics.period_months(ivs_all, base["period"])
+    props = aggregate_props(ivs_c)
+    activity = analytics.property_activity(ivs_c, ivs_all_c, prop_key, len(months))
+    full = {p["key"]: p for p in base["props"]}
+    for p in props:
+        p.update(activity.get(p["key"], {}))
+        f = full.get(p["key"]) or {}
+        # profitul estimat al casei, proportional cu partea clientului din incasarile casei
+        if f.get("cost_est") is not None and f.get("total"):
+            cost = f["cost_est"] * p["total"] / f["total"]
+            p.update({"profit_est": round(p["total"] - cost, 2), "cost_est": round(cost, 2),
+                      "marja_est": round((p["total"] - cost) / p["total"] * 100, 1) if p["total"] else None})
+    geo_for_props(props)
+    tot = round(sum(p["total"] for p in props), 2)
+    val = {**base, "props": props, "client_sel": client,
+           "client_info": {"venit": tot, "interventii": sum(p["interventii"] for p in props), "case": len(props),
+                           "procent": round(tot / base["metrics"]["venit"] * 100, 1) if base["metrics"]["venit"] else 0,
+                           "inactive": sum(1 for p in props if p.get("inactiva"))}}
+    with _an_lock:
+        while len(_an_cache) >= 12:
+            del _an_cache[next(iter(_an_cache))]
+        _an_cache[key] = (ivs_raw, val)
+    return val
+
+
+def _compute_analytics_base(period_key="all"):
     """
     Toti indicatorii pentru perioada aleasa. Rezultatul e pastrat in memorie pana se schimba
     datele/perioada/ziua — dashboard-ul il cere des, dar calculul se face doar cand e nevoie.
@@ -1459,10 +1501,10 @@ def compute_analytics(period_key="all"):
     return val
 
 
-def build_excel(sort="interventii", period_key="all"):
+def build_excel(sort="interventii", period_key="all", client=None):
     with state_lock:
         files = [dict(f) for f in state["files"].values()]
-    an = compute_analytics(period_key)
+    an = compute_analytics(period_key, client)
     interventii = analytics.filter_ivs(analysis_ivs(state["interventii"])[0], an["period"])
     props = sorted(an["props"], key=SORT_KEYS.get(sort, SORT_KEYS["interventii"]), reverse=True)
 
@@ -1611,7 +1653,8 @@ def build_excel(sort="interventii", period_key="all"):
             ws8.cell(ws8.max_row, 1).number_format = "DD/MM/YYYY"
 
     # perioada exportata, vizibila in titlul primei foi
-    ws1.title = f"Clasament {an['period']['label']}"[:31].replace("/", "-")
+    ws1.title = (f"{an['client_sel'][:14]} {an['period']['label']}" if an.get("client_sel")
+                 else f"Clasament {an['period']['label']}")[:31].replace("/", "-")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -1670,7 +1713,7 @@ def api_state():
 
 @app.route("/api/analytics")
 def api_analytics():
-    return jsonify(compute_analytics(request.args.get("period", "all")))
+    return jsonify(compute_analytics(request.args.get("period", "all"), request.args.get("client")))
 
 
 @app.route("/api/factura/<file_id>")
@@ -1698,7 +1741,8 @@ def api_monitor():
 
 @app.route("/api/export")
 def api_export():
-    buf = build_excel(request.args.get("sort", "interventii"), request.args.get("period", "all"))
+    buf = build_excel(request.args.get("sort", "interventii"), request.args.get("period", "all"),
+                      request.args.get("client"))
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
