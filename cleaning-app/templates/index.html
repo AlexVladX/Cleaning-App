@@ -692,6 +692,9 @@ function renderState() {
       pf.classList.remove('indet'); pf.style.width = `${Math.round(sc.done / sc.total * 100)}%`;
     }
   }
+  if (!sc.active && !(s.metrics || {}).files && sc.retry_at && sc.retry_at > s.now) {
+    stxt.textContent = `Datele nu s-au încărcat încă — reîncerc automat în ${Math.max(1, Math.round((sc.retry_at - s.now) / 60))} min (sau apasă Scanare manuală)`;
+  }
   schedule(sc.active ? 2000 : 5000);
   $('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
   $('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
@@ -785,11 +788,13 @@ const PCOLS = [
   {id: 'frecventa', label: 'Pe lună', hint: 'intervenții pe lună în perioada aleasă', sort: 'frecventa_luna', w: 80, def: true, cell: p => p.frecventa_luna != null ? num(p.frecventa_luna) : '—'},
   {id: 'total', label: 'Încasări', sort: 'total', w: 110, def: true, cls: 'money', cell: p => eur(p.total)},
   {id: 'medie', label: '€ / int.', hint: 'încasări împărțit la numărul de intervenții', sort: 'medie', w: 96, def: true, cell: p => eur2(p.medie)},
-  {id: 'ore_est', label: 'Ore / menaj', hint: 'ore estimate pentru O persoană la un menaj forfait (editabil, se salvează în Sheet)', sort: 'ore_est', w: 104, def: true, raw: true,
-   cell: p => p.forfait ? `<input class="ore-in${p.ore_est ? '' : ' miss'}" type="text" inputmode="decimal" data-ore="${esc(p.key)}" value="${p.ore_est ?? ''}" placeholder="?" aria-label="Ore estimate pentru ${esc(p.name)}" title="Ore pentru o persoană, la un menaj">` : '<span class="hint" title="Doar menaje la oră">la oră</span>'},
-  {id: 'ore_lucru', label: 'Ore lucru', hint: 'în perioadă: menaje forfait × ore / menaj + orele facturate la oră', sort: 'ore_lucru', w: 96, def: true, cell: p => p.ore_lucru != null ? num(p.ore_lucru) + ' h' : (p.ore_lipsa ? '<span class="hint">completează orele</span>' : '—')},
-  {id: 'eur_ora', label: '€ / oră', hint: 'încasări împărțit la orele de lucru (cât câștigi pe o oră de muncă a unei persoane)', sort: 'eur_ora_lucru', w: 96, def: true,
+  {id: 'ore_est', label: 'Ore / menaj', hint: 'timpul REAL al unei persoane la un menaj complet (Standard / Ouverture), oricum ar fi facturat (forfait sau la oră). Editabil, se salvează în Sheet, foaia „Ore”', sort: 'ore_est', w: 104, def: true, raw: true,
+   cell: p => p.menaje_complete ? `<input class="ore-in${p.ore_est ? '' : ' miss'}" type="text" inputmode="decimal" data-ore="${esc(p.key)}" value="${p.ore_est ?? ''}" placeholder="?" aria-label="Ore estimate pentru ${esc(p.name)}" title="Timpul real al unei persoane la un menaj complet">` : '<span class="hint" title="Casa are doar menaje Intermédiaire">doar interm.</span>'},
+  {id: 'ore_lucru', label: 'Ore lucru', hint: 'în perioadă: menaje complete (Standard / Ouverture) × ore / menaj. Intermédiaire-urile nu intră', sort: 'ore_lucru', w: 96, def: true, cell: p => p.ore_lucru != null ? num(p.ore_lucru) + ' h' + `<span class="sub-num">${p.menaje_complete} menaje</span>` : (p.ore_lipsa ? '<span class="hint">completează orele</span>' : '—')},
+  {id: 'eur_ora', label: '€ / oră', hint: 'încasările din menajele complete (Standard / Ouverture) împărțite la orele de lucru. Intermédiaire-urile sunt separate', sort: 'eur_ora_lucru', w: 96, def: true,
    cell: p => p.eur_ora_lucru != null ? `<b class="${p.eur_ora_lucru >= 25 ? 'pos' : p.eur_ora_lucru < 18 ? 'negv' : ''}">${eur2(p.eur_ora_lucru)}</b>` : '—'},
+  {id: 'interm', label: 'Intermédiaire', hint: 'încasările din menajele Intermédiaire, separat de € / oră', sort: 'interm_venit', w: 116, def: true,
+   cell: p => p.interm_n ? `${eur(p.interm_venit)}<span class="sub-num">${p.interm_n} ${p.interm_n === 1 ? 'menaj' : 'menaje'}${p.interm_ore ? ' · ' + num(p.interm_ore) + ' h facturate' : ''}</span>` : '—'},
   {id: 'distanta', label: 'Distanță', hint: 'pe drum, de la bază', sort: 'distanta_km', w: 96, def: true,
    cell: p => p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'},
   {id: 'zona', label: 'Zonă', sort: null, w: 96, def: false, cell: p => p.zona ? esc(p.zona) : '—'},
@@ -800,7 +805,7 @@ const PCOLS = [
   {id: 'ultima', label: 'Ultima intervenție', sort: 'zile_de_la_ultima', w: 140, def: true, left: true,
    cell: p => p.ultima ? `${fmtDate(p.ultima)}<span class="sub-num">${p.zile_de_la_ultima} zile${p.interval_tipic ? ` · de obicei la ${p.interval_tipic} z.` : ''}</span>` : '—'},
 ];
-Object.assign(SORTS, {ore_est: p => [p.ore_est ?? -1, p.total], ore_lucru: p => [p.ore_lucru ?? -1, p.total],
+Object.assign(SORTS, {interm_venit: p => [p.interm_venit ?? 0, p.total], ore_est: p => [p.ore_est ?? -1, p.total], ore_lucru: p => [p.ore_lucru ?? -1, p.total],
   eur_ora_lucru: p => [p.eur_ora_lucru ?? -1, p.total], motorina_est: p => [p.motorina_est ?? -1, p.total], pret_ora: p => [p.pret_ora ?? -1, p.total]});
 let visCols;
 try { visCols = JSON.parse(store.get('propCols', 'null')); } catch (e) { visCols = null; }
@@ -866,10 +871,10 @@ function renderProps() {
 $('prop-head').addEventListener('click', e => { const th = e.target.closest('th[data-sort]'); if (th) setSort(th.dataset.sort); });
 // ore estimate: salvare la Enter / iesire din camp; coloanele derivate se recalculeaza pe loc
 function recalcHours(p) {
-  const h = p.ore_est, lucru = (p.forfait || 0) * (h || 0) + (p.ore || 0);
-  p.ore_lipsa = !!p.forfait && !h;
-  p.ore_lucru = !p.ore_lipsa && lucru ? Math.round(lucru * 10) / 10 : null;
-  p.eur_ora_lucru = !p.ore_lipsa && lucru ? Math.round(p.total / lucru * 100) / 100 : null;
+  const h = p.ore_est, n = p.menaje_complete || 0;
+  p.ore_lipsa = n > 0 && !h;
+  p.ore_lucru = n && h ? Math.round(n * h * 10) / 10 : null;
+  p.eur_ora_lucru = n && h ? Math.round(p.venit_complet / (n * h) * 100) / 100 : null;
 }
 async function saveHours(inp) {
   const key = inp.dataset.ore, val = inp.value.trim().replace(',', '.');
