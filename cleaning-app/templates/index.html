@@ -486,7 +486,7 @@
         <label style="flex:3 1 280px">ID-ul calendarului<input id="g-cid" placeholder="abc123…@group.calendar.google.com"></label>
         <label>Verifică de la (opțional)<input type="date" id="g-from"></label>
         <button class="btn btn-dark" type="button" id="g-save">Salvează și citește calendarul</button>
-        <span class="hint" id="g-status" style="flex-basis:100%"></span>
+        <span class="hint" id="gc-status" style="flex-basis:100%"></span>
       </div>
       <div id="g-body" style="display:none">
         <div class="headline" id="g-head"></div>
@@ -568,7 +568,8 @@
         <div><label for="g-sheet">Sheet-ul cu coordonatele caselor</label><div class="hint">Linkul sau ID-ul Sheet-ului.</div><input id="g-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
         <div style="grid-column:1/-1"><button class="btn btn-dark" onclick="saveGeo(false)">Salvează și calculează distanțele</button>
           <button class="btn" onclick="saveGeo(true)" title="Refă toate traseele de la zero">Recalculează toate traseele</button>
-          <span class="saved" id="g-saved"></span><div class="hint" id="g-status" style="margin-top:6px"></div></div>
+          <span class="saved" id="g-saved"></span><div class="hint" id="g-status" style="margin-top:6px"></div>
+          <div class="hint" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="o-status"></span><button class="btn btn-sm" type="button" id="o-rewrite">↻ Rescrie toate orele în foaia „Ore”</button></div></div>
         <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><label>Posibile dubluri (nume foarte asemănătoare)</label><div class="hint">Verifică fiecare pereche: „Unește” dacă e aceeași casă, „Nu e dublură” ca să nu mai apară.</div><div class="sugg-list" id="sugg-list"></div></div>
       </div>
     </details>
@@ -1493,7 +1494,7 @@ function renderGcal() {
   $('g-sa').textContent = G.service_account || 'email-ul service account-ului';
   const ci = $('g-cid'); if (document.activeElement !== ci) ci.value = G.calendar_id || '';
   const fi = $('g-from'); if (document.activeElement !== fi) fi.value = G.de_la_setat || '';
-  $('g-status').innerHTML = G.eroare ? `<span style="color:var(--bad-ink)">⚠ ${esc(G.eroare)}</span>`
+  $('gc-status').innerHTML = G.eroare ? `<span style="color:var(--bad-ink)">⚠ ${esc(G.eroare)}</span>`
     : G.citit ? `✓ ${G.evenimente} evenimente citite · ${esc(G.citit)} · se recitește la fiecare scanare` : (G.configurat ? 'Încă necitit.' : '');
   $('g-body').style.display = G.configurat && G.citit ? '' : 'none';
   if (!G.citit) return;
@@ -1529,7 +1530,7 @@ $('g-list').addEventListener('click', async e => {
   if (await post('/api/calendar/ok', {ids: [id], undo: !!un})) { await fetchGcal(); if (ok) showToast('Marcat „E corect”', async () => { await post('/api/calendar/ok', {ids: [id], undo: true}); fetchGcal(); }); }
 });
 $('g-save').addEventListener('click', async () => {
-  $('g-status').textContent = 'Citesc calendarul…';
+  $('gc-status').textContent = 'Citesc calendarul…';
   const j = await post('/api/calendar', {calendar_id: $('g-cid').value, de_la: $('g-from').value});
   if (j) { G = j; renderGcal(); }
 });
@@ -1585,9 +1586,16 @@ async function loadSettings(data) {
   const gb = $('g-baza'); if (document.activeElement !== gb) gb.value = s.baza || '';
   const gs = $('g-sheet'); if (document.activeElement !== gs) gs.value = s.coord_sheet || '';
   $('g-status').textContent = s.coord_sheet ? (s.n_coords ? `${s.n_coords} case citite din Sheet · ultima citire ${s.geo_sync || '—'}` : 'Sheet configurat, încă necitit') : 'Sheet necunoscut încă.';
+  $('o-status').textContent = `Ore pe casă salvate în aplicație: ${s.n_ore || 0}` + (s.ore_status && s.ore_status.msg ? ` · ${s.ore_status.msg}` : '');
   $('m-list').innerHTML = (s.unite || []).map(u => `<div class="merge-item"><span>${esc(u.din_nume || u.din)} → <b>${esc(u.in_nume)}</b></span><button class="link-btn" data-unmerge="${esc(u.din)}">anulează</button></div>`).join('');
 }
 $('m-list').addEventListener('click', e => { const b = e.target.closest('[data-unmerge]'); if (b) unmerge(b.dataset.unmerge); });
+$('o-rewrite').addEventListener('click', async () => {
+  $('o-status').textContent = 'Scriu orele în Sheet…';
+  const j = await post('/api/ore/rescrie', {});
+  if (j) { showToast(`${j.n} case · ${j.status && j.status.msg ? j.status.msg : 'gata'}`, null); loadSettings(); }
+  else loadSettings();
+});
 async function saveGeo(force) {
   const j = await post('/api/geo', {baza: $('g-baza').value, coord_sheet: $('g-sheet').value, force});
   if (j) { loadSettings(j); $('g-saved').textContent = '✓ Salvat · calculez distanțele (urmărește jurnalul)…'; setTimeout(() => { $('g-saved').textContent = ''; loadSettings(); }, 6000); }
