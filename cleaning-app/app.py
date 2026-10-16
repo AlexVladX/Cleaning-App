@@ -546,8 +546,13 @@ def load_cache():
     try:
         set_stage("descarc backup-ul")
         raw = download_pdf(fid).read().decode("utf-8").strip()
-        data = json.loads(raw) if raw else {}
     except Exception as e:
+        # problema de retea / Google: NU refacem backup-ul de la zero (s-ar pierde tot), reincercam
+        cache["loaded"] = False
+        raise RuntimeError(f"nu am putut descarca backup-ul ({e}) — reincerc automat") from e
+    try:
+        data = json.loads(raw) if raw else {}
+    except ValueError as e:
         add_log(f"⚠ Backup ilizibil ({e}) — il refac de la zero")
         cache["dirty"] = True
         return
@@ -567,17 +572,25 @@ def load_cache():
                                 for iv in f.get("interventii") or []]
     recompute_all()
     cache["dirty"] = False
+    cache["known_files"] = len(files)
     add_log(f"Backup incarcat: {len(files)} facturi (salvat {data.get('saved_at', '?')})")
 
 
-def save_cache(force=False):
+def save_cache(force=False, allow_empty=False):
     if not cache["enabled"] or not (cache["dirty"] or force):
         return
+    if not cache["loaded"]:
+        return          # backup-ul nu a fost inca citit: nu-l suprascriem cu o stare incompleta
     with state_lock:
         files = {fid: {k: f.get(k) for k in CACHE_KEYS}
                  for fid, f in state["files"].items()
                  if f.get("status") in ("done", "warning", "duplicate", "error")}
-        cache["dirty"] = False
+        refuse = not files and cache.get("known_files") and not allow_empty
+        if not refuse:
+            cache["dirty"] = False
+    if refuse:   # (mesajul in afara lacatului: add_log il foloseste si el)
+        add_log("⚠ Protecție: nu suprascriu backup-ul cu o listă goală de facturi")
+        return
     payload = json.dumps({"parser_version": PARSER_VERSION,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
                           "setari": {k: settings[k] for k in RULE_KEYS + PERSIST_KEYS},
@@ -592,6 +605,8 @@ def save_cache(force=False):
     except Exception as e:
         cache["dirty"] = True
         add_log(f"⚠ Nu am putut salva backup-ul: {e}")
+        return
+    cache["known_files"] = len(files)
 
 
 # ---------------------------------------------------------------- rezerva AI
@@ -825,12 +840,12 @@ def scan_folder(retry_errors=False):
     """
     if not FOLDER_ID:
         add_log("DRIVE_FOLDER_ID nu e setat")
-        return
+        return False
     if not scan_lock.acquire(blocking=False):
         with state_lock:
             stage, since = state["scan"].get("stage"), state["scan"].get("stage_since") or time.time()
         add_log(f"Scanare deja in curs — pasul curent: {stage} ({time.time() - since:.0f}s)")
-        return
+        return None
     scan_id = time.time()
     with state_lock:
         state["scan"] = {"active": True, "phase": "listare", "done": 0, "total": 0,
@@ -847,6 +862,10 @@ def scan_folder(retry_errors=False):
             state["scan"]["phase"] = "procesare"
             known = {fid: dict(f) for fid, f in state["files"].items()}  # copie, nu referinte
         in_drive = {f["id"] for f in files}
+        if not files and known:
+            # Drive a intors 0 PDF-uri desi aveam facturi: aproape sigur o problema temporara de acces
+            add_log("⚠ Drive a întors 0 facturi (acces sau rețea) — nu șterg nimic din aplicație, reîncerc")
+            return False
 
         # 1) facturi sterse din Drive -> le scoatem si din aplicatie
         removed = [fid for fid, f in known.items()
@@ -911,10 +930,12 @@ def scan_folder(retry_errors=False):
         if settings.get("calendar_id"):
             read_calendar()
         save_cache()
+        return True
     except Exception as e:
         add_log(f"Eroare scanare: {e}")
         _drive_local.service = None  # la urmatoarea scanare ne reconectam de la zero
         save_cache()
+        return False
     finally:
         with state_lock:
             state["scan"]["active"] = False
@@ -943,9 +964,30 @@ def start_background():
     add_log("Aplicatie pornita (parser direct, AI doar ca rezerva).")
     if FOLDER_ID:
         # asteptam ca serverul sa termine de pornit inainte de prima conexiune la Google
-        t = threading.Timer(5.0, scan_folder, kwargs={"retry_errors": True})
+        t = threading.Timer(5.0, boot_scan)
         t.daemon = True
         t.start()
+
+
+BOOT_RETRY = [30, 90, 180, 300, 600]   # secunde intre reincercari, apoi la 15 minute
+
+
+def boot_scan(attempt=0):
+    """
+    Scanarea de la pornire (dupa somnul Render sau un deploy). Daca Google nu raspunde,
+    reincearca singura — inainte ramaneai cu 0 peste tot pana dadeai Scanare manuala.
+    """
+    ok = scan_folder(retry_errors=(attempt == 0))
+    if ok or (ok is None and cache["loaded"]):
+        return
+    delay = BOOT_RETRY[attempt] if attempt < len(BOOT_RETRY) else 900
+    add_log(f"Datele nu s-au putut încărca — reîncerc automat în {delay // 60 or delay} "
+            f"{'min' if delay >= 60 else 's'} (încercarea {attempt + 2})")
+    with state_lock:
+        state["scan"]["retry_at"] = time.time() + delay
+    t = threading.Timer(delay, boot_scan, kwargs={"attempt": attempt + 1})
+    t.daemon = True
+    t.start()
 
 
 # ---------------------------------------------------------------- agregari
@@ -960,12 +1002,15 @@ def aggregate_props(interventii):
         key = prop_key(raw)
         p = props.setdefault(key, {"key": key, "interventii": 0, "forfait": 0, "ore": 0.0,
                                    "total": 0.0, "venit_ora": 0.0, "clients": set(), "ultima": "",
-                                   "variante": {}, "tipuri": {}})
+                                   "variante": {}, "tipuri": {}, "venit_tip": {}, "ore_tip": {}})
         p["interventii"] += 1
         p["variante"][raw] = p["variante"].get(raw, 0) + 1
         tip = iv.get("tip_menaj") or canonical_type(iv.get("tip_serviciu"))
         p["tipuri"][tip] = p["tipuri"].get(tip, 0) + 1
         suma = float(iv.get("suma") or 0)
+        p["venit_tip"][tip] = p["venit_tip"].get(tip, 0.0) + suma
+        if iv.get("tip_facturare") == "heure":
+            p["ore_tip"][tip] = p["ore_tip"].get(tip, 0.0) + float(iv.get("ore") or iv.get("qty") or 0)
         if iv.get("tip_facturare") == "heure":
             p["ore"] += float(iv.get("ore") or iv.get("qty") or 0)
             p["venit_ora"] += suma
@@ -986,6 +1031,8 @@ def aggregate_props(interventii):
         p["client"] = ", ".join(sorted(p.pop("clients")))
         p["ore"] = round(p["ore"], 2)
         p["total"] = round(p["total"], 2)
+        p["venit_tip"] = {k: round(v, 2) for k, v in p["venit_tip"].items()}
+        p["ore_tip"] = {k: round(v, 2) for k, v in p["ore_tip"].items()}
         p["medie"] = round(p["total"] / p["interventii"], 2) if p["interventii"] else 0
         p["pret_ora"] = round(p.pop("venit_ora") / p["ore"], 2) if p["ore"] else None
         p["pct"] = round(p["interventii"] / max_c * 100)
@@ -1372,18 +1419,30 @@ def with_monthly_profit(rows, ivs_all):
 
 
 def add_hours(props):
-    """Ore estimate (1 persoana) -> ore de lucru in perioada si € pe ora de lucru."""
+    """
+    Ore estimate = timpul REAL al unei persoane la un menaj complet (Standard / Ouverture / Fermeture),
+    indiferent daca menajul e facturat forfait sau la ora (orele facturate sunt dupa piata, nu timpul real).
+    € / ora = incasarile din menajele complete / (menaje complete x ore estimate).
+    Intermédiaire-urile sunt alt tip de munca: se arata separat si nu intra in € / ora.
+    """
     ore = settings.get("ore_estimate") or {}
     for p in props:
         h = ore.get(p["key"])
-        p["ore_est"] = h
-        p["ore_lipsa"] = bool(p.get("forfait")) and not h
-        if p["ore_lipsa"]:          # fara orele estimate, calculul ar iesi umflat: nu-l afisam
+        tipuri, venit_tip = p.get("tipuri") or {}, p.get("venit_tip") or {}
+        n_int = tipuri.get("intermediaire", 0)
+        n_complet = sum(n for t, n in tipuri.items() if t != "intermediaire")
+        v_int = venit_tip.get("intermediaire", 0.0)
+        v_complet = round(p["total"] - v_int, 2)
+        p.update({"ore_est": h, "menaje_complete": n_complet, "venit_complet": v_complet,
+                  "interm_n": n_int, "interm_venit": round(v_int, 2),
+                  "interm_ore": (p.get("ore_tip") or {}).get("intermediaire"),
+                  "ore_lipsa": n_complet > 0 and not h})
+        if n_complet and h:
+            lucru = n_complet * h
+            p["ore_lucru"] = round(lucru, 1)
+            p["eur_ora_lucru"] = round(v_complet / lucru, 2)
+        else:                       # fara ore estimate (sau doar intermediaire): nu calculam
             p["ore_lucru"] = p["eur_ora_lucru"] = None
-            continue
-        lucru = (p.get("forfait", 0) * (h or 0)) + (p.get("ore") or 0)
-        p["ore_lucru"] = round(lucru, 1) if lucru else None
-        p["eur_ora_lucru"] = round(p["total"] / lucru, 2) if lucru else None
 
 
 def compute_analytics(period_key="all", client=None):
@@ -1572,8 +1631,9 @@ def build_excel(sort="interventii", period_key="all", client=None):
                 "Interventii / luna", "Ultima interventie", "Zile de la ultima", "Inactiva",
                 "Distanta (km)", "Timp drum (min)", "Zona",
                 "Performanta", "Apare in facturi ca", "Profit estimat (EUR)", "Marja estimata %",
-                "Ore estimate (1 pers.)", "Ore de lucru", "EUR / ora de lucru"],
-          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14, 14, 12, 14])
+                "Ore / menaj (1 pers.)", "Ore de lucru (menaje complete)", "EUR / ora (menaje complete)",
+                "Venit Intermediaire", "Ore Intermediaire"],
+          [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14, 14, 16, 16, 14, 13])
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
@@ -1583,9 +1643,10 @@ def build_excel(sort="interventii", period_key="all", client=None):
                     p.get("zile_de_la_ultima"), "da" if p.get("inactiva") else "",
                     p.get("distanta_km"), p.get("timp_min"), p.get("zona") or "", p["perf"],
                     ", ".join(p["variante"]) if len(p["variante"]) > 1 else "",
-                    p.get("profit_est"), p.get("marja_est"), p.get("ore_est"), p.get("ore_lucru"), p.get("eur_ora_lucru")])
+                    p.get("profit_est"), p.get("marja_est"), p.get("ore_est"), p.get("ore_lucru"), p.get("eur_ora_lucru"),
+                    p.get("interm_venit") or None, p.get("interm_ore")])
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
-        for col in range(1, 26):
+        for col in range(1, 28):
             c = ws1.cell(i + 1, col)
             c.border = thin
             if fill:
@@ -2283,14 +2344,6 @@ def _col_letter(i):
     return s
 
 
-def sheet_row_name(key):
-    """Numele din Sheet al casei (dupa aceleasi reguli ca distantele), sau None."""
-    alias = (settings.get("coord_alias") or {}).get(key)
-    if alias:
-        return alias
-    return next((c["nume"] for c in settings.get("coords") or [] if prop_key(c["nume"]) == key), None)
-
-
 ORE_TAB = "Ore"   # foaia separata din acelasi document, doar cu nume + ore
 
 
@@ -2371,14 +2424,10 @@ def read_hours_tab(sid):
     return out
 
 
-def _house_display_name(key):
+def _house_display_names():
     with state_lock:
         ivs = state["interventii"]
-    for iv in ivs:
-        n = re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip())
-        if n and prop_key(n) == key:
-            return n
-    return None
+    return {p["key"]: p["name"] for p in aggregate_props(split_ivs(ivs)[0])}
 
 
 def flush_hours():
@@ -2389,8 +2438,11 @@ def flush_hours():
             return
         ore = settings.get("ore_estimate") or {}
         items, no_row = [], []
+        names = _house_display_names()
         for k in pending:
-            nume = sheet_row_name(k) or _house_display_name(k)
+            # numele casei din facturi (nu cel din foaia cu coordonate): case diferite din aceeasi
+            # rezidenta au aceleasi coordonate, dar ore si tarife diferite -> fiecare pe randul ei
+            nume = names.get(k)
             (items.append((nume, ore.get(k))) if nume else no_row.append(k))
         try:
             missing = write_hours_to_sheet(items) if items else []
@@ -2750,7 +2802,7 @@ def api_reset():
             state.update({"files": {}, "interventii": [], "last_scan": None,
                           "monitoring": False, "log": []})
             state["scan"].update({"done": 0, "total": 0, "eta": None})
-        save_cache(force=True)
+        save_cache(force=True, allow_empty=True)
     finally:
         scan_lock.release()
     add_log("Reset complet (inclusiv backup-ul). Apasati Scanare pentru a reciti facturile.")
