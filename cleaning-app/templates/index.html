@@ -24,6 +24,9 @@
   .topbar .sub-brand{font-weight:400;color:#9FD9CF;font-size:13px}
   .topbar .status-txt{color:#B9D6D2}
   .topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
+  .top-scan{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none}
+  .top-scan:hover{background:rgba(255,255,255,.18)}
+  @media(max-width:520px){.top-scan-t{display:none}}
   .dot{width:8px;height:8px;border-radius:50%;background:#6B7280;flex:none}
   .dot.live{background:#10B981;animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -42,10 +45,10 @@
   .period label{font-size:12px;color:var(--muted)}
   .period select{border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
 
-  .metric-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+  .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .metric[hidden]{display:none}
   .hero-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-  @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-  @media(max-width:640px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero-grid{grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:640px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric-grid .metric:first-child{grid-column:1/-1}.hero-grid{grid-template-columns:minmax(0,1fr)}}
   .metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;border-top:4px solid var(--acc,var(--line));position:relative}
   .metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px;font-weight:600}
   .metric-label .ic{width:24px;height:24px;border-radius:7px;background:var(--acc-bg,var(--line-2));color:var(--acc,var(--muted));display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -274,9 +277,21 @@
   .cp-row .base{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap}
   .cp-row .mv{border:1px solid var(--line);background:#fff;border-radius:5px;width:24px;height:24px;cursor:pointer;color:var(--ink);flex:none}
   .cp-row .mv:disabled{opacity:.3;cursor:default}
-  .cdot{width:18px;height:18px;border-radius:50%;border:1.5px dashed #B8C4C2;cursor:pointer;flex:none;padding:0}
+  .cdot{width:22px;height:22px;border-radius:50%;border:1.5px dashed #B8C4C2;cursor:pointer;flex:none;padding:0;font-size:10px;color:var(--muted);line-height:1}
+  .cp-row button.nm{border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:2px 0}
+  .cp-row button.nm:hover{color:var(--brand-2)}
+  .cp-f{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
+  .cp-f>span:first-child{width:52px;font-size:11px;color:var(--muted);flex:none}
+  .cp-f input{flex:1;min-width:0;border:1px solid #D1D5DB;border-radius:6px;padding:5px 7px;font-size:13px}
+  .cc-sws{display:flex;flex-wrap:wrap;gap:5px}
+  .wbtn{border:1px solid var(--line);background:#fff;border-radius:6px;width:28px;height:26px;cursor:pointer;font-size:14px}
+  .wval{font-size:12px;min-width:52px;text-align:center}
+  th .rsz{position:absolute;top:0;right:0;bottom:0;width:7px;cursor:col-resize;z-index:2}
+  th .rsz:hover,body.col-resizing th .rsz{background:linear-gradient(90deg,transparent 3px,var(--brand) 3px,var(--brand) 4px,transparent 4px)}
+  body.col-resizing,body.col-resizing *{cursor:col-resize!important;user-select:none}
+  @media(pointer:coarse){th .rsz{display:none}}
   .cdot.set{border:2px solid #fff;box-shadow:0 0 0 1px #94A3B8}
-  .cc-pal{display:flex;flex-wrap:wrap;gap:6px;padding:6px 4px 8px 26px;align-items:center}
+  .cc-pal{display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;margin:2px 0 6px 22px;background:var(--line-2);border-radius:10px}
   .cc-sw{width:22px;height:22px;border-radius:6px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
   .cc-sw.on{box-shadow:0 0 0 2px var(--ink)}
   .cc-none{border:1px solid var(--line);background:#fff;border-radius:6px;width:22px;height:22px;cursor:pointer;color:var(--muted);font-size:11px;padding:0}
@@ -423,7 +438,7 @@
 
 <div class="topbar">
   <h1><span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 9"/><path d="M6 13h10l2 8H4z"/><path d="M9 17v4M13 17v4"/></svg></span>SimNettoyage <span class="sub-brand">· Analizator facturi</span></h1>
-  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span></div>
+  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span><button class="top-scan" type="button" onclick="scan()" title="Verifică acum dacă sunt facturi noi în Drive">↻<span class="top-scan-t"> Scanează</span></button></div>
 </div>
 
 <div class="main">
@@ -434,9 +449,6 @@
   </div>
 
   <div class="controls">
-    <button class="btn btn-dark" onclick="scan()">&#x1F504; Scanare manuală</button>
-    <button class="btn btn-green" id="btn-monitor-start" onclick="startMonitor()">&#x25B6; Start monitorizare</button>
-    <button class="btn btn-red" id="btn-monitor-stop" onclick="stopMonitor()" style="display:none">&#x23F8; Stop monitorizare</button>
     <button class="btn" type="button" id="ex-toggle" title="Ascunde / arată textele explicative (gri) din pagină">ⓘ Ascunde explicațiile</button>
     <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
     <div class="period"><label for="period">Perioadă</label><select id="period"><option value="all">Toată perioada</option></select></div>
@@ -455,10 +467,10 @@
   <div class="metric-grid">
     <div class="metric click m-amber" id="m-due-box" onclick="showTab('incasari')" title="Deschide tab-ul Încasări"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg></span>De încasat</div><div class="metric-value" id="m-due">—</div><div class="metric-sub" id="m-due-sub"></div></div>
     <div class="metric m-blue"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
-    <div class="metric m-teal"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Proprietăți active</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
-    <div class="metric click m-violet" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
-    <div class="metric click m-rose" id="m-prices-box" onclick="showTab('preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
-    <div class="metric click m-amber" id="m-warn-box" onclick="showTab('facturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
+    <div class="metric m-teal" id="m-props-box"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Case</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
+    <div class="metric click m-violet" id="m-inactive-box" hidden onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
+    <div class="metric click m-rose" id="m-prices-box" hidden onclick="showTab('preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
+    <div class="metric click m-amber" id="m-warn-box" hidden onclick="showTab('facturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
   </div>
 
   <div class="card" style="padding-top:4px">
@@ -468,7 +480,7 @@
       <button class="tab" role="tab" data-tab="proprietati">Proprietăți <span class="n" id="n-props"></span></button>
       <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
       <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
-      <button class="tab" role="tab" data-tab="calendar">Calendar</button>
+      <button class="tab" role="tab" data-tab="calendar" title="Harta zilelor în care ai lucrat">Zile lucrate</button>
       <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
       <span class="tab-sep" aria-hidden="true"></span>
       <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
@@ -496,7 +508,7 @@
 
     <!-- PROPRIETATI -->
     <section class="panel" id="panel-proprietati" role="tabpanel">
-      <div class="headline" id="p-headline" style="margin-top:14px"></div>
+      <div class="headline" id="p-headline" style="margin-top:14px" hidden></div>
       <div class="card-head">
         <div class="toolbar">
           <select id="p-client" class="search" style="width:auto;max-width:240px" aria-label="Filtrează după client"><option value="">Toți clienții</option></select>
@@ -506,17 +518,13 @@
         <div class="toolbar"><div class="colpick" id="colpick">
             <button class="btn btn-sm" type="button" id="colpick-btn" aria-expanded="false">⇅ Coloane <span id="colpick-n"></span></button>
             <div class="colpick-menu" id="colpick-menu" hidden>
-              <div class="hint ex" style="margin-bottom:6px">Mută coloanele cu ↑ ↓, sau trage titlul lor direct în tabel (pe telefon: ține apăsat pe titlu, apoi trage). Bifele aleg ce indicatori proprii vezi; coloanele de bază rămân mereu. Cercul ◌ dă o culoare coloanei (sau o scală după valoare).</div>
+              <div class="hint ex" style="margin-bottom:6px">Mută coloanele cu ↑ ↓, sau trage titlul lor direct în tabel (pe telefon: ține apăsat pe titlu, apoi trage). Bifa arată / ascunde coloana. Click pe nume: redenumești, schimbi lățimea și culoarea. ↑ ↓ mută coloana; în tabel poți și trage titlul sau marginea lui (lățimea).</div>
               <div class="colpick-acts"><button class="btn btn-sm" type="button" data-cp="all">Selectează tot</button><button class="btn btn-sm" type="button" data-cp="none">Deselectează tot</button><button class="btn btn-sm" type="button" data-cp="reset" title="Ordinea inițială, în Proprietăți și în Clienți">Ordinea inițială</button></div>
               <div id="colpick-list"></div>
             </div>
           </div>
           <button class="btn btn-sm" type="button" data-gloss>📖 Glosar</button>
-          <span class="hint">Sortează:</span>
-          <div class="seg" id="sort-bar">
-            <button data-sort="total">Încasări</button><button data-sort="interventii">Intervenții</button>
-            <button data-sort="frecventa_luna">Frecvență</button><button data-sort="medie">€ / int.</button><button data-sort="distanta_km">Distanță</button><button data-sort="profit_est">Profit</button><button data-sort="zile_de_la_ultima">Inactivitate</button>
-          </div>
+          
         </div>
       </div>
       <div class="table-wrap">
@@ -537,8 +545,8 @@
     <section class="panel" id="panel-clienti" role="tabpanel">
       <div style="margin-top:14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div class="headline" id="c-headline"></div>
         <div class="toolbar"><span class="hint ex">Trage titlurile ca să muți coloanele · click = sortare</span>
-          <div class="colpick" id="ccl"><button class="btn btn-sm" type="button" id="ccl-btn" aria-expanded="false">🎨 Culori coloane</button>
-            <div class="colpick-menu" id="ccl-menu" hidden><div class="hint" style="margin-bottom:6px">Alege o culoare ca să scoți în evidență un indicator. „Scală” colorează după valoare. Culorile sunt aceleași și în Proprietăți.</div><div id="ccl-list"></div></div></div>
+          <div class="colpick" id="ccl"><button class="btn btn-sm" type="button" id="ccl-btn" aria-expanded="false">⇅ Coloane</button>
+            <div class="colpick-menu" id="ccl-menu" hidden><div class="hint" style="margin-bottom:6px">Bifa arată / ascunde coloana. Click pe nume: redenumești, schimbi lățimea și culoarea. ↑ ↓ mută coloana (sau trage titlul în tabel).</div><div id="ccl-list"></div></div></div>
           <button class="btn btn-sm" type="button" data-gloss>📖 Glosar</button></div></div>
       <div class="table-wrap">
         <table class="t">
@@ -902,8 +910,6 @@ function renderState(filesChanged = true) {
     stxt.textContent = `Datele nu s-au încărcat încă — reîncerc automat în ${Math.max(1, Math.round((sc.retry_at - s.now) / 60))} min (sau apasă Scanare manuală)`;
   }
   schedule(sc.active ? 2000 : 5000);
-  $('btn-monitor-start').style.display = s.monitoring ? 'none' : '';
-  $('btn-monitor-stop').style.display = s.monitoring ? '' : 'none';
   const m = s.metrics || {};
   $('m-warn').textContent = m.warnings ?? '—';
   $('m-warn-box').classList.toggle('alert', !!m.warnings);
@@ -937,7 +943,9 @@ function renderAnalytics() {
   $('m-int').textContent = m.interventii.toLocaleString('fr-FR');
   $('m-int-sub').textContent = `în medie ${eur(m.medie)} / intervenție`;
   $('m-props').textContent = m.proprietati;
-  $('m-props-sub').textContent = `din care ${m.inactive} inactive`;
+  $('m-props-sub').textContent = m.inactive ? `${m.inactive} inactive · aduceau ${eur(m.venit_inactive)}` : 'toate active';
+  const pb = $('m-props-box'); pb.classList.toggle('click', !!m.inactive);
+  pb.onclick = m.inactive ? showInactive : null; pb.title = m.inactive ? 'Arată casele inactive' : '';
   $('m-inactive').textContent = m.inactive;
   $('m-inactive-sub').textContent = m.inactive ? `aduceau ${eur(m.venit_inactive)} în perioadă` : 'toate casele sunt active';
   $('m-inactive-box').classList.toggle('alert', !!m.inactive);
@@ -962,6 +970,7 @@ const SORTS = {
   distanta_km: p => [p.distanta_km ?? null, p.total],
   profit_est: p => [p.profit_est ?? null, p.total],
   venit_complet: p => [p.venit_complet ?? p.total, p.total],
+  menaje_complete: p => [p.menaje_complete ?? null, p.total],
   interm_venit: p => [p.interm_n ? p.interm_venit : null, p.total],
   ore_est: p => [p.ore_est ?? null, p.total],
   motorina_est: p => [p.motorina_est ?? null, p.total],
@@ -1085,7 +1094,10 @@ function prepareFormulas() {
 // ---- aranjarea coloanelor: ordinea aleasa (trasa) + indicatorii ascunsi; salvate in backup si in browser
 const normLayout = o => { const L = k => Array.isArray(o && o[k]) ? o[k].map(String) : [];
   const c = o && o.culori && typeof o.culori === 'object' ? Object.fromEntries(Object.entries(o.culori).filter(([, v]) => CC_ALL.includes(v))) : {};
-  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c}; };
+  const D = k => o && o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) ? o[k] : {};
+  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c, nume: {...D('nume')}, latimi: {...D('latimi')}}; };
+const dl = c => (LAYOUT && LAYOUT.nume || {})[c.key] || c.label;                 // numele afisat (redenumit de tine)
+const cw = c => (LAYOUT && LAYOUT.latimi || {})[c.key] || c.w;                   // latimea aleasa
 // culorile coloanelor: tenta fixa sau scala dupa valoare (mare = mai intens; inversa: mic = mai intens)
 const CC = {verde: ['#E3F5EC', '#0F8A5F'], albastru: ['#E6EFFD', '#2563EB'], galben: ['#FDF3D3', '#A16207'], mov: ['#EFE7FD', '#7C3AED'], roz: ['#FCE7EF', '#BE185D'], gri: ['#EDF1F0', '#334155']};
 const CC_ALL = [...Object.keys(CC), 'scala', 'scala_inv'];
@@ -1101,17 +1113,37 @@ function ccTd(key, v, rng) {
   return `background:rgba(15,138,95,${(0.05 + 0.40 * t).toFixed(3)});`;
 }
 const ccSwatch = c => !c ? 'transparent' : CC[c] ? CC[c][1] : (c === 'scala' ? 'linear-gradient(90deg,#E6F4EF,#0F8A5F)' : 'linear-gradient(90deg,#0F8A5F,#E6F4EF)');
-function ccPalette(key) {
+function colPanel(c) {
+  const key = c.key, cur = colColor(key), named = (LAYOUT.nume || {})[key];
+  return `<div class="cc-pal" data-key="${esc(key)}">
+    <div class="cp-f"><span>Nume</span><input type="text" data-cname maxlength="40" value="${esc(named || '')}" placeholder="${esc(c.label)}" aria-label="Numele coloanei">${named ? '<button type="button" class="cc-none" data-cname-reset title="Numele inițial">↺</button>' : ''}</div>
+    <div class="cp-f"><span>Lățime</span><button type="button" class="wbtn" data-w="-20" aria-label="Mai îngustă">−</button><b class="wval">${cw(c)} px</b><button type="button" class="wbtn" data-w="20" aria-label="Mai lată">+</button>${(LAYOUT.latimi || {})[key] ? '<button type="button" class="cc-none" data-w="0" title="Lățimea inițială">↺</button>' : ''}</div>
+    <div class="cp-f"><span>Culoare</span><span class="cc-sws">${ccSwatches(key)}</span></div></div>`;
+}
+function ccSwatches(key) {
   const cur = colColor(key);
-  return `<div class="cc-pal" data-key="${esc(key)}">${CC_ALL.map(c => `<button type="button" class="cc-sw${cur === c ? ' on' : ''}" data-setc="${c}" title="${esc(CC_LABEL[c])}" aria-label="${esc(CC_LABEL[c])}" style="background:${ccSwatch(c)}"></button>`).join('')}<button type="button" class="cc-none" data-setc="" title="Fără culoare">✕</button></div>`;
+  return `${CC_ALL.map(c => `<button type="button" class="cc-sw${cur === c ? ' on' : ''}" data-setc="${c}" title="${esc(CC_LABEL[c])}" aria-label="${esc(CC_LABEL[c])}" style="background:${ccSwatch(c)}"></button>`).join('')}<button type="button" class="cc-none" data-setc="" title="Fără culoare">✕</button>`;
+}
+function setColName(key, name) { LAYOUT.nume = {...(LAYOUT.nume || {})}; name = String(name || '').trim().slice(0, 40); if (name) LAYOUT.nume[key] = name; else delete LAYOUT.nume[key]; saveLayout(); renderProps(); renderClients(); }
+function setColWidth(key, w) { LAYOUT.latimi = {...(LAYOUT.latimi || {})}; if (w) LAYOUT.latimi[key] = Math.max(50, Math.min(420, Math.round(w))); else delete LAYOUT.latimi[key]; saveLayout(); renderProps(); renderClients(); }
+// evenimentele panoului (acelasi in meniul din Proprietati si din Clienti)
+function colPanelEvent(e, cols, rerender) {
+  const pan = e.target.closest('.cc-pal'); if (!pan) return false;
+  const key = pan.dataset.key, c = cols.find(x => x.key === key); if (!c) return true;
+  const sc = e.target.closest('[data-setc]'); if (sc) { setColColor(key, sc.dataset.setc); rerender(); return true; }
+  const wb = e.target.closest('[data-w]'); if (wb) { const d = +wb.dataset.w; setColWidth(key, d ? cw(c) + d : 0); rerender(); return true; }
+  if (e.target.closest('[data-cname-reset]')) { setColName(key, ''); rerender(); return true; }
+  return true;
 }
 let ccOpen = null;
 function setColColor(key, c) { LAYOUT.culori = {...(LAYOUT.culori || {})}; if (c) LAYOUT.culori[key] = c; else delete LAYOUT.culori[key]; saveLayout(); renderProps(); renderClients(); }
+document.addEventListener('change', e => { const n = e.target.closest('[data-cname]'); if (n) { setColName(n.closest('.cc-pal').dataset.key, n.value); if (!$('colpick-menu').hidden) renderColPicker(); if (!$('ccl-menu').hidden) renderCclMenu(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-cname]')) e.target.blur(); });
 let LAYOUT;
 try { LAYOUT = normLayout(JSON.parse(store.get('colLayout', 'null'))); } catch (e) { LAYOUT = normLayout(null); }
 try { if (!LAYOUT.ascunse.length) { const old = JSON.parse(store.get('hiddenFormulas', '[]')); if (Array.isArray(old)) LAYOUT.ascunse = old.map(String); } } catch (e) {}
 let hiddenF = LAYOUT.ascunse, layoutTimer = null, layoutDirty = false;
-const layoutEmpty = L => !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length;
+const layoutEmpty = L => !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length && !Object.keys(L.nume || {}).length && !Object.keys(L.latimi || {}).length;
 function saveLayout() {
   LAYOUT.ascunse = hiddenF;
   store.set('colLayout', JSON.stringify(LAYOUT));
@@ -1127,7 +1159,7 @@ function saveLayout() {
 function adoptLayout(srv) {      // la fiecare incarcare: aranjarea din backup (aceeasi pe telefon si pe calculator)
   if (layoutDirty) return;
   const s = normLayout(srv);
-  if (!layoutEmpty(s) || Object.keys(s.culori).length) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); }
+  if (!layoutEmpty(s)) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); }
   else if (!layoutEmpty(LAYOUT)) saveLayout();     // prima data: trimite ce era salvat doar in browser
 }
 function orderCols(cols, order) {
@@ -1140,13 +1172,26 @@ function moveCol(which, cols, from, to, after) {
   keys.splice(after ? i + 1 : i, 0, from);
   LAYOUT[which] = keys; saveLayout(); return true;
 }
+// lățimea: trage de marginea dreaptă a titlului (mouse); pe telefon din meniul Coloane
+let rszJust = false;
+document.addEventListener('pointerdown', e => {
+  const h = e.target.closest('.rsz'); if (!h) return;
+  e.preventDefault(); e.stopPropagation();
+  const th = h.closest('th'), key = h.dataset.rsz, x0 = e.clientX, w0 = th.offsetWidth;
+  document.body.classList.add('col-resizing');
+  const mv = ev => { th.style.width = Math.max(50, Math.min(420, w0 + ev.clientX - x0)) + 'px'; };
+  const up = ev => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); document.body.classList.remove('col-resizing');
+    rszJust = true; setTimeout(() => { rszJust = false; }, 80);
+    if (Math.abs(ev.clientX - x0) > 2) setColWidth(key, w0 + ev.clientX - x0); };
+  addEventListener('pointermove', mv); addEventListener('pointerup', up);
+}, true);
 // trage titlul unei coloane: mouse = direct; telefon = tine apasat ~0,35 s, apoi trage
 function colDrag(thead, onDrop) {
   let d = null, justDragged = false;
   const clear = () => thead.querySelectorAll('.drop-l,.drop-r,.dragging').forEach(t => t.classList.remove('drop-l', 'drop-r', 'dragging'));
   thead.addEventListener('pointerdown', e => {
     const th = e.target.closest('th[data-key]');
-    if (!th || e.button > 0 || e.target.closest('input,button,a')) return;
+    if (!th || e.button > 0 || e.target.closest('input,button,a,.rsz')) return;
     d = {key: th.dataset.key, th, x: e.clientX, y: e.clientY, armed: e.pointerType === 'mouse', active: false, target: null};
     if (!d.armed) d.timer = setTimeout(() => { if (d) { d.armed = true; th.classList.add('dragging'); try { navigator.vibrate && navigator.vibrate(12); } catch (x) {} } }, 350);
   });
@@ -1174,12 +1219,13 @@ function colDrag(thead, onDrop) {
   addEventListener('pointerup', end); addEventListener('pointercancel', end);
   thead.addEventListener('touchmove', e => { if (d && d.armed) e.preventDefault(); }, {passive: false});
   thead.addEventListener('contextmenu', e => { if (d) e.preventDefault(); });
-  thead.addEventListener('click', e => { if (justDragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+  thead.addEventListener('click', e => { if (justDragged || rszJust || e.target.closest('.rsz')) { e.stopPropagation(); e.preventDefault(); } }, true);
 }
 
 // coloanele fixe (mereu afisate) — pe ele se calculeaza formulele
 const FIXED_COLS = [
-  {id: 'interventii', label: 'Intervenții', sort: 'interventii', w: 92, cell: p => `${p.interventii}`},
+  {id: 'interventii', label: 'Intervenții', hint: 'toate intervențiile (cu Intermédiaire)', sort: 'interventii', w: 92, cell: p => `${p.interventii}`},
+  {id: 'menaje', label: 'Intervenții fără inter.', hint: 'menaje complete: Standard / Ouverture / Fermeture (fără Intermédiaire)', sort: 'menaje_complete', w: 104, cell: p => `${p.menaje_complete ?? '—'}`},
   {id: 'inc_fara', label: 'Încasări fără inter.', hint: 'încasările din menajele Standard / Ouverture', sort: 'venit_complet', w: 120, cls: 'money', cell: p => eur(p.venit_complet ?? p.total)},
   {id: 'inc_inter', label: 'Încasări inter.', hint: 'încasările din menajele Intermédiaire', sort: 'interm_venit', w: 108,
    cell: p => p.interm_n ? `${eur(p.interm_venit)}<span class="sub-num">${p.interm_n} ${p.interm_n === 1 ? 'menaj' : 'menaje'}${p.interm_ore ? ' · ' + num(p.interm_ore) + ' h' : ''}</span>` : '—'},
@@ -1202,18 +1248,20 @@ function formulaCols(all = false) {
     cell: p => { const v = (p._f || [])[FORMS.indexOf(f)]; return `<b>${fmtFormula(f.nume, v)}</b>`; }}));
 }
 function allPropCols() { return orderCols([...FIXED_COLS, ...formulaCols(true)], LAYOUT.props); }
-function shownCols() { return allPropCols().filter(c => !c.formula || !hiddenF.includes(c.label)); }
+// ascunse: formulele dupa nume; coloanele de baza cu prefix ('b:' in Proprietati, 'c:' in Clienti)
+const hideId = (c, pre = 'b:') => c.formula ? c.label : pre + c.key;
+function shownCols() { return allPropCols().filter(c => !hiddenF.includes(hideId(c))); }
 function renderColPicker() {
   const cols = allPropCols(), box = $('colpick-list'), sc = box.querySelector('.cp-list'), top = sc ? sc.scrollTop : 0;
   box.innerHTML = '<div class="cp-list">' + cols.map((c, i) => `<div class="cp-row" data-key="${esc(c.key)}">
-      ${c.formula ? `<input type="checkbox" data-col="${esc(c.label)}"${hiddenF.includes(c.label) ? '' : ' checked'} aria-label="Arată ${esc(c.label)}">` : '<span style="width:13px;flex:none"></span>'}
-      <span class="nm">${esc(c.label)}${c.formula ? `<small>${esc(c.hint)}</small>` : ''}</span>${c.formula ? '' : '<span class="base">de bază</span>'}
-      <button type="button" class="cdot${colColor(c.key) ? ' set' : ''}" data-cc="${esc(c.key)}" title="Culoarea coloanei" aria-label="Culoare pentru ${esc(c.label)}" style="background:${ccSwatch(colColor(c.key))}"></button>
-      <button class="mv" type="button" data-mv="-1"${i ? '' : ' disabled'} aria-label="Mută ${esc(c.label)} mai la stânga" title="Mai la stânga">↑</button><button class="mv" type="button" data-mv="1"${i < cols.length - 1 ? '' : ' disabled'} aria-label="Mută ${esc(c.label)} mai la dreapta" title="Mai la dreapta">↓</button></div>${ccOpen === c.key ? ccPalette(c.key) : ''}`).join('') + '</div>'
+      <input type="checkbox" data-col="${esc(hideId(c))}"${hiddenF.includes(hideId(c)) ? '' : ' checked'} aria-label="Arată ${esc(c.label)}">
+      <button type="button" class="nm" data-cc="${esc(c.key)}" title="Redenumește, lățime, culoare">${esc(dl(c))}${dl(c) !== c.label ? `<small>${esc(c.label)}</small>` : c.formula ? `<small>${esc(c.hint)}</small>` : ''}</button>
+      <button type="button" class="cdot${colColor(c.key) ? ' set' : ''}" data-cc="${esc(c.key)}" title="Redenumește, lățime, culoare" aria-label="Setări pentru ${esc(dl(c))}" style="background:${ccSwatch(colColor(c.key))}">${colColor(c.key) ? '' : '✎'}</button>
+      <button class="mv" type="button" data-mv="-1"${i ? '' : ' disabled'} aria-label="Mută ${esc(c.label)} mai la stânga" title="Mai la stânga">↑</button><button class="mv" type="button" data-mv="1"${i < cols.length - 1 ? '' : ' disabled'} aria-label="Mută ${esc(c.label)} mai la dreapta" title="Mai la dreapta">↓</button></div>${ccOpen === c.key ? colPanel(c) : ''}`).join('') + '</div>'
     + (FORMS.length ? '' : '<div class="hint" style="padding:6px 2px">Nu ai încă indicatori proprii.</div>')
     + '<button class="btn btn-sm" type="button" id="colpick-edit" style="margin-top:8px;width:100%">✎ Adaugă / editează formulele</button>';
   const nsc = box.querySelector('.cp-list'); if (nsc) nsc.scrollTop = top;
-  $('colpick-n').textContent = FORMS.length ? `(${FORMS.filter(f => !hiddenF.includes(f.nume)).length}/${FORMS.length} indicatori)` : '';
+  $('colpick-n').textContent = `(${cols.filter(c => !hiddenF.includes(hideId(c))).length}/${cols.length})`;
 }
 function placeColMenu() {   // meniul ramane mereu in ecran (butonul se poate muta cand bara se rupe pe 2 randuri)
   const m = $('colpick-menu'); if (m.hidden) return;
@@ -1228,11 +1276,10 @@ $('colpick-menu').addEventListener('click', e => {
   e.stopPropagation();
   const b = e.target.closest('[data-cp]');
   if (b && b.dataset.cp === 'reset') { LAYOUT.props = []; LAYOUT.clienti = []; setHidden(hiddenF); return; }
-  if (b) setHidden(b.dataset.cp === 'none' ? FORMS.map(f => f.nume) : []);
+  if (b) setHidden(b.dataset.cp === 'none' ? [...hiddenF.filter(x => x.startsWith('c:')), ...allPropCols().map(c => hideId(c))] : hiddenF.filter(x => x.startsWith('c:')));
   const cd = e.target.closest('[data-cc]');
   if (cd) { ccOpen = ccOpen === cd.dataset.cc ? null : cd.dataset.cc; renderColPicker(); return; }
-  const sc = e.target.closest('[data-setc]');
-  if (sc && sc.closest('#colpick-menu')) { setColColor(sc.closest('.cc-pal').dataset.key, sc.dataset.setc); ccOpen = null; renderColPicker(); return; }
+  if (colPanelEvent(e, allPropCols(), renderColPicker)) return;
   const mv = e.target.closest('[data-mv]');
   if (mv) {
     const cols = allPropCols(), key = mv.closest('[data-key]').dataset.key, i = cols.findIndex(c => c.key === key), n = i + Number(mv.dataset.mv);
@@ -1248,7 +1295,7 @@ const GLOSS = [
   {sec: 'Coloanele de bază (Proprietăți)'},
   {nume: 'Intervenții', vars: ['interventii', 'menaje', 'interm'],
    ce: 'Câte rânduri de menaj are casa pe facturile din perioada aleasă (sus, filtrul de perioadă). Produsele și rândurile scoase din listă nu intră.',
-   calc: 'interventii = menaje complete (Standard / Ouverture / Fermeture) + Intermédiaire\nmenaje = doar menajele complete · interm = doar Intermédiaire'},
+   calc: 'interventii = menaje complete (Standard / Ouverture / Fermeture) + Intermédiaire\nmenaje = doar menajele complete = coloana „Intervenții fără inter.” · interm = doar Intermédiaire'},
   {nume: 'Încasări fără inter.', vars: ['incasari_fara_inter', 'incasari'],
    ce: 'Banii facturați pentru casă în perioadă, fără Intermédiaire-uri. Pe ei se calculează € / oră.',
    calc: 'incasari = suma tuturor rândurilor casei de pe facturi\nincasari_fara_inter = incasari − incasari_inter'},
@@ -1311,8 +1358,8 @@ function renderProps() {
   document.querySelectorAll('#sort-bar button').forEach(b => { const on = b.dataset.sort === sortBy; b.classList.toggle('on', on); b.dataset.lbl = b.dataset.lbl || b.textContent; b.innerHTML = esc(b.dataset.lbl) + (on ? ' ' + sortArrow(sortDir) : ''); b.title = on ? 'Click din nou pentru ' + (sortDir === 'asc' ? 'cele mai mari primele' : 'cele mai mici primele') : ''; });
   document.querySelectorAll('#p-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === propFilter));
   const table = $('prop-head').parentElement;
-  table.style.minWidth = (300 + cols.reduce((a, c) => a + c.w, 0)) + 'px';
-  $('prop-head').innerHTML = `<tr><th class="w-rank">#</th><th style="min-width:220px">Proprietate</th>${cols.map(c => `<th class="${c.left ? '' : 'num '}${c.sort ? 'sortable' : ''}${c.sort === sortBy ? ' active' : ''}" style="width:${c.w}px;${ccTh(c.key)}" data-key="${esc(c.key)}"${c.sort ? ` data-sort="${c.sort}"` : ''}${c.hint || c.sort ? ` title="${esc((c.hint ? c.hint + ' · ' : '') + (c.sort ? 'click: sortează · click din nou: invers · ' : '') + 'trage ca s-o muți')}"` : ''}>${esc(c.label)}${c.sort === sortBy ? ' ' + sortArrow(sortDir) : ''}</th>`).join('')}</tr>`;
+  table.style.minWidth = ((innerWidth <= 640 ? 190 : 300) + cols.reduce((a, c) => a + cw(c), 0)) + 'px';
+  $('prop-head').innerHTML = `<tr><th class="w-rank">#</th><th style="min-width:${innerWidth <= 640 ? 150 : 220}px">Proprietate</th>${cols.map(c => `<th class="${c.left ? '' : 'num '}${c.sort ? 'sortable' : ''}${c.sort === sortBy ? ' active' : ''}" style="width:${cw(c)}px;${ccTh(c.key)}" data-key="${esc(c.key)}"${c.sort ? ` data-sort="${c.sort}"` : ''}${c.hint || c.sort ? ` title="${esc((c.hint ? c.hint + ' · ' : '') + (c.sort ? 'click: sortează · click din nou: invers · ' : '') + 'trage ca s-o muți')}"` : ''}>${esc(dl(c))}${c.sort === sortBy ? ' ' + sortArrow(sortDir) : ''}<span class="rsz" data-rsz="${esc(c.key)}" aria-hidden="true"></span></th>`).join('')}</tr>`;
   const body = $('prop-body'), span = cols.length + 2;
   if (!A || !A.props.length) { body.innerHTML = `<tr><td colspan="${span}" class="empty">Nicio intervenție în perioada aleasă</td></tr>`; return; }
   const key = SORTS[sortBy] || SORTS.total;
@@ -1440,7 +1487,7 @@ function hideToast() { $('toast').classList.remove('on'); }
 $('prop-body').addEventListener('click', e => { const b = e.target.closest('[data-excl]'); if (b) askExclude(b.dataset.excl); });
 $('ex-list').addEventListener('click', e => { const b = e.target.closest('[data-unexcl]'); if (b) setExcluded(b.dataset.unexcl, b.dataset.name, true); });
 function setSort(k) { if (!SORTS[k]) return; sortDir = k === sortBy ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'; sortBy = k; store.set('sortBy2', k); store.set('sortDir', sortDir); renderProps(); }
-$('sort-bar').addEventListener('click', e => { const b = e.target.closest('button[data-sort]'); if (b) setSort(b.dataset.sort); });
+
 $('p-search').addEventListener('input', renderProps);
 $('client-body').addEventListener('click', e => { const b = e.target.closest('[data-cl]'); if (!b) return;
   propClient = b.dataset.cl; store.set('propClient', propClient); lastDataKey = null; showTab('proprietati'); fetchAnalytics();
@@ -1457,14 +1504,15 @@ function showInactive() {
 // ---- clienti
 function clientColDefs() {
   return [
-    {key: 'venit', label: 'Venit', cls: 'w-120 num', cs: 'venit', val: x => x.venit, td: x => `<td class="num money">${eur(x.venit)}</td>`},
-    {key: 'procent', label: '% din venit', cls: 'w-160 hide-m', hint: 'partea clientului din venitul perioadei',
-     val: x => x.procent, td: (x, k) => `<td class="hide-m"><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / k.max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>`},
-    {key: 'case', label: 'Case', cls: 'w-80 num', cs: 'case', val: x => x.case, td: x => `<td class="num">${x.case}</td>`},
-    {key: 'interventii', label: 'Intervenții', cls: 'w-100 num hide-m', cs: 'interventii', val: x => x.interventii, td: x => `<td class="num hide-m">${x.interventii}</td>`},
-    {key: 'medie', label: '€ / int.', cls: 'w-100 num hide-m', cs: 'medie', hint: 'venit ÷ intervenții', val: x => x.medie, td: x => `<td class="num hide-m">${eur2(x.medie)}</td>`},
-    {key: 'ultima', label: 'Ultima', cls: 'w-110 hide-m', cs: 'ultima', val: x => x.ultima ? Date.parse(x.ultima) : null, td: x => `<td class="hide-m">${fmtDate(x.ultima)}</td>`},
-    ...formulaCols().map(f => ({key: f.key, label: f.label, hint: f.hint, cls: 'w-110 num', cs: f.id, formula: true, val: (x, k) => k.fnum(x, f),
+    {key: 'venit', label: 'Venit', w: 120, cls: 'num', cs: 'venit', val: x => x.venit, td: x => `<td class="num money">${eur(x.venit)}</td>`},
+    {key: 'procent', label: '% din venit', w: 160, cls: '', hint: 'partea clientului din venitul perioadei',
+     val: x => x.procent, td: (x, k) => `<td><div class="share"><div class="share-bar"><div class="share-fill" style="width:${x.procent / k.max * 100}%"></div></div><span class="num" style="min-width:42px">${num(x.procent)}%</span></div></td>`},
+    {key: 'case', label: 'Case', w: 80, cls: 'num', cs: 'case', val: x => x.case, td: x => `<td class="num">${x.case}</td>`},
+    {key: 'interventii', label: 'Intervenții', w: 100, cls: 'num', cs: 'interventii', val: x => x.interventii, td: x => `<td class="num">${x.interventii}</td>`},
+    {key: 'menaje', label: 'Intervenții fără inter.', w: 110, cls: 'num', cs: 'menaje', hint: 'menaje complete, fără Intermédiaire', val: (x, k) => k.men(x), td: (x, k) => `<td class="num">${k.men(x) ?? '—'}</td>`},
+    {key: 'medie', label: '€ / int.', w: 100, cls: 'num', cs: 'medie', hint: 'venit ÷ intervenții', val: x => x.medie, td: x => `<td class="num">${eur2(x.medie)}</td>`},
+    {key: 'ultima', label: 'Ultima', w: 110, cls: '', cs: 'ultima', val: x => x.ultima ? Date.parse(x.ultima) : null, td: x => `<td>${fmtDate(x.ultima)}</td>`},
+    ...formulaCols().map(f => ({key: f.key, label: f.label, hint: f.hint, w: 110, cls: 'num', cs: f.id, formula: true, val: (x, k) => k.fnum(x, f),
       td: (x, k) => { const v = k.fnum(x, f); return `<td class="num">${v == null ? '—' : `<b>${fmtFormula(f.label, v)}</b>`}</td>`; }})),
   ];
 }
@@ -1480,16 +1528,17 @@ function renderClients() {
   const byClient = {};
   for (const p of (ABASE || A).props || []) for (const cl of String(p.client || '').split(', ')) (byClient[cl] = byClient[cl] || []).push(p);
   const fnum = (x, f) => { const ps = byClient[x.client]; if (!ps || !ps.length) return null; const ff = FORMS[FORMS.findIndex(g => 'f' + g.i === f.id)]; return ff ? evalFormula(ff.rpn, clientVars(ps)) : null; };
-  const cols = allClientCols(), ctx = {max, fnum};
+  const men = x => { const ps = byClient[x.client]; return ps && ps.length ? ps.reduce((a, p) => a + (p.menaje_complete || 0), 0) : null; };
+  const cols = allClientCols().filter(col => !hiddenF.includes(hideId(col, 'c:'))), ctx = {max, fnum, men};
   const CS = {};
   cols.forEach(col => { if (col.cs) CS[col.cs] = col.val; });
   if (!CS[cSort.k]) cSort = {k: 'venit', d: 'desc'};
   c = c.slice().sort((a, b) => cmpKeys([CS[cSort.k](a, ctx), a.venit], [CS[cSort.k](b, ctx), b.venit], cSort.d));
-  const th = col => `<th class="${col.cls}${col.cs ? ' sortable' : ''}${col.cs && cSort.k === col.cs ? ' active' : ''}" style="${ccTh(col.key)}" data-key="${esc(col.key)}"${col.cs ? ` data-cs="${col.cs}"` : ''} title="${esc((col.hint ? col.hint + ' · ' : '') + (col.cs ? 'click: sortează · click din nou: invers · ' : '') + 'trage ca s-o muți')}">${esc(col.label)}${col.cs && cSort.k === col.cs ? ' ' + sortArrow(cSort.d) : ''}</th>`;
-  $('client-head').innerHTML = `<tr><th>Client</th>${cols.map(th).join('')}</tr>`;
+  const th = col => `<th class="${col.cls}${col.cs ? ' sortable' : ''}${col.cs && cSort.k === col.cs ? ' active' : ''}" style="width:${cw(col)}px;${ccTh(col.key)}" data-key="${esc(col.key)}"${col.cs ? ` data-cs="${col.cs}"` : ''} title="${esc((col.hint ? col.hint + ' · ' : '') + (col.cs ? 'click: sortează · click din nou: invers · ' : '') + 'trage ca s-o muți')}">${esc(dl(col))}${col.cs && cSort.k === col.cs ? ' ' + sortArrow(cSort.d) : ''}<span class="rsz" data-rsz="${esc(col.key)}" aria-hidden="true"></span></th>`;
+  $('client-head').innerHTML = `<tr><th style="width:${innerWidth <= 640 ? 140 : 230}px">Client</th>${cols.map(th).join('')}</tr>`;
   const crng = Object.fromEntries(cols.filter(col => colColor(col.key).startsWith('scala') && col.val).map(col => [col.key, ccRange(c.map(x => col.val(x, ctx)))]));
   const nf = cols.filter(x => x.formula).length;
-  const tbl = $('client-head').parentElement; tbl.style.minWidth = ((innerWidth <= 760 ? 330 : 900) + nf * 110) + 'px';
+  const tbl = $('client-head').parentElement; tbl.style.minWidth = ((innerWidth <= 640 ? 140 : 230) + cols.reduce((a, col) => a + cw(col), 0)) + 'px';
   $('client-body').innerHTML = c.length ? c.map(x => `<tr>
     <td><div class="pname"><button class="cl-link" data-cl="${esc(x.client)}" title="Vezi clasamentul caselor acestui client">${esc(x.client)}</button>${(x.membri || []).length ? ' <span class="tag info">grup</span>' : ''}</div>${x.ore ? `<div class="psub">${num(x.ore)} h la oră</div>` : ''}
       ${(x.membri || []).length ? `<details class="palias mem"><summary>${x.membri.length} ${x.membri.length === 1 ? 'client facturat' : 'clienți facturați'}</summary>${x.membri.map(esc).join(', ')}</details>` : ''}</td>
@@ -1497,15 +1546,25 @@ function renderClients() {
     : `<tr><td colspan="${1 + cols.length}" class="empty">Nicio intervenție în perioada aleasă</td></tr>`;
 }
 
+function allClientColsMenu() { return orderCols([...clientColDefs().filter(c => !c.formula), ...formulaCols(true).map(f => ({key: f.key, label: f.label, w: 110, formula: true}))], LAYOUT.clienti); }
 function renderCclMenu() {
-  $('ccl-list').innerHTML = '<div class="cp-list">' + allClientCols().map(col => `<div class="cp-row" data-key="${esc(col.key)}"><span class="nm">${esc(col.label)}</span>
-    <button type="button" class="cdot${colColor(col.key) ? ' set' : ''}" data-cc="${esc(col.key)}" title="Culoarea coloanei" aria-label="Culoare pentru ${esc(col.label)}" style="background:${ccSwatch(colColor(col.key))}"></button></div>${ccOpen === col.key ? ccPalette(col.key) : ''}`).join('') + '</div>';
+  const all = allClientColsMenu(), sc = $('ccl-list').querySelector('.cp-list'), top = sc ? sc.scrollTop : 0;
+  $('ccl-list').innerHTML = '<div class="cp-list">' + all.map((col, i) => `<div class="cp-row" data-key="${esc(col.key)}"><input type="checkbox" data-ccol="${esc(hideId(col, 'c:'))}"${hiddenF.includes(hideId(col, 'c:')) ? '' : ' checked'} aria-label="Arată ${esc(dl(col))}">
+    <button type="button" class="nm" data-cc="${esc(col.key)}" title="Redenumește, lățime, culoare">${esc(dl(col))}${dl(col) !== col.label ? `<small>${esc(col.label)}</small>` : ''}</button>
+    <button type="button" class="cdot${colColor(col.key) ? ' set' : ''}" data-cc="${esc(col.key)}" title="Redenumește, lățime, culoare" aria-label="Setări pentru ${esc(dl(col))}" style="background:${ccSwatch(colColor(col.key))}">${colColor(col.key) ? '' : '✎'}</button>
+    <button class="mv" type="button" data-cmv="-1"${i ? '' : ' disabled'} aria-label="Mai la stânga">↑</button><button class="mv" type="button" data-cmv="1"${i < all.length - 1 ? '' : ' disabled'} aria-label="Mai la dreapta">↓</button></div>${ccOpen === col.key ? colPanel(col) : ''}`).join('') + '</div>';
+  const nsc = $('ccl-list').querySelector('.cp-list'); if (nsc) nsc.scrollTop = top;
 }
+$('ccl-menu').addEventListener('change', e => { const c = e.target.closest('[data-ccol]'); if (!c) return;
+  hiddenF = c.checked ? hiddenF.filter(x => x !== c.dataset.ccol) : [...hiddenF, c.dataset.ccol]; saveLayout(); renderClients(); renderCclMenu(); if (!$('colpick-menu').hidden) renderColPicker(); });
 $('ccl-btn').addEventListener('click', e => { e.stopPropagation(); const m = $('ccl-menu'); m.hidden = !m.hidden; $('ccl-btn').setAttribute('aria-expanded', !m.hidden); if (!m.hidden) { ccOpen = null; renderCclMenu(); const r = $('ccl-btn').getBoundingClientRect(); m.style.left = r.left + 300 > innerWidth - 16 ? 'auto' : '0'; m.style.right = r.left + 300 > innerWidth - 16 ? '0' : 'auto'; } });
 $('ccl-menu').addEventListener('click', e => {
   e.stopPropagation();
   const cd = e.target.closest('[data-cc]'); if (cd) { ccOpen = ccOpen === cd.dataset.cc ? null : cd.dataset.cc; renderCclMenu(); return; }
-  const sc = e.target.closest('[data-setc]'); if (sc) { setColColor(sc.closest('.cc-pal').dataset.key, sc.dataset.setc); ccOpen = null; renderCclMenu(); }
+  if (colPanelEvent(e, allClientColsMenu(), renderCclMenu)) return;
+  const mv = e.target.closest('[data-cmv]');
+  if (mv) { const all = allClientColsMenu(), key = mv.closest('[data-key]').dataset.key, i = all.findIndex(c => c.key === key), n = i + Number(mv.dataset.cmv);
+    if (i >= 0 && n >= 0 && n < all.length) { moveCol('clienti', all, key, all[n].key, n > i); renderClients(); renderCclMenu(); } }
 });
 document.addEventListener('click', () => { const m = $('ccl-menu'); if (!m.hidden) { m.hidden = true; $('ccl-btn').setAttribute('aria-expanded', 'false'); } });
 colDrag($('client-head'), (from, to, after) => { if (moveCol('clienti', allClientCols(), from, to, after)) renderClients(); });
@@ -2100,7 +2159,7 @@ function qFields(level) {
     {k: 'incasari_fara_inter', label: 'Încasări fără inter.', f: 'eur'},
     {k: 'incasari_inter', label: 'Încasări inter.', f: 'eur'},
     {k: 'interventii', label: 'Intervenții', f: 'n'},
-    {k: 'menaje', label: 'Menaje complete', f: 'n'},
+    {k: 'menaje', label: 'Intervenții fără inter.', f: 'n'},
     {k: 'interm', label: 'Intermédiaire (nr.)', f: 'n'},
     {k: 'medie', label: '€ / intervenție', f: 'eur'},
     {k: 'eur_ora', label: '€ / oră', f: 'eur'},
