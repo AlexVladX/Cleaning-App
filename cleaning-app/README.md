@@ -94,7 +94,8 @@ Toți indicatorii se calculează din facturi și respectă **filtrul de perioad�
 | **Facturi** | lista facturilor cu filtrele De verificat / Erori / Duplicate |
 
 - **Ore / menaj** (Proprietăți): timpul real al unei persoane la un menaj complet (Standard / Ouverture), oricum ar fi facturat (forfait sau la oră), editabil direct în tabel. Se salvează în backup și în foaia separată **„Ore”** (nume | ore) din documentul cu coordonate, cu **numele casei din facturi** — casele din aceeași rezidență (aceleași coordonate) au fiecare rândul ei. **Ore lucru** = menaje complete × ore / menaj; **€ / oră** = încasările din menajele complete ÷ ore lucru. **Intermédiaire**-urile au coloana lor și nu intră în € / oră. Pentru scriere: Google Sheets API activat în proiectul service account-ului + service account Editor pe document.
-- **Coloane** (Proprietăți): alegi ce coloane vezi (Selectează tot / Deselectează tot / Implicit); alegerea rămâne salvată în browser.
+- **Coloane fixe** (Proprietăți): Intervenții, Încasări fără inter., Încasări inter., Ore estimate, Distanță, Zonă, Profit estimat, Motorină, Ultima intervenție — mereu afișate.
+- **Indicatori proprii (formule)** (Reguli → Indicatori proprii): un rând pe indicator, `Nume = formulă`, ex. `€ / oră = incasari_fara_inter / ore_lucru`. Se acceptă numere, variabilele afișate (click pe ele le inserează), `+ - * / ( )` și `min, max, round, abs`. Fiecare formulă devine o coloană în Proprietăți (pe casă) și în Clienți (pe client = suma caselor lui; distanța, timpul și orele / menaj sunt medii), se poate sorta și apare și în Excel. Numele care se termină în `%` se afișează ca procent, cele cu `€` ca bani. Dacă lipsește o valoare (ex. ore netrecute) sau se împarte la 0, apare „—”. Butonul **ƒ Indicatori** alege ce formule vezi (Selectează tot / Deselectează tot). Formulele se salvează în backup; în server sunt verificate pe arborele de sintaxă, nu se execută cod.
 - **Produse și alte rânduri care nu sunt case**: butonul ✕ din Proprietăți le scoate din listă (se pot pune înapoi din „Scoase din listă”). Rândurile care conțin cuvintele din **Reguli → Produse** (implicit „produit” și „fourniture”) se scot automat, și din facturile viitoare. Nu intră în venit, intervenții sau clasament. Siguranță: ✕ cere confirmare (cu avertisment dacă rândul pare o casă) și poate fi anulat imediat; cuvintele-cheie nu scot niciodată o casă din Sheet-ul cu coordonate sau una pusă înapoi manual.
 - **Grupuri de clienți** (Reguli): un rând pe grup, `Nume grup: cuvânt, cuvânt`. O factură intră în grup dacă numele clientului sau folderul ei din Drive conține unul din cuvinte (ex. persoane fizice aduse de același colaborator). În Clienți apare un singur rând, cu lista clienților facturați; pe factură clientul rămâne neschimbat. Regula „Clienți facturați doar la oră” se aplică tot după numele de pe factură.
 - O casă e **inactivă** când n-a mai avut menaj de mult mai mult timp decât intervalul ei obișnuit (de 3 ori intervalul tipic, cel puțin 45 de zile).
@@ -143,6 +144,7 @@ cleaning-app/
 ├── geo.py              # coordonate din Sheet, trasee OSRM, zone
 ├── costs.py            # cheltuieli, motorina estimata, profit
 ├── calendar_check.py   # comparatia Google Calendar ↔ facturi
+├── formulas.py         # indicatorii proprii (formulele din Reguli)
 ├── templates/index.html
 ├── requirements.txt
 ├── Procfile            # pentru Railway/Heroku (Render folosește render.yaml)

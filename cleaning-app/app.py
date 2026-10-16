@@ -28,6 +28,7 @@ import openpyxl
 import analytics
 import calendar_check
 import costs
+import formulas
 import geo
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
@@ -94,6 +95,8 @@ settings = {
     # ore estimate pe casa, pentru O persoana (salvate si in Sheet-ul cu coordonate, coloana "ore")
     "ore_estimate": {},
     "ore_nescrise": [],        # case modificate in aplicatie dar inca nescrise in Sheet (se reincearca)
+    # indicatori proprii: [{"nume": "€ / oră", "expr": "incasari_fara_inter / ore_lucru"}]
+    "formule": [dict(f) for f in formulas.DEFAULT_FORMULAS],
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -463,7 +466,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -526,7 +529,7 @@ def merge_old_settings(old):
 
     for k in ("coord_sheet", "baza", "calendar_id", "calendar_de_la", "consum", "pret_motorina",
               "prag_forfait", "tipuri_la_ora", "clienti_la_ora", "categorii_cheltuieli", "grupuri_clienti",
-              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse"):
+              "coords", "dist_matrix", "distante_baza", "geo_sync", "cuvinte_produse", "formule"):
         if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
             settings[k] = old[k]
             got.append(k)
@@ -1667,6 +1670,7 @@ def _compute_analytics_base(period_key="all"):
         },
         "profit": profit,
         "ore_status": dict(hours_status), "ore_sheet": bool(settings.get("coord_sheet")),
+        "formule": settings.get("formule") or [],
         "excluse": excluse,
         "props": props,
         "clients": clients, "top3": top3,
@@ -1730,6 +1734,16 @@ def build_excel(sort="interventii", period_key="all", client=None):
                 "Ore / menaj (1 pers.)", "Ore de lucru (menaje complete)", "EUR / ora (menaje complete)",
                 "Venit Intermediaire", "Ore Intermediaire"],
           [6, 26, 24, 11, 10, 13, 11, 11, 8, 13, 17, 15, 16, 15, 9, 12, 14, 12, 13, 36, 16, 14, 14, 16, 16, 14, 13])
+    fcols = []
+    for fdef in settings.get("formule") or []:
+        try:
+            fcols.append((fdef["nume"], formulas.compile_expr(fdef["expr"])))
+        except formulas.FormulaError:
+            pass
+    for j, (fname, _) in enumerate(fcols):
+        c = ws1.cell(1, 28 + j, fname)
+        c.font, c.fill = header_font, header_fill
+        ws1.column_dimensions[openpyxl.utils.get_column_letter(28 + j)].width = 14
     for i, p in enumerate(props, 1):
         ultima = datetime.fromisoformat(p["ultima"]).strftime("%d/%m/%Y") if p.get("ultima") else ""
         t = p["tipuri"]
@@ -1741,6 +1755,8 @@ def build_excel(sort="interventii", period_key="all", client=None):
                     ", ".join(p["variante"]) if len(p["variante"]) > 1 else "",
                     p.get("profit_est"), p.get("marja_est"), p.get("ore_est"), p.get("ore_lucru"), p.get("eur_ora_lucru"),
                     p.get("interm_venit") or None, p.get("interm_ore")])
+        for j, (_, code) in enumerate(fcols):     # indicatorii proprii, dupa coloanele fixe
+            ws1.cell(ws1.max_row, 28 + j, formulas.evaluate(code, formulas.house_values(p)))
         fill = {"Performant": "D1FAE5", "Rar": "FEE2E2"}.get(p["perf"])
         for col in range(1, 28):
             c = ws1.cell(i + 1, col)
@@ -2064,6 +2080,7 @@ def _settings_payload():
         "geo_sync": settings.get("geo_sync"),
         "n_coords": len(settings.get("coords") or []),
         "n_ore": sum(1 for h in (settings.get("ore_estimate") or {}).values() if h),
+        "formule": settings.get("formule") or [], "formule_vars": formulas.VARS,
         "ore_status": dict(hours_status),
     }
 
@@ -2627,6 +2644,20 @@ def flush_hours():
             add_log(f"⚠ Ore estimate: {msg}")
         cache["dirty"] = True
         save_cache()
+
+
+@app.route("/api/formule", methods=["POST"])
+def api_formule():
+    """Salveaza indicatorii proprii ('Nume = expresie' pe fiecare rand). Cu greseli: nu salveaza nimic."""
+    text = (request.json or {}).get("text", "")
+    lst, errors = formulas.parse_lines(text)
+    if errors:
+        return jsonify({"ok": False, "error": "; ".join(errors), "erori": errors}), 400
+    settings["formule"] = lst
+    cache["dirty"] = True
+    add_log(f"Indicatori proprii salvați: {', '.join(f['nume'] for f in lst) or '—'}")
+    _save_async()
+    return jsonify({"ok": True, "formule": lst})
 
 
 @app.route("/api/restaureaza-setari", methods=["POST"])
