@@ -65,7 +65,9 @@ CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 # Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
 PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
 
-cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False, "msg": "se încarcă"}
+cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False, "msg": "se încarcă",
+         # ready = regulile din backup sunt aplicate; pana atunci nu primim modificari (testele locale: gata din start)
+         "ready": os.environ.get("DISABLE_BACKGROUND") == "1"}
 
 # Reguli de calcul + unificari de proprietati. Se editeaza din dashboard si se salveaza in backup.
 settings = {
@@ -306,6 +308,18 @@ def require_password():
         return None
     return Response("Autentificare necesara", 401,
                     {"WWW-Authenticate": 'Basic realm="Facturi"'})
+
+
+_EDIT_OK_WHILE_LOADING = ("/api/scan", "/api/backup/", "/api/monitor", "/api/restaureaza-setari", "/api/reset")
+
+
+@app.before_request
+def block_edits_until_backup_loaded():
+    if (request.method == "POST" and request.path.startswith("/api/") and FOLDER_ID and not cache.get("ready")
+            and not request.path.startswith(_EDIT_OK_WHILE_LOADING)):
+        return jsonify({"ok": False, "error": "Regulile tale încă se încarcă din backup-ul din Drive — "
+                                              "încearcă din nou în câteva secunde (altfel modificarea s-ar pierde)."}), 409
+    return None
 
 
 # ---------------------------------------------------------------- retea
@@ -629,6 +643,7 @@ def load_cache():
         if msg != cache.get("msg"):
             add_log(f"⚠ Backup dezactivat: {msg} — reîncerc la fiecare scanare")
         cache["msg"] = msg
+        cache["ready"] = True
         return
     cache.update({"file_id": fid, "enabled": True})
     try:
@@ -655,6 +670,7 @@ def load_cache():
         cache["msg"] = "backup-ul a venit gol din Drive, deși fișierul are conținut — reîncerc automat"
         raise RuntimeError(cache["msg"])
     apply_saved_settings(data.get("setari"))  # setarile raman valabile si cand se schimba parserul
+    cache["ready"] = True
     cache["msg"] = ""
     add_log(f"Reguli și setări încărcate din backup ({len(data.get('setari') or {})} chei)")
     if data.get("parser_version") != PARSER_VERSION:
@@ -676,7 +692,17 @@ def load_cache():
     add_log(f"Backup incarcat: {len(files)} facturi (salvat {data.get('saved_at', '?')})")
 
 
+_save_cache_lock = threading.RLock()
+
+
 def save_cache(force=False, allow_empty=False):
+    # o singura salvare odata: altfel o salvare inceputa mai devreme (ex. dupa o scanare, cu
+    # setarile de atunci) putea termina DUPA una mai noua si suprascria ce tocmai ai schimbat
+    with _save_cache_lock:
+        return _save_cache(force, allow_empty)
+
+
+def _save_cache(force=False, allow_empty=False):
     if not cache["enabled"] or not (cache["dirty"] or force):
         return
     if not cache["loaded"]:
@@ -704,9 +730,12 @@ def save_cache(force=False, allow_empty=False):
         ).execute(num_retries=DRIVE_RETRIES)
     except Exception as e:
         cache["dirty"] = True
-        add_log(f"⚠ Nu am putut salva backup-ul: {e}")
+        cache["save_err"] = str(e)[:200]
+        add_log(f"⚠ Nu am putut salva backup-ul: {e} — reîncerc automat")
         return
     cache["known_files"] = len(files)
+    cache["save_err"] = ""
+    cache["saved_at"] = time.time()
 
 
 # ---------------------------------------------------------------- rezerva AI
@@ -2004,7 +2033,8 @@ def api_state():
                     "interventii": len(interventii),
                     "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2)}
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
-    s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or ""}
+    s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or "",
+                   "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"])}
     return jsonify(s)
 
 
@@ -2074,7 +2104,12 @@ def _saver_loop():
             else:
                 save_cache()
         except Exception as e:  # noqa: BLE001
+            cache["save_err"] = str(e)[:200]
             add_log(f"⚠ Salvare: {e}")
+        if cache["dirty"] and cache["enabled"] and cache["loaded"]:
+            t = threading.Timer(30, _save_event.set)     # n-a mers: reincercam in 30 s
+            t.daemon = True
+            t.start()
         gc.collect()
 
 
@@ -2756,6 +2791,11 @@ def api_coloane():
         if not isinstance(v, dict):
             return jsonify({"ok": False, "error": "Format greșit"}), 400
         cur["culori"] = {str(k)[:60]: str(c) for k, c in list(v.items())[:80] if str(c) in COL_COLORS}
+    if "sortari" in d:         # sortarea aleasa: {"props": "profit_est|desc", "clienti": "venit|asc"}
+        v = d.get("sortari")
+        if not isinstance(v, dict):
+            return jsonify({"ok": False, "error": "Format greșit"}), 400
+        cur["sortari"] = {k: str(v[k])[:70] for k in ("props", "clienti") if k in v}
     if "nume" in d:            # nume date de tine coloanelor: {cheie: "Nume nou"}
         v = d.get("nume")
         if not isinstance(v, dict):
