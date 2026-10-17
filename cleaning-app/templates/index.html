@@ -443,6 +443,7 @@
 
 <div class="main">
   <div class="bk-warn" id="bk-save" role="alert" hidden><div><b>⚠ Ultimele modificări nu s-au putut salva în Drive.</b> Reîncerc automat la 30 de secunde; nu închide aplicația până dispare mesajul.<br><span style="font-size:12px" id="bk-save-msg"></span></div></div>
+  <div class="bk-warn" id="bk-dup" role="alert" hidden><div><b>⚠ În folderul facturilor sunt <span id="bk-dup-n"></span> fișiere „cache-facturi.json”.</b> Aplicația folosește doar pe cel mai nou. Deschide folderul în Google Drive și șterge-le pe celelalte (cele mai vechi), ca setările să nu se mai amestece.</div></div>
   <div class="bk-warn" id="bk-warn" role="alert" hidden>
     <div><b>⚠ Regulile și setările tale nu sunt încărcate încă din backup-ul din Drive.</b> <span id="bk-msg"></span><br>
       Până se încarcă vezi regulile implicite — nu le modifica acum (orice schimbare ar fi înlocuită de backup).</div>
@@ -888,6 +889,7 @@ function renderState(filesChanged = true) {
   const bk = s.backup || {ok: true};
   $('bk-warn').hidden = !!bk.ok; $('bk-msg').textContent = bk.msg ? `Motiv: ${bk.msg}.` : '';
   $('bk-save').hidden = !(bk.ok && bk.eroare_salvare); $('bk-save-msg').textContent = bk.eroare_salvare || '';
+  $('bk-dup').hidden = !(bk.duplicate > 1); $('bk-dup-n').textContent = bk.duplicate || '';
   dot.className = s.monitoring ? 'dot live' : 'dot';
   stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
   const sc = s.scan || {}, pf = $('p-fill');
