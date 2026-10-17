@@ -2842,6 +2842,29 @@ def api_formule():
     return jsonify({"ok": True, "formule": lst})
 
 
+@app.route("/api/diagnostic")
+def api_diagnostic():
+    """Ce e in memorie vs ce e in fisierul din Drive (pentru depanarea salvarii setarilor)."""
+    def summ(st):
+        st = st or {}
+        col = st.get("coloane") or {}
+        return {"formule": [f.get("nume") for f in st.get("formule") or []],
+                "coloane": {k: (len(v) if isinstance(v, (list, dict)) else v) for k, v in col.items()},
+                "ascunse": col.get("ascunse") or [], "ordine": (col.get("props") or [])[:20],
+                "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or [])}
+    out = {"gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
+           "fisiere_backup": cache.get("duplicate") or 1, "nesalvat": bool(cache["dirty"]),
+           "ultima_salvare": datetime.fromtimestamp(cache["saved_at"]).strftime("%d.%m %H:%M:%S") if cache.get("saved_at") else "—",
+           "eroare_salvare": cache.get("save_err") or "", "in_memorie": summ(settings)}
+    if cache.get("file_id"):
+        try:
+            data = json.loads(download_pdf(cache["file_id"]).read().decode("utf-8"))
+            out["in_drive"] = {**summ(data.get("setari")), "salvat_la": data.get("saved_at")}
+        except Exception as e:  # noqa: BLE001
+            out["in_drive"] = f"nu pot citi: {e}"
+    return jsonify(out)
+
+
 @app.route("/api/backup/versiuni")
 def api_backup_versions():
     """Versiunile backup-ului pastrate de Google Drive (cele mai noi primele), ca sa recuperezi regulile."""
