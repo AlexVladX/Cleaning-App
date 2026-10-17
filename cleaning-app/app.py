@@ -1434,7 +1434,8 @@ def data_key():
                json.dumps(settings.get("ore_estimate") or {}, sort_keys=True), tuple(settings.get("separate") or [])))
     g = hash((settings.get("baza"), len(settings.get("coords") or []), len(settings.get("distante") or {}),
               tuple(sorted((settings.get("coord_alias") or {}).items())), settings.get("geo_sync"), settings.get("geo_v")))
-    return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}"
+    # + daca regulile din backup sunt deja aplicate: cand se termina incarcarea, pagina reia datele
+    return f"{id(ivs)}-{len(ivs)}-{alias}-{ok}-{g}-{int(bool(cache.get('ready')))}"
 
 
 # ---------------------------------------------------------------- cheltuieli & profit
@@ -2056,7 +2057,7 @@ def api_analytics():
     val = compute_analytics(request.args.get("period", "all"), request.args.get("client"))
     # formulele si ordinea coloanelor se iau mereu din setarile curente (rezultatul de mai sus e tinut in memorie)
     return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {},
-                    "intrebari": settings.get("intrebari") or []})
+                    "intrebari": settings.get("intrebari") or [], "setari_gata": bool(cache.get("ready"))})
 
 
 @app.route("/api/factura/<file_id>")
