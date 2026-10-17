@@ -442,6 +442,7 @@
 </div>
 
 <div class="main">
+  <div class="bk-warn" id="bk-save" role="alert" hidden><div><b>⚠ Ultimele modificări nu s-au putut salva în Drive.</b> Reîncerc automat la 30 de secunde; nu închide aplicația până dispare mesajul.<br><span style="font-size:12px" id="bk-save-msg"></span></div></div>
   <div class="bk-warn" id="bk-warn" role="alert" hidden>
     <div><b>⚠ Regulile și setările tale nu sunt încărcate încă din backup-ul din Drive.</b> <span id="bk-msg"></span><br>
       Până se încarcă vezi regulile implicite — nu le modifica acum (orice schimbare ar fi înlocuită de backup).</div>
@@ -844,7 +845,7 @@ let S = null, A = null;               // /api/state si /api/analytics
 let period = store.get('period', 'all');
 let propClient = store.get('propClient', '');
 let tab = store.get('tab', 'proprietati');
-let ABASE = null;
+let ABASE = null, lastSettingsEdit = 0;   // momentul ultimei modificari de formule / coloane / intrebari
 let sortBy = store.get('sortBy2', 'total');
 let propFilter = 'all', fileFilter = 'all', priceFilter = 'abatere';
 let lastDataKey = null, lastAnFetch = 0, anLoading = false;
@@ -867,7 +868,10 @@ async function fetchAnalytics() {
   anLoading = true; lastAnFetch = Date.now();
   try {
     const key = S ? S.data_key : null;
+    const t0 = Date.now(), prev = A;
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
+    // un raspuns cerut INAINTE de o modificare a ta nu are voie s-o anuleze (formule, coloane, intrebari)
+    if (prev && lastSettingsEdit >= t0) for (const k of ['formule', 'coloane', 'intrebari']) A[k] = prev[k];
     // intrebarile raspund mereu pe toate casele, indiferent de filtrul de client din Proprietati
     ABASE = A.client_sel ? await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json() : A;
     lastDataKey = key;
@@ -883,6 +887,7 @@ function renderState(filesChanged = true) {
   const s = S, dot = $('dot'), stxt = $('status-txt');
   const bk = s.backup || {ok: true};
   $('bk-warn').hidden = !!bk.ok; $('bk-msg').textContent = bk.msg ? `Motiv: ${bk.msg}.` : '';
+  $('bk-save').hidden = !(bk.ok && bk.eroare_salvare); $('bk-save-msg').textContent = bk.eroare_salvare || '';
   dot.className = s.monitoring ? 'dot live' : 'dot';
   stxt.textContent = s.monitoring ? 'Monitorizare activă' : 'Monitorizare oprită';
   const sc = s.scan || {}, pf = $('p-fill');
@@ -1095,7 +1100,7 @@ function prepareFormulas() {
 const normLayout = o => { const L = k => Array.isArray(o && o[k]) ? o[k].map(String) : [];
   const c = o && o.culori && typeof o.culori === 'object' ? Object.fromEntries(Object.entries(o.culori).filter(([, v]) => CC_ALL.includes(v))) : {};
   const D = k => o && o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) ? o[k] : {};
-  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c, nume: {...D('nume')}, latimi: {...D('latimi')}}; };
+  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c, nume: {...D('nume')}, latimi: {...D('latimi')}, sortari: {...D('sortari')}}; };
 const dl = c => (LAYOUT && LAYOUT.nume || {})[c.key] || c.label;                 // numele afisat (redenumit de tine)
 const cw = c => (LAYOUT && LAYOUT.latimi || {})[c.key] || c.w;                   // latimea aleasa
 // culorile coloanelor: tenta fixa sau scala dupa valoare (mare = mai intens; inversa: mic = mai intens)
@@ -1143,15 +1148,17 @@ let LAYOUT;
 try { LAYOUT = normLayout(JSON.parse(store.get('colLayout', 'null'))); } catch (e) { LAYOUT = normLayout(null); }
 try { if (!LAYOUT.ascunse.length) { const old = JSON.parse(store.get('hiddenFormulas', '[]')); if (Array.isArray(old)) LAYOUT.ascunse = old.map(String); } } catch (e) {}
 let hiddenF = LAYOUT.ascunse, layoutTimer = null, layoutDirty = false;
-const layoutEmpty = L => !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length && !Object.keys(L.nume || {}).length && !Object.keys(L.latimi || {}).length;
+const layoutEmpty = L => !Object.keys(L.sortari || {}).length && !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length && !Object.keys(L.nume || {}).length && !Object.keys(L.latimi || {}).length;
 function saveLayout() {
-  LAYOUT.ascunse = hiddenF;
+  LAYOUT.ascunse = hiddenF; lastSettingsEdit = Date.now();
   store.set('colLayout', JSON.stringify(LAYOUT));
   layoutDirty = true; clearTimeout(layoutTimer);
   layoutTimer = setTimeout(async () => {
     try {
       const r = await fetch('/api/coloane', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(LAYOUT)});
       if (r.ok && A) A.coloane = normLayout(LAYOUT);
+      if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Aranjarea coloanelor nu s-a putut salva'), null); }
+      lastSettingsEdit = Date.now();
     } catch (e) {}
     layoutDirty = false;
   }, 700);
@@ -1159,7 +1166,7 @@ function saveLayout() {
 function adoptLayout(srv) {      // la fiecare incarcare: aranjarea din backup (aceeasi pe telefon si pe calculator)
   if (layoutDirty) return;
   const s = normLayout(srv);
-  if (!layoutEmpty(s)) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); }
+  if (!layoutEmpty(s)) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); applySavedSort(); }
   else if (!layoutEmpty(LAYOUT)) saveLayout();     // prima data: trimite ce era salvat doar in browser
 }
 function orderCols(cols, order) {
@@ -1486,7 +1493,13 @@ function showToast(text, undo) {
 function hideToast() { $('toast').classList.remove('on'); }
 $('prop-body').addEventListener('click', e => { const b = e.target.closest('[data-excl]'); if (b) askExclude(b.dataset.excl); });
 $('ex-list').addEventListener('click', e => { const b = e.target.closest('[data-unexcl]'); if (b) setExcluded(b.dataset.unexcl, b.dataset.name, true); });
-function setSort(k) { if (!SORTS[k]) return; sortDir = k === sortBy ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'; sortBy = k; store.set('sortBy2', k); store.set('sortDir', sortDir); renderProps(); }
+function setSort(k) { if (!SORTS[k]) return; sortDir = k === sortBy ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'; sortBy = k; store.set('sortBy2', k); store.set('sortDir', sortDir); saveSort(); renderProps(); }
+function saveSort() { LAYOUT.sortari = {props: sortBy + '|' + sortDir, clienti: cSort.k + '|' + cSort.d}; saveLayout(); }
+function applySavedSort() {      // sortarea salvata in backup (aceeasi pe toate dispozitivele)
+  const s = LAYOUT.sortari || {};
+  if (s.props) { const [k, d] = s.props.split('|'); if (k) { sortBy = k; sortDir = d === 'asc' ? 'asc' : 'desc'; } }
+  if (s.clienti) { const [k, d] = s.clienti.split('|'); if (k) cSort = {k, d: d === 'asc' ? 'asc' : 'desc'}; }
+}
 
 $('p-search').addEventListener('input', renderProps);
 $('client-body').addEventListener('click', e => { const b = e.target.closest('[data-cl]'); if (!b) return;
@@ -1569,7 +1582,7 @@ $('ccl-menu').addEventListener('click', e => {
 document.addEventListener('click', () => { const m = $('ccl-menu'); if (!m.hidden) { m.hidden = true; $('ccl-btn').setAttribute('aria-expanded', 'false'); } });
 colDrag($('client-head'), (from, to, after) => { if (moveCol('clienti', allClientCols(), from, to, after)) renderClients(); });
 $('client-head').addEventListener('click', e => { const t = e.target.closest('th[data-cs]'); if (!t) return;
-  const k = t.dataset.cs; cSort = {k, d: cSort.k === k && cSort.d === 'desc' ? 'asc' : 'desc'}; store.set('clientSort2', cSort.k + '|' + cSort.d); renderClients(); });
+  const k = t.dataset.cs; cSort = {k, d: cSort.k === k && cSort.d === 'desc' ? 'asc' : 'desc'}; store.set('clientSort2', cSort.k + '|' + cSort.d); saveSort(); renderClients(); });
 // ---- grafice cu bare (o singura serie, o singura axa)
 function barChart(container, data, opts) {
   const svg = container.querySelector('svg');
@@ -2311,13 +2324,14 @@ function qAdopt(srv) {
 function qPersist(serverToo = true) {
   try { store.set('intrebariLocal', JSON.stringify(QS.filter(q => !q.pastrata).map(qClean))); } catch (e) {}
   if (!serverToo) return;
-  qDirty = true; clearTimeout(qSaveT);
+  qDirty = true; clearTimeout(qSaveT); lastSettingsEdit = Date.now();
   qSaveT = setTimeout(async () => {
     const lista = QS.filter(q => q.pastrata).map(qClean);
     try {
       const r = await fetch('/api/intrebari', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lista})});
       if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Nu s-au putut salva întrebările'), null); }
       else if (A) A.intrebari = lista;
+      lastSettingsEdit = Date.now();
     } catch (e) { showToast('⚠ Fără conexiune: întrebările păstrate nu s-au salvat încă', null); }
     qDirty = false;
   }, 600);
@@ -2589,6 +2603,7 @@ $('fx-save').addEventListener('click', async () => {
   const j = await r.json();
   if (!r.ok) { $('fx-status').innerHTML = `<span style="color:var(--bad-ink)">⚠ ${esc(j.error || 'Eroare')}</span>`; return; }
   $('fx-status').textContent = `✓ Salvat (${j.formule.length} indicatori)`;
+  lastSettingsEdit = Date.now();
   if (A) { A.formule = j.formule; prepareFormulas(); renderColPicker(); renderProps(); renderClients(); }
   setTimeout(() => $('fx-status').textContent = '', 4000);
 });
