@@ -615,17 +615,27 @@ def find_cache_file():
     set_stage(f"caut fisierul de backup '{CACHE_FILE_NAME}'")
     res = svc.files().list(
         q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
-        fields="files(id, name, size, capabilities/canEdit)",
+        fields="files(id, name, size, modifiedTime, capabilities/canEdit)",
+        orderBy="modifiedTime desc",
         supportsAllDrives=True, includeItemsFromAllDrives=True,
     ).execute(num_retries=DRIVE_RETRIES)
     found = res.get("files", [])
     if not found:
         return None
-    if not found[0].get("capabilities", {}).get("canEdit"):
+    editable = [f for f in found if f.get("capabilities", {}).get("canEdit")]
+    if not editable:
         cache["msg"] = f"{CACHE_FILE_NAME} există, dar service account-ul nu e Editor pe el"
         return None
-    cache["file_size"] = int(found[0].get("size") or 0)
-    return found[0]["id"]
+    # mai multe fisiere cu acelasi nume (ex. o versiune veche urcata inapoi in folder): Google le
+    # intoarce in ordine oarecare -> la o pornire se citea unul, la alta celalalt, si modificarile
+    # pareau pierdute. Folosim MEREU cel mai recent modificat si avertizam.
+    cache["duplicate"] = len(found)
+    if len(found) > 1:
+        add_log(f"⚠ Am găsit {len(found)} fișiere „{CACHE_FILE_NAME}” în folderul facturilor — folosesc "
+                f"doar cel mai nou ({editable[0].get('modifiedTime', '?')[:16].replace('T', ' ')}). "
+                "Șterge-le pe celelalte din Drive, altfel setările se pot amesteca.")
+    cache["file_size"] = int(editable[0].get("size") or 0)
+    return editable[0]["id"]
 
 
 def load_cache():
@@ -736,6 +746,8 @@ def _save_cache(force=False, allow_empty=False):
     cache["known_files"] = len(files)
     cache["save_err"] = ""
     cache["saved_at"] = time.time()
+    nf = len(settings.get("formule") or [])
+    add_log(f"✓ Salvat în Drive: setările ({nf} formule, {len(settings.get('intrebari') or [])} întrebări păstrate) + {len(files)} facturi")
 
 
 # ---------------------------------------------------------------- rezerva AI
@@ -2034,7 +2046,8 @@ def api_state():
                     "revenue": round(sum(float(iv.get("suma") or 0) for iv in interventii), 2)}
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
     s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or "",
-                   "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"])}
+                   "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"]),
+                   "duplicate": cache.get("duplicate") or 0}
     return jsonify(s)
 
 
