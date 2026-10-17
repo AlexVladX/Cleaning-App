@@ -846,7 +846,8 @@ let S = null, A = null;               // /api/state si /api/analytics
 let period = store.get('period', 'all');
 let propClient = store.get('propClient', '');
 let tab = store.get('tab', 'proprietati');
-let ABASE = null, lastSettingsEdit = 0;   // momentul ultimei modificari de formule / coloane / intrebari
+let ABASE = null;
+const lastEdit = {formule: 0, coloane: 0, intrebari: 0};   // momentul ultimei modificari facute de tine
 let sortBy = store.get('sortBy2', 'total');
 let propFilter = 'all', fileFilter = 'all', priceFilter = 'abatere';
 let lastDataKey = null, lastAnFetch = 0, anLoading = false;
@@ -872,7 +873,9 @@ async function fetchAnalytics() {
     const t0 = Date.now(), prev = A;
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
     // un raspuns cerut INAINTE de o modificare a ta nu are voie s-o anuleze (formule, coloane, intrebari)
-    if (prev && lastSettingsEdit >= t0) for (const k of ['formule', 'coloane', 'intrebari']) A[k] = prev[k];
+    if (prev) for (const k of ['formule', 'coloane', 'intrebari']) if (lastEdit[k] >= t0) A[k] = prev[k];
+    // cat timp regulile nu sunt inca citite din backup, nu folosim valorile implicite ale serverului
+    if (prev && A.setari_gata === false) for (const k of ['formule', 'coloane', 'intrebari']) A[k] = prev[k];
     // intrebarile raspund mereu pe toate casele, indiferent de filtrul de client din Proprietati
     ABASE = A.client_sel ? await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json() : A;
     lastDataKey = key;
@@ -1152,7 +1155,7 @@ try { if (!LAYOUT.ascunse.length) { const old = JSON.parse(store.get('hiddenForm
 let hiddenF = LAYOUT.ascunse, layoutTimer = null, layoutDirty = false;
 const layoutEmpty = L => !Object.keys(L.sortari || {}).length && !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length && !Object.keys(L.nume || {}).length && !Object.keys(L.latimi || {}).length;
 function saveLayout() {
-  LAYOUT.ascunse = hiddenF; lastSettingsEdit = Date.now();
+  LAYOUT.ascunse = hiddenF; lastEdit.coloane = Date.now();
   store.set('colLayout', JSON.stringify(LAYOUT));
   layoutDirty = true; clearTimeout(layoutTimer);
   layoutTimer = setTimeout(async () => {
@@ -1160,13 +1163,13 @@ function saveLayout() {
       const r = await fetch('/api/coloane', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(LAYOUT)});
       if (r.ok && A) A.coloane = normLayout(LAYOUT);
       if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Aranjarea coloanelor nu s-a putut salva'), null); }
-      lastSettingsEdit = Date.now();
+      lastEdit.coloane = Date.now();
     } catch (e) {}
     layoutDirty = false;
   }, 700);
 }
 function adoptLayout(srv) {      // la fiecare incarcare: aranjarea din backup (aceeasi pe telefon si pe calculator)
-  if (layoutDirty) return;
+  if (layoutDirty || !A || A.setari_gata === false) return;
   const s = normLayout(srv);
   if (!layoutEmpty(s)) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); applySavedSort(); }
   else if (!layoutEmpty(LAYOUT)) saveLayout();     // prima data: trimite ce era salvat doar in browser
@@ -2314,7 +2317,7 @@ const qClean = q => ({id: q.id, q: String(q.q || '').slice(0, 200), nivel: q.niv
   cols: (q.cols || []).slice(0, 8).map(String), nota: String(q.nota || '').slice(0, 3000), pastrata: !!q.pastrata,
   istoric: (q.istoric || []).slice(-25), creat: q.creat || new Date().toISOString().slice(0, 10)});
 function qAdopt(srv) {
-  if (qDirty) return;
+  if (qDirty || (A && A.setari_gata === false && qLoaded)) return;
   let temp = [];
   try { temp = JSON.parse(store.get('intrebariLocal', '[]')); } catch (e) {}
   if (!Array.isArray(temp)) temp = [];
@@ -2326,14 +2329,14 @@ function qAdopt(srv) {
 function qPersist(serverToo = true) {
   try { store.set('intrebariLocal', JSON.stringify(QS.filter(q => !q.pastrata).map(qClean))); } catch (e) {}
   if (!serverToo) return;
-  qDirty = true; clearTimeout(qSaveT); lastSettingsEdit = Date.now();
+  qDirty = true; clearTimeout(qSaveT); lastEdit.intrebari = Date.now();
   qSaveT = setTimeout(async () => {
     const lista = QS.filter(q => q.pastrata).map(qClean);
     try {
       const r = await fetch('/api/intrebari', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lista})});
       if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Nu s-au putut salva întrebările'), null); }
       else if (A) A.intrebari = lista;
-      lastSettingsEdit = Date.now();
+      lastEdit.intrebari = Date.now();
     } catch (e) { showToast('⚠ Fără conexiune: întrebările păstrate nu s-au salvat încă', null); }
     qDirty = false;
   }, 600);
@@ -2605,7 +2608,7 @@ $('fx-save').addEventListener('click', async () => {
   const j = await r.json();
   if (!r.ok) { $('fx-status').innerHTML = `<span style="color:var(--bad-ink)">⚠ ${esc(j.error || 'Eroare')}</span>`; return; }
   $('fx-status').textContent = `✓ Salvat (${j.formule.length} indicatori)`;
-  lastSettingsEdit = Date.now();
+  lastEdit.formule = Date.now();
   if (A) { A.formule = j.formule; prepareFormulas(); renderColPicker(); renderProps(); renderClients(); }
   setTimeout(() => $('fx-status').textContent = '', 4000);
 });
