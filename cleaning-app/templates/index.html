@@ -764,6 +764,8 @@
       <section class="rsec" id="rs-backup">
         <h3 class="rsec-h"><span class="rnum">5</span>Backup și recuperare</h3>
         <div class="hint ex rsec-sub">Toate setările se salvează automat în Google Drive (cache-facturi.json).</div>
+        <div style="margin-bottom:12px"><button class="btn btn-sm" type="button" id="diag-btn">🩺 Verifică salvarea</button> <span class="hint">arată ce e în aplicație, în Drive și în acest browser</span>
+          <pre id="diag-out" hidden style="white-space:pre-wrap;font-size:11.5px;background:var(--line-2);border-radius:8px;padding:10px;margin-top:8px;max-height:420px;overflow:auto"></pre></div>
         <div><label>Recuperează setările dintr-un backup vechi</label>
           <div class="hint ex">Dacă s-au pierdut setări (grupuri, linkul Sheet-ului, ore, cheltuieli, încasări, uniri de case…): în Google Drive → <b>cache-facturi.json</b> → Gestionează versiunile → descarcă o versiune de dinainte de pierdere și încarc-o aici. Se recuperează doar ce lipsește acum; ce ai deja nu se schimbă, iar facturile nu sunt atinse.</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><b style="font-size:13px">Direct din Drive:</b>
@@ -2638,6 +2640,15 @@ $('rv-btn').addEventListener('click', async () => {
   if (!r.ok) { $('rv-status').textContent = '⚠ ' + (j.error || 'Eroare'); return; }
   $('rv-status').textContent = j.recuperat && j.recuperat.length ? `✓ Recuperat: ${j.recuperat.join(', ')}` : (j.msg || 'Nimic nou de recuperat') + ' — încearcă o versiune mai veche';
   lastDataKey = null; loadSettings(); fetchState(); fetchAnalytics();
+});
+$('diag-btn').addEventListener('click', async () => {
+  const out = $('diag-out'); out.hidden = false; out.textContent = 'Verific…';
+  let srv; try { srv = await (await fetch('/api/diagnostic')).json(); } catch (e) { srv = {eroare: String(e)}; }
+  let ls = null; try { ls = JSON.parse(store.get('colLayout', 'null')); } catch (e) {}
+  const pagina = {setari_gata: A && A.setari_gata, formule_primite: (A && A.formule || []).map(f => f.nume),
+    formule_coloane: FORMS.map(f => f.nume), formule_ascunse: hiddenF, coloane_afisate: shownCols().map(c => dl(c)),
+    aranjare_folosita: LAYOUT, aranjare_din_browser: ls, modificari_in_curs: {coloane: layoutDirty, intrebari: qDirty}};
+  out.textContent = 'APLICAȚIA (server):\n' + JSON.stringify(srv, null, 1) + '\n\nPAGINA (acest browser):\n' + JSON.stringify(pagina, null, 1);
 });
 $('o-rewrite').addEventListener('click', async () => {
   $('o-status').textContent = 'Scriu orele în Sheet…';
