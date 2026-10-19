@@ -108,6 +108,7 @@ settings = {
     "separate": [],
     # intrebarile pastrate din tab-ul "Intrebari" (filtre/sortare pe indicatori + concluzii si istoric)
     "intrebari": [],
+    "intrebari_ts": 0,
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -513,7 +514,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "separate", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -2057,7 +2058,8 @@ def api_analytics():
     val = compute_analytics(request.args.get("period", "all"), request.args.get("client"))
     # formulele si ordinea coloanelor se iau mereu din setarile curente (rezultatul de mai sus e tinut in memorie)
     return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {},
-                    "intrebari": settings.get("intrebari") or [], "setari_gata": bool(cache.get("ready"))})
+                    "intrebari": settings.get("intrebari") or [], "intrebari_ts": settings.get("intrebari_ts") or 0,
+                    "setari_gata": bool(cache.get("ready"))})
 
 
 @app.route("/api/factura/<file_id>")
@@ -2777,8 +2779,13 @@ def api_intrebari():
     if not isinstance(lst, list) or len(lst) > MAX_INTREBARI or not all(isinstance(q, dict) for q in lst):
         return jsonify({"ok": False, "error": f"Format greșit (cel mult {MAX_INTREBARI} întrebări)"}), 400
     for q in lst:
-        if len(json.dumps(q, ensure_ascii=False)) > 12000:
+        if len(json.dumps(q, ensure_ascii=False)) > 60000:
             return jsonify({"ok": False, "error": "O întrebare e prea mare (concluzia sau istoricul)"}), 400
+    if len(json.dumps(lst, ensure_ascii=False)) > 600000:
+        return jsonify({"ok": False, "error": "Întrebările păstrate sunt prea mari în total"}), 400
+    ts = (request.json or {}).get("ts")
+    if isinstance(ts, (int, float)):
+        settings["intrebari_ts"] = ts       # momentul modificarii (din pagina) -> cea mai noua castiga
     if lst != settings.get("intrebari"):
         settings["intrebari"] = lst
         cache["dirty"] = True
@@ -2805,6 +2812,8 @@ def api_coloane():
         if not isinstance(v, dict):
             return jsonify({"ok": False, "error": "Format greșit"}), 400
         cur["culori"] = {str(k)[:60]: str(c) for k, c in list(v.items())[:80] if str(c) in COL_COLORS}
+    if isinstance(d.get("_ts"), (int, float)):
+        cur["_ts"] = d["_ts"]  # momentul modificarii (din pagina) -> cea mai noua castiga intre dispozitive
     if "sortari" in d:         # sortarea aleasa: {"props": "profit_est|desc", "clienti": "venit|asc"}
         v = d.get("sortari")
         if not isinstance(v, dict):
