@@ -25,6 +25,9 @@
   .topbar .status-txt{color:#B9D6D2}
   .topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
   .top-scan{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none}
+  .sync-chip{font-size:11px;background:rgba(255,255,255,.14);color:#fff;border-radius:999px;padding:3px 9px;white-space:nowrap;flex:none}
+  .sync-chip.bad{background:#FDE68A;color:#78350F}
+  .sync-chip[hidden]{display:none}
   .top-scan:hover{background:rgba(255,255,255,.18)}
   @media(max-width:520px){.top-scan-t{display:none}}
   .dot{width:8px;height:8px;border-radius:50%;background:#6B7280;flex:none}
@@ -438,7 +441,7 @@
 
 <div class="topbar">
   <h1><span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 9"/><path d="M6 13h10l2 8H4z"/><path d="M9 17v4M13 17v4"/></svg></span>SimNettoyage <span class="sub-brand">· Analizator facturi</span></h1>
-  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span><button class="top-scan" type="button" onclick="scan()" title="Verifică acum dacă sunt facturi noi în Drive">↻<span class="top-scan-t"> Scanează</span></button></div>
+  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span><span class="sync-chip" id="sync-chip" hidden></span><button class="top-scan" type="button" onclick="scan()" title="Verifică acum dacă sunt facturi noi în Drive">↻<span class="top-scan-t"> Scanează</span></button></div>
 </div>
 
 <div class="main">
@@ -875,9 +878,9 @@ async function fetchAnalytics() {
     const t0 = Date.now(), prev = A;
     A = await (await fetch('/api/analytics?period=' + encodeURIComponent(period) + (propClient ? '&client=' + encodeURIComponent(propClient) : ''))).json();
     // un raspuns cerut INAINTE de o modificare a ta nu are voie s-o anuleze (formule, coloane, intrebari)
-    if (prev) for (const k of ['formule', 'coloane', 'intrebari']) if (lastEdit[k] >= t0) A[k] = prev[k];
+    if (prev) for (const k of ['formule', 'coloane', 'intrebari']) if (lastEdit[k] >= t0) { A[k] = prev[k]; if (k === 'intrebari') A.intrebari_ts = prev.intrebari_ts; }
     // cat timp regulile nu sunt inca citite din backup, nu folosim valorile implicite ale serverului
-    if (prev && A.setari_gata === false) for (const k of ['formule', 'coloane', 'intrebari']) A[k] = prev[k];
+    if (prev && A.setari_gata === false) for (const k of ['formule', 'coloane', 'intrebari', 'intrebari_ts']) A[k] = prev[k];
     // intrebarile raspund mereu pe toate casele, indiferent de filtrul de client din Proprietati
     ABASE = A.client_sel ? await (await fetch('/api/analytics?period=' + encodeURIComponent(period))).json() : A;
     lastDataKey = key;
@@ -969,7 +972,7 @@ function renderAnalytics() {
   const np = $('n-prices'); np.textContent = m.abateri || ''; np.classList.toggle('alert', !!m.abateri);
   adoptLayout(A.coloane); prepareFormulas(); renderColPicker();
   renderProps(); renderExcluded(); renderClients(); renderMonthly(); renderCalendar(); renderPrices(); renderZones();
-  qAdopt(A.intrebari); renderQuestions(); if (QE && !$('q-editor').hidden) renderQPreview();
+  qAdopt(A.intrebari, A.intrebari_ts); renderQuestions(); if (QE && !$('q-editor').hidden) renderQPreview();
 }
 
 // ---- proprietati
@@ -1107,7 +1110,7 @@ function prepareFormulas() {
 const normLayout = o => { const L = k => Array.isArray(o && o[k]) ? o[k].map(String) : [];
   const c = o && o.culori && typeof o.culori === 'object' ? Object.fromEntries(Object.entries(o.culori).filter(([, v]) => CC_ALL.includes(v))) : {};
   const D = k => o && o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) ? o[k] : {};
-  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c, nume: {...D('nume')}, latimi: {...D('latimi')}, sortari: {...D('sortari')}}; };
+  return {props: L('props'), clienti: L('clienti'), ascunse: L('ascunse'), culori: c, nume: {...D('nume')}, latimi: {...D('latimi')}, sortari: {...D('sortari')}, _ts: +(o && o._ts) || 0}; };
 const dl = c => (LAYOUT && LAYOUT.nume || {})[c.key] || c.label;                 // numele afisat (redenumit de tine)
 const cw = c => (LAYOUT && LAYOUT.latimi || {})[c.key] || c.w;                   // latimea aleasa
 // culorile coloanelor: tenta fixa sau scala dupa valoare (mare = mai intens; inversa: mic = mai intens)
@@ -1156,23 +1159,50 @@ try { LAYOUT = normLayout(JSON.parse(store.get('colLayout', 'null'))); } catch (
 try { if (!LAYOUT.ascunse.length) { const old = JSON.parse(store.get('hiddenFormulas', '[]')); if (Array.isArray(old)) LAYOUT.ascunse = old.map(String); } } catch (e) {}
 let hiddenF = LAYOUT.ascunse, layoutTimer = null, layoutDirty = false;
 const layoutEmpty = L => !Object.keys(L.sortari || {}).length && !L.props.length && !L.clienti.length && !L.ascunse.length && !Object.keys(L.culori || {}).length && !Object.keys(L.nume || {}).length && !Object.keys(L.latimi || {}).length;
+// ---- sincronizarea cu serverul: o modificare ramane „in asteptare” (si in browser) pana o confirma serverul;
+// daca serverul nu raspunde / inca isi incarca backup-ul, se reincearca singura. Cea mai noua modificare castiga.
+const SYNC = (() => { try { const o = JSON.parse(store.get('syncPending', '{}')); return {coloane: +o.coloane || 0, intrebari: +o.intrebari || 0}; } catch (e) { return {coloane: 0, intrebari: 0}; } })();
+const syncErr = {coloane: '', intrebari: ''}, syncTimer = {}, syncTry = {coloane: 0, intrebari: 0};
+function syncStore() { store.set('syncPending', JSON.stringify(SYNC)); renderSyncChip(); }
+function renderSyncChip() {
+  const c = $('sync-chip'); if (!c) return;
+  const pend = SYNC.coloane || SYNC.intrebari, err = syncErr.coloane || syncErr.intrebari;
+  c.hidden = !pend; c.classList.toggle('bad', !!err);
+  c.textContent = err ? '⚠ Nesalvat încă' : '⟳ Se salvează…';
+  c.title = err ? `Modificările tale sunt păstrate în browser și se trimit din nou automat. Motiv: ${err}` : 'Se trimite la server';
+}
+function syncSchedule(kind, fn, wait) { clearTimeout(syncTimer[kind]); syncTimer[kind] = setTimeout(fn, wait); }
+async function syncPush(kind, url, body, onOk) {
+  const ts = SYNC[kind]; if (!ts) return;
+  try {
+    const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body())});
+    if (r.ok) {
+      syncTry[kind] = 0; syncErr[kind] = '';
+      if (SYNC[kind] === ts) SYNC[kind] = 0;          // confirmat (daca nu s-a mai schimbat ceva intre timp)
+      onOk && onOk(); syncStore(); return;
+    }
+    const j = await r.json().catch(() => ({}));
+    syncErr[kind] = j.error || ('eroare ' + r.status);
+    if (r.status === 400) { SYNC[kind] = 0; syncStore(); showToast('⚠ ' + syncErr[kind], null); return; }   // date respinse: nu are rost sa reincercam
+  } catch (e) { syncErr[kind] = 'fără conexiune la server'; }
+  syncTry[kind] = Math.min(syncTry[kind] + 1, 6);
+  syncStore();
+  syncSchedule(kind, () => syncPush(kind, url, body, onOk), [3, 5, 10, 15, 30, 30, 60][syncTry[kind]] * 1000);
+}
+function pushLayout() { syncPush('coloane', '/api/coloane', () => LAYOUT, () => { if (A) A.coloane = normLayout(LAYOUT); }); }
 function saveLayout() {
-  LAYOUT.ascunse = hiddenF; lastEdit.coloane = Date.now();
+  LAYOUT.ascunse = hiddenF; lastEdit.coloane = Date.now(); LAYOUT._ts = Date.now();
   store.set('colLayout', JSON.stringify(LAYOUT));
-  layoutDirty = true; clearTimeout(layoutTimer);
-  layoutTimer = setTimeout(async () => {
-    try {
-      const r = await fetch('/api/coloane', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(LAYOUT)});
-      if (r.ok && A) A.coloane = normLayout(LAYOUT);
-      if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Aranjarea coloanelor nu s-a putut salva'), null); }
-      lastEdit.coloane = Date.now();
-    } catch (e) {}
-    layoutDirty = false;
-  }, 700);
+  SYNC.coloane = LAYOUT._ts; syncStore();
+  syncSchedule('coloane', pushLayout, 700);
 }
 function adoptLayout(srv) {      // la fiecare incarcare: aranjarea din backup (aceeasi pe telefon si pe calculator)
-  if (layoutDirty || !A || A.setari_gata === false) return;
+  if (!A || A.setari_gata === false) return;
   const s = normLayout(srv);
+  if (SYNC.coloane) {                // ai o modificare netrimisa inca: daca serverul nu are una mai noua, o trimitem
+    if (s._ts > SYNC.coloane) { SYNC.coloane = 0; syncErr.coloane = ''; syncStore(); }
+    else { syncSchedule('coloane', pushLayout, 300); return; }
+  }
   if (!layoutEmpty(s)) { LAYOUT = s; hiddenF = s.ascunse; store.set('colLayout', JSON.stringify(LAYOUT)); applySavedSort(); }
   else if (!layoutEmpty(LAYOUT)) saveLayout();     // prima data: trimite ce era salvat doar in browser
 }
@@ -2318,30 +2348,32 @@ const qClean = q => ({id: q.id, q: String(q.q || '').slice(0, 200), nivel: q.niv
   sort: q.sort && q.sort.k ? {k: String(q.sort.k), d: q.sort.d === 'asc' ? 'asc' : 'desc'} : null, n: Number(q.n) || 0,
   cols: (q.cols || []).slice(0, 8).map(String), nota: String(q.nota || '').slice(0, 3000), pastrata: !!q.pastrata,
   istoric: (q.istoric || []).slice(-25), creat: q.creat || new Date().toISOString().slice(0, 10)});
-function qAdopt(srv) {
-  if (qDirty || (A && A.setari_gata === false && qLoaded)) return;
+function qAdopt(srv, srvTs) {
+  if (A && A.setari_gata === false && qLoaded) return;
   let temp = [];
   try { temp = JSON.parse(store.get('intrebariLocal', '[]')); } catch (e) {}
   if (!Array.isArray(temp)) temp = [];
-  const kept = Array.isArray(srv) ? srv : [];
+  let kept = Array.isArray(srv) ? srv : [];
+  if (SYNC.intrebari) {              // pastrarile tale netrimise inca castiga, daca serverul nu are ceva mai nou
+    if ((+srvTs || 0) > SYNC.intrebari) { SYNC.intrebari = 0; syncErr.intrebari = ''; syncStore(); }
+    else {
+      try { const loc = JSON.parse(store.get('intrebariKept', 'null')); if (Array.isArray(loc)) kept = loc; } catch (e) {}
+      if (A && A.setari_gata !== false) syncSchedule('intrebari', pushQuestions, 300);
+    }
+  }
   const ids = new Set(kept.map(q => q.id));
   QS = [...kept.map(q => ({...q, pastrata: true})), ...temp.filter(q => q && !ids.has(q.id)).map(q => ({...q, pastrata: false}))];
   qLoaded = true;
 }
+function keptList() { return QS.filter(q => q.pastrata).map(qClean); }
+function pushQuestions() { syncPush('intrebari', '/api/intrebari', () => ({lista: keptList(), ts: SYNC.intrebari}), () => { if (A) { A.intrebari = keptList(); A.intrebari_ts = Date.now(); } }); }
 function qPersist(serverToo = true) {
   try { store.set('intrebariLocal', JSON.stringify(QS.filter(q => !q.pastrata).map(qClean))); } catch (e) {}
   if (!serverToo) return;
-  qDirty = true; clearTimeout(qSaveT); lastEdit.intrebari = Date.now();
-  qSaveT = setTimeout(async () => {
-    const lista = QS.filter(q => q.pastrata).map(qClean);
-    try {
-      const r = await fetch('/api/intrebari', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lista})});
-      if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('⚠ ' + (j.error || 'Nu s-au putut salva întrebările'), null); }
-      else if (A) A.intrebari = lista;
-      lastEdit.intrebari = Date.now();
-    } catch (e) { showToast('⚠ Fără conexiune: întrebările păstrate nu s-au salvat încă', null); }
-    qDirty = false;
-  }, 600);
+  lastEdit.intrebari = Date.now();
+  try { store.set('intrebariKept', JSON.stringify(keptList())); } catch (e) {}
+  SYNC.intrebari = Date.now(); syncStore();
+  syncSchedule('intrebari', pushQuestions, 600);
 }
 const qNewId = () => 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -2526,6 +2558,7 @@ $('bk-retry').addEventListener('click', async () => { const j = await post('/api
 function applyEx() { const off = store.get('faraExplicatii', '0') === '1'; document.body.classList.toggle('no-ex', off); $('ex-toggle').textContent = off ? 'ⓘ Arată explicațiile' : 'ⓘ Ascunde explicațiile'; }
 $('ex-toggle').addEventListener('click', () => { store.set('faraExplicatii', store.get('faraExplicatii', '0') === '1' ? '0' : '1'); applyEx(); });
 applyEx();
+renderSyncChip();
 
 // ------------------------------------------------------------ tab-uri & perioada
 function showTab(t) {
@@ -2647,7 +2680,8 @@ $('diag-btn').addEventListener('click', async () => {
   let ls = null; try { ls = JSON.parse(store.get('colLayout', 'null')); } catch (e) {}
   const pagina = {setari_gata: A && A.setari_gata, formule_primite: (A && A.formule || []).map(f => f.nume),
     formule_coloane: FORMS.map(f => f.nume), formule_ascunse: hiddenF, coloane_afisate: shownCols().map(c => dl(c)),
-    aranjare_folosita: LAYOUT, aranjare_din_browser: ls, modificari_in_curs: {coloane: layoutDirty, intrebari: qDirty}};
+    aranjare_folosita: LAYOUT, aranjare_din_browser: ls, netrimise: {...SYNC}, erori_trimitere: {...syncErr},
+    intrebari_pastrate_pagina: QS.filter(q => q.pastrata).map(q => q.q), intrebari_pastrate_server: (A && A.intrebari || []).map(q => q.q)};
   out.textContent = 'APLICAȚIA (server):\n' + JSON.stringify(srv, null, 1) + '\n\nPAGINA (acest browser):\n' + JSON.stringify(pagina, null, 1);
 });
 $('o-rewrite').addEventListener('click', async () => {
