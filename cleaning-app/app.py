@@ -316,6 +316,9 @@ _EDIT_OK_WHILE_LOADING = ("/api/scan", "/api/backup/", "/api/monitor", "/api/res
 
 @app.before_request
 def block_edits_until_backup_loaded():
+    if request.method == "POST" and request.path.startswith("/api/") and not IS_PRIMARY:
+        return jsonify({"ok": False, "error": "Serverul rulează în mai multe procese — modificarea nu poate fi salvată sigur. "
+                                              "Vezi mesajul roșu de sus (Start Command în Render)."}), 503
     if (request.method == "POST" and request.path.startswith("/api/") and FOLDER_ID and not cache.get("ready")
             and not request.path.startswith(_EDIT_OK_WHILE_LOADING)):
         return jsonify({"ok": False, "error": "Regulile tale încă se încarcă din backup-ul din Drive — "
@@ -714,6 +717,8 @@ def save_cache(force=False, allow_empty=False):
 
 
 def _save_cache(force=False, allow_empty=False):
+    if not IS_PRIMARY:
+        return          # un proces secundar nu are voie sa suprascrie backup-ul cu copia lui
     if not cache["enabled"] or not (cache["dirty"] or force):
         return
     if not cache["loaded"]:
@@ -2049,7 +2054,7 @@ def api_state():
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
     s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or "",
                    "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"]),
-                   "duplicate": cache.get("duplicate") or 0}
+                   "duplicate": cache.get("duplicate") or 0, "procese": process_count()}
     return jsonify(s)
 
 
@@ -2861,7 +2866,8 @@ def api_diagnostic():
                 "coloane": {k: (len(v) if isinstance(v, (list, dict)) else v) for k, v in col.items()},
                 "ascunse": col.get("ascunse") or [], "ordine": (col.get("props") or [])[:20],
                 "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or [])}
-    out = {"gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
+    out = {"proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
+           "gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
            "fisiere_backup": cache.get("duplicate") or 1, "nesalvat": bool(cache["dirty"]),
            "ultima_salvare": datetime.fromtimestamp(cache["saved_at"]).strftime("%d.%m %H:%M:%S") if cache.get("saved_at") else "—",
            "eroare_salvare": cache.get("save_err") or "", "in_memorie": summ(settings)}
@@ -3323,8 +3329,55 @@ def api_reset():
 
 
 # pornim firele de fundal la import (gunicorn importa modulul, nu ruleaza __main__)
+# ---------------------------------------------------------------- un singur proces
+# Daca serverul porneste mai multe procese (ex. gunicorn --workers 2), fiecare ar avea alta copie a
+# setarilor si ar salva-o peste celelalte in Drive -> modificari „pierdute” la intamplare.
+# Doar procesul care tine lacatul lucreaza normal; celelalte nu salveaza si refuza modificarile.
+PROC_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "facturi-procese")
+_proc_lock = None
+
+
+def _claim_primary():
+    global _proc_lock
+    try:
+        import fcntl
+        os.makedirs(PROC_DIR, exist_ok=True)
+        open(os.path.join(PROC_DIR, str(os.getpid())), "w").close()
+        _proc_lock = open(os.path.join(PROC_DIR, "principal.lock"), "w")
+        fcntl.flock(_proc_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except BlockingIOError:
+        return False
+    except Exception:  # noqa: BLE001  (sistem fara fcntl: lucram ca inainte)
+        return True
+
+
+def process_count():
+    n = 0
+    try:
+        for name in os.listdir(PROC_DIR):
+            if name.isdigit():
+                try:
+                    os.kill(int(name), 0)
+                    n += 1
+                except OSError:
+                    try:
+                        os.remove(os.path.join(PROC_DIR, name))
+                    except OSError:
+                        pass
+    except OSError:
+        return 1
+    return max(n, 1)
+
+
+IS_PRIMARY = True
 if os.environ.get("DISABLE_BACKGROUND") != "1":
-    start_background()
+    IS_PRIMARY = _claim_primary()
+    if IS_PRIMARY:
+        start_background()
+    else:
+        cache["msg"] = "proces secundar"
+        add_log(f"⚠ Aplicația rulează în mai multe procese (acesta: {os.getpid()}) — doar primul salvează")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
