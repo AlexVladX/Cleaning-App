@@ -1712,8 +1712,9 @@ def fuel_routes(ivs):
     def house_point(iv):
         k = prop_key(re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut")
         return (k, hp[k]) if k in hp else None
-    val = costs.daily_routes(ivs, house_point, base, road_dist())
-    _fuel_cache.update({"k": key, "v": val})
+    routes = {}
+    val = costs.daily_routes(ivs, house_point, base, road_dist(), routes)
+    _fuel_cache.update({"k": key, "v": val, "routes": routes})
     return val
 
 
@@ -1834,6 +1835,7 @@ def days_table(ivs, ivs_all, props, prop_display, scale):
     interventii, menaje, interm, incasari, km_drum, motorina, ore_lucru ... + ore_drum, clienti, case.
     """
     km_day, _, _ = fuel_routes(ivs_all)
+    routes = _fuel_cache.get("routes") or {} if km_day else {}
     fkm = fuel_per_km() * (scale or 1.0)
     speed = drive_speed()
     ore = settings.get("ore_estimate") or {}
@@ -1866,6 +1868,8 @@ def days_table(ivs, ivs_all, props, prop_display, scale):
             else:
                 r["ore_lipsa"] += 1
         r["case"][k] = prop_display(raw)
+        r.setdefault("_det", []).append((k, prop_display(raw), (iv.get("client") or "—").strip() or "—",
+                                         iv.get("tip_menaj") or "standard", round(suma, 2)))
         cl = (iv.get("client") or "—").strip() or "—"
         r["clienti"][cl] = round(r["clienti"].get(cl, 0.0) + suma, 2)
         if k not in known:
@@ -1876,6 +1880,18 @@ def days_table(ivs, ivs_all, props, prop_display, scale):
         km = km_day.get(d)
         ds = [dist[k] for k in r["case"] if dist.get(k) is not None]
         r["clienti"] = [[cl_idx.setdefault(c, len(cl_idx)), v] for c, v in r["clienti"].items()]
+        # detaliul zilei, in ordinea traseului: [casa, client, tip, €, ore estimate, km de la casa anterioara]
+        order = {k: (i, leg) for i, (k, leg) in enumerate(routes.get(d) or []) if k}
+        det = sorted(r.pop("_det"), key=lambda x: (order.get(x[0], (999, 0))[0], x[1].casefold()))
+        seen = set()
+        r["det"] = []
+        for k, name, cl, tip, sm in det:
+            leg = order[k][1] if k in order and k not in seen else None
+            seen.add(k)
+            r["det"].append([nm_idx.setdefault(name, len(nm_idx)), cl_idx.setdefault(cl, len(cl_idx)), tip, sm,
+                             ore.get(k) if tip != "intermediaire" else None, leg, dist.get(k)])
+        rt = routes.get(d) or []
+        r["retur"] = rt[-1][1] if rt and rt[-1][0] is None else None
         r.update({
             "incasari": round(r["incasari"], 2), "incasari_inter": round(r["incasari_inter"], 2),
             "incasari_fara_inter": round(r["incasari"] - r["incasari_inter"], 2),

@@ -75,7 +75,7 @@ def expand(entries, until_month):
 
 # ------------------------------------------------------------------ motorina estimata
 
-def daily_routes(ivs, house_point, base, dist):
+def daily_routes(ivs, house_point, base, dist, routes=None):
     """
     Pe fiecare zi: baza -> casele zilei (cea mai apropiata urmatoare) -> baza.
     house_point(iv) -> (cheie casa, punct) sau None; dist(a, b) -> km.
@@ -103,6 +103,8 @@ def daily_routes(ivs, house_point, base, dist):
             cur = left.pop(k)
         back = dist(cur, base)
         total += back
+        if routes is not None:          # ordinea caselor in traseul zilei + km de la punctul anterior
+            routes[d] = [[k, round(leg, 1)] for k, leg in legs] + [[None, round(back, 1)]]
         # km-ii zilei se impart intre casele zilei proportional cu distanta fiecareia de la baza
         # (o casa departe "cere" mai mult drum). Nu depinde de ordinea in care le-ai facut:
         # inainte, casa din mijlocul unui grup de case apropiate primea doar 1-2 km.
