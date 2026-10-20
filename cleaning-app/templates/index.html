@@ -312,6 +312,16 @@
   .toast span{overflow-wrap:anywhere}
   .toast button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;flex:none}
   .muted{color:var(--muted)}
+  .d-row{cursor:pointer}.d-row:hover td{background:#F3F8F7}.d-row.open td{background:#E8F3F1;border-bottom-color:transparent}
+  .d-row.flash td{background:#FDF3C7}
+  .d-arr{display:inline-block;width:12px;color:var(--brand);font-size:11px}
+  .d-table tbody tr.d-det-row>td:first-child{position:static}
+  .d-det-row>td{background:#F6FAF9;padding:6px 10px 14px!important;white-space:normal!important}
+  .d-det{position:sticky;left:10px;max-width:min(860px,calc(100vw - 60px))}
+  .d-det-h{font-size:13px;margin:4px 0 8px}
+  table.t.d-det-t{table-layout:auto;background:#fff;font-size:12.5px}
+  .d-det-t th,.d-det-t td{padding:6px 8px!important;position:static!important}
+  .cal-cell.has{cursor:pointer}
   .show-m{display:none}
   .subtabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
   .subtabs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink-2);display:inline-flex;gap:6px;align-items:center}
@@ -643,7 +653,7 @@
       <div class="cal-wrap" id="cal"></div>
       <div class="chart" id="ch-wd"><h3>Menaje pe zi, după ziua săptămânii</h3><div class="sub">media zilelor lucrate</div><svg></svg></div>
       <h3 style="font-size:13px;font-weight:600;margin:6px 0 2px">Toate zilele lucrate</h3>
-      <p class="hint ex" data-txt="zile-tabel" style="margin-bottom:8px">Fiecare zi cu încasările, drumul (traseul zilei: bază → case → bază), motorina estimată și orele de lucru (menaje complete × orele estimate ale casei). Click pe titlul unei coloane: sortezi (al doilea click inversează). Formulele tale din Proprietăți apar și aici, calculate pe zi, când au sens pe o zi.</p>
+      <p class="hint ex" data-txt="zile-tabel" style="margin-bottom:8px">Fiecare zi cu încasările, drumul (traseul zilei: bază → case → bază), motorina estimată și orele de lucru (menaje complete × orele estimate ale casei). Click pe titlul unei coloane: sortezi (al doilea click inversează). Formulele tale din Proprietăți apar și aici, calculate pe zi, când au sens pe o zi. Click pe o zi (sau pe o căsuță din calendar) → casele zilei, în ordinea traseului.</p>
       <div class="card-head" style="margin-top:0">
         <div class="toolbar">
           <select id="d-client" class="search" style="width:auto;max-width:220px" aria-label="Client"><option value="">Toți clienții</option></select>
@@ -759,7 +769,7 @@
             <div class="seg" id="ln-filter"><button data-lf="check" class="on">De verificat</button><button data-lf="all">Toate</button><button data-lf="manual">Legate manual</button></div>
             <input class="search" id="ln-search" type="search" placeholder="Caută casă sau rând din Sheet…" aria-label="Caută">
           </div>
-          <div class="table-wrap" style="max-height:440px"><table class="t ln-table"><thead><tr><th>Casa (facturi)</th><th class="w-110 num hide-m">Venit total</th><th style="width:42%">Rândul din Sheet</th><th class="w-80 num">Km</th><th style="width:96px"></th></tr></thead><tbody id="ln-body"></tbody></table></div>
+          <div class="table-wrap" style="max-height:440px"><table class="t ln-table"><thead><tr><th>Casa (facturi)</th><th class="w-110 num hide-m">Venit total</th><th style="width:42%">Rândul din Sheet</th><th class="w-90 num" title="Distanța pe drum de la bază până la casă (un sens)">Km de la bază</th><th style="width:96px"></th></tr></thead><tbody id="ln-body"></tbody></table></div>
         </div>
     </section>
 
@@ -1369,12 +1379,12 @@ const FIXED_COLS = [
    cell: p => p.interm_n ? `${eur(p.interm_venit)}<span class="sub-num">${p.interm_n} ${p.interm_n === 1 ? 'menaj' : 'menaje'}${p.interm_ore ? ' · ' + num(p.interm_ore) + ' h' : ''}</span>` : '—'},
   {id: 'ore_est', label: 'Ore estimate', hint: 'timpul REAL al unei persoane la un menaj complet (Standard / Ouverture). Editabil, se salvează în Sheet, foaia „Ore”', sort: 'ore_est', w: 104,
    cell: p => p.menaje_complete ? `<input class="ore-in${p.ore_est ? '' : ' miss'}" type="text" inputmode="decimal" data-ore="${esc(p.key)}" value="${p.ore_est ?? ''}" placeholder="?" aria-label="Ore estimate pentru ${esc(p.name)}" title="Timpul real al unei persoane la un menaj complet">` : '<span class="hint" title="Casa are doar menaje Intermédiaire">doar interm.</span>'},
-  {id: 'distanta', label: 'Distanță', hint: 'pe drum, de la bază', sort: 'distanta_km', w: 92,
+  {id: 'distanta', label: 'Distanță', hint: 'pe drum, de la bază (un sens)', sort: 'distanta_km', w: 92,
    cell: p => p.distanta_km != null ? num(p.distanta_km) + ' km' + `<span class="sub-num">${p.timp_min} min${p.dist_sursa === 'estimat' ? ' · estimat' : ''}</span>` : '—'},
   {id: 'zona', label: 'Zonă', sort: 'distanta_km', w: 92, cell: p => p.zona ? esc(p.zona) : '—'},
   {id: 'profit', label: 'Profit estimat', hint: 'încasări minus drum, salarii/produse după menaje și restul după venit', sort: 'profit_est', w: 110,
    cell: p => p.profit_est != null ? `<span class="${p.profit_est >= 0 ? 'pos' : 'negv'}" style="font-weight:700">${eur(p.profit_est)}</span>${p.distanta_km == null ? '<span class="sub-num" title="Lipsesc coordonatele casei: drumul nu e scăzut din profit">fără drum</span>' : ''}` : '—'},
-  {id: 'motorina', label: 'Motorină', hint: 'costul estimat al drumurilor casei în perioadă', sort: 'motorina_est', w: 96, cell: p => p.motorina_est != null ? (p.motorina_est < 10 ? eur2(p.motorina_est) : eur(p.motorina_est)) + (p.km_drum ? `<span class="sub-num">${num(p.km_drum)} km</span>` : '') : p.distanta_km == null ? '<span title="Casa nu are coordonate în Sheet (sau nu e legată de un rând din Sheet) — vezi tab-ul Zone">— <span class="sub-num">fără coordonate</span></span>' : '—'},
+  {id: 'motorina', label: 'Motorină', hint: 'costul estimat al drumurilor casei în perioadă', sort: 'motorina_est', w: 96, cell: p => p.motorina_est != null ? (p.motorina_est < 10 ? eur2(p.motorina_est) : eur(p.motorina_est)) + (p.km_drum ? `<span class="sub-num" title="Km de drum ai casei în perioada aleasă (partea ei din traseele zilnice), nu distanța de la bază">${num(p.km_drum)} km în perioadă</span>` : '') : p.distanta_km == null ? '<span title="Casa nu are coordonate în Sheet (sau nu e legată de un rând din Sheet) — vezi tab-ul Zone">— <span class="sub-num">fără coordonate</span></span>' : '—'},
   {id: 'ultima', label: 'Ultima intervenție', sort: 'zile_de_la_ultima', w: 136, left: true, hint: 'data ultimei intervenții; dedesubt: zile de atunci și intervalul obișnuit dintre vizite',
    cell: p => p.ultima ? `${fmtDate(p.ultima)}<span class="sub-num">${p.zile_de_la_ultima} zile${p.interval_tipic ? ` · de obicei la ${p.interval_tipic} z.` : ''}</span>` : '—'},
 ];
@@ -1786,6 +1796,7 @@ function dayRows() {
     for (const d of Z.zile || []) {
       if (Array.isArray(d.clienti)) d.clienti = Object.fromEntries(d.clienti.map(([i, v]) => [cl[i], v]));
       d.case = (d.case || []).map(i => typeof i === 'number' ? cn[i] : i);
+      d.det = (d.det || []).map(([h, c, tip, sm, ore, leg, km]) => ({casa: typeof h === 'number' ? cn[h] : h, client: typeof c === 'number' ? cl[c] : c, tip, suma: sm, ore, leg, km}));
     }
     Z._exp = true;
   }
@@ -1842,6 +1853,8 @@ function drawCalendar() {
         v.case.slice(0, 8).join(', ') + (v.case.length > 8 ? ` … +${v.case.length - 8}` : ''));
       el.addEventListener('pointermove', show); el.addEventListener('focus', show);
       el.addEventListener('pointerleave', hideTip); el.addEventListener('blur', hideTip);
+      el.addEventListener('click', () => { hideTip(); openDay(el.dataset.d); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') openDay(el.dataset.d); });
     });
   }
   const wd = c.pe_zi_saptamana;
@@ -1852,6 +1865,7 @@ function drawCalendar() {
 
 // ---- zile lucrate: tabel pe zi cu filtre, sortare si formulele proprii
 const DZ = {client: '', wd: '', month: '', q: '', sort: 'data', dir: 'desc', all: false};
+const DZ_OPEN = new Set();
 try { Object.assign(DZ, JSON.parse(localStorage.getItem('zileFiltre') || '{}'), {q: '', all: false}); } catch (e) {}
 const ZI_SCURT = ['Lu', 'Ma', 'Mi', 'Jo', 'Vi', 'Sâ', 'Du'], ZI_LUNG = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică'];
 const hrs = v => v == null ? '—' : num(v) + ' h';
@@ -1863,7 +1877,7 @@ function dayVars(d) {
 }
 function dayCols(rows) {
   const cols = [
-    {k: 'data', l: 'Data', w: 120, v: d => d.data, c: d => `${fmtDate(d.data)} <span class="muted">${ZI_SCURT[d.zi]}</span>`, num: false},
+    {k: 'data', l: 'Data', w: 120, v: d => d.data, c: d => `<span class="d-arr" aria-hidden="true">${DZ_OPEN.has(d.data) ? '▾' : '▸'}</span> ${fmtDate(d.data)} <span class="muted">${ZI_SCURT[d.zi]}</span>`, num: false},
     {k: 'interventii', l: 'Interv.', w: 70, v: d => d.interventii, c: d => d.interventii + (d.interm ? `<span class="muted" title="din care Intermédiaire"> (${d.interm})</span>` : '')},
     {k: 'n_case', l: 'Case', w: 60, v: d => d.n_case, c: d => d.n_case},
     {k: 'incasari', l: 'Venit', w: 90, v: d => d.incasari, c: d => eur(d.incasari)},
@@ -1888,6 +1902,23 @@ const D_PRESETS = [
   ['ore_drum', 'desc', 'Cel mai mult drum'], ['motorina', 'desc', 'Cea mai scumpă motorină'], ['pct_drum', 'desc', '% drum maxim'],
   ['eur_ora', 'asc', 'Cel mai slab € / oră'], ['eur_ora', 'desc', 'Cel mai bun € / oră'], ['incasari', 'desc', 'Cel mai mare venit'], ['interventii', 'desc', 'Cele mai aglomerate'],
 ];
+function dayDetail(d) {
+  const rows = d.det.map((x, i) => `<tr><td class="num muted">${x.leg != null ? i + 1 : ''}</td><td><b>${esc(x.casa)}</b></td><td class="psub" style="font-size:12px">${esc(x.client)}</td>
+    <td>${esc(TL[x.tip] || x.tip)}</td><td class="num">${eur2(x.suma)}</td><td class="num">${x.ore ? num(x.ore) + ' h' : '<span class="muted">—</span>'}</td>
+    <td class="num">${x.km != null ? num(x.km) + ' km' : '<span class="muted">fără coord.</span>'}</td><td class="num">${x.leg != null ? '+' + num(x.leg) + ' km' : ''}</td></tr>`).join('');
+  const back = d.retur != null ? `<tr class="muted"><td></td><td colspan="6">↩ întoarcere la bază</td><td class="num">+${num(d.retur)} km</td></tr>` : '';
+  return `<div class="d-det"><div class="d-det-h">${esc(fmtDateLong(d.data))} · <b>${d.n_case}</b> ${d.n_case === 1 ? 'casă' : 'case'} · ${d.interventii} intervenții · ${eur(d.incasari)}${d.km_drum != null ? ` · traseu ${num(d.km_drum)} km` : ''}</div>
+    <div class="table-wrap"><table class="t d-det-t"><thead><tr><th class="num" title="Ordinea în traseul zilei (cea mai apropiată casă următoare)">#</th><th>Casa</th><th>Client</th><th>Tip</th><th class="num">Venit</th><th class="num">Ore est.</th><th class="num" title="Distanța casei de la bază">De la bază</th><th class="num" title="Km de la punctul anterior din traseu">Drum</th></tr></thead>
+    <tbody>${rows}${back}</tbody></table></div>
+    <div class="psub" style="margin-top:4px;white-space:normal">Ordinea e traseul estimat (de la bază mereu la cea mai apropiată casă următoare), nu neapărat ordinea reală din ziua aceea.</div></div>`;
+}
+function toggleDay(day) { if (DZ_OPEN.has(day)) DZ_OPEN.delete(day); else DZ_OPEN.add(day); renderDays(); }
+function openDay(day) {      // din calendar: deschide ziua in tabel
+  Object.assign(DZ, {client: '', wd: '', month: day.slice(0, 7), q: ''}); $('d-search').value = '';
+  DZ_OPEN.add(day); renderDays();
+  const tr = document.querySelector(`#d-body tr[data-day="${day}"]`);
+  if (tr) { tr.scrollIntoView({block: 'center', behavior: 'smooth'}); tr.classList.add('flash'); setTimeout(() => tr.classList.remove('flash'), 1500); }
+}
 function saveDZ() { try { localStorage.setItem('zileFiltre', JSON.stringify({client: DZ.client, wd: DZ.wd, month: DZ.month, sort: DZ.sort, dir: DZ.dir})); } catch (e) {} }
 function renderDays() {
   const Z = (A && A.zile) || {zile: []};
@@ -1928,7 +1959,8 @@ function renderDays() {
   $('d-reset').hidden = !(DZ.client || DZ.wd !== '' || DZ.month || DZ.q);
   $('d-head').innerHTML = cols.map(c => `<th class="${c.num === false || c.txt ? '' : 'num '}${c.k === 'case' ? 'hide-m ' : ''}${c.fx ? 'fx ' : ''}sortable${DZ.sort === c.k ? ' active' : ''}" style="min-width:${Math.min(c.w, 90)}px" data-dk="${c.k}" tabindex="0" aria-sort="${DZ.sort === c.k ? (DZ.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${esc(c.l)}${DZ.sort === c.k ? (DZ.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`).join('');
   const LIM = 60, shown = DZ.all ? rows : rows.slice(0, LIM);
-  $('d-body').innerHTML = shown.map(d => `<tr data-day="${d.data}">${cols.map(c => `<td class="${c.num === false || c.txt ? '' : 'num'}${c.k === 'case' ? ' hide-m' : ''}">${c.c(d)}</td>`).join('')}</tr>`).join('')
+  $('d-body').innerHTML = shown.map(d => `<tr data-day="${d.data}" class="d-row${DZ_OPEN.has(d.data) ? ' open' : ''}" tabindex="0" aria-expanded="${DZ_OPEN.has(d.data)}">${cols.map(c => `<td class="${c.num === false || c.txt ? '' : 'num'}${c.k === 'case' ? ' hide-m' : ''}">${c.c(d)}</td>`).join('')}</tr>`
+    + (DZ_OPEN.has(d.data) ? `<tr class="d-det-row"><td colspan="${cols.length}">${dayDetail(d)}</td></tr>` : '')).join('')
     || `<tr><td colspan="${cols.length}" class="empty">Nicio zi nu corespunde filtrelor.</td></tr>`;
   $('d-more').hidden = rows.length <= LIM;
   $('d-more').textContent = DZ.all ? 'Arată doar primele ' + LIM : `Arată toate cele ${rows.length} zile`;
@@ -1958,6 +1990,8 @@ $('d-reset').addEventListener('click', () => { Object.assign(DZ, {client: '', wd
 $('d-more').addEventListener('click', () => { DZ.all = !DZ.all; renderDays(); });
 $('d-presets').addEventListener('click', e => { const b = e.target.closest('[data-ds]'); if (!b) return; DZ.sort = b.dataset.ds; DZ.dir = b.dataset.dd; saveDZ(); renderDays(); });
 function daySort(th) { const k = th.dataset.dk; if (DZ.sort === k) DZ.dir = DZ.dir === 'asc' ? 'desc' : 'asc'; else { DZ.sort = k; DZ.dir = k === 'data' || k === 'case' ? 'asc' : 'desc'; } saveDZ(); renderDays(); }
+$('d-body').addEventListener('click', e => { const tr = e.target.closest('tr.d-row'); if (tr) toggleDay(tr.dataset.day); });
+$('d-body').addEventListener('keydown', e => { const tr = e.target.closest('tr.d-row'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleDay(tr.dataset.day); } });
 $('d-head').addEventListener('click', e => { const th = e.target.closest('[data-dk]'); if (th) daySort(th); });
 $('d-head').addEventListener('keydown', e => { const th = e.target.closest('[data-dk]'); if (th && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); daySort(th); } });
 
