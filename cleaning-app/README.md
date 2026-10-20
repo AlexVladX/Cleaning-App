@@ -129,6 +129,9 @@ Cum funcționează:
 
 ## Backup în Google Drive (recomandat)
 
+**Setările** (reguli, formule, coloane, întrebări, încasări, ore…) stau separat în **`setari-facturi.json`**, în același folder. Fișierul se creează singur; dacă service account-ul nu are voie să creeze fișiere, creezi tu o dată un fișier gol cu numele acesta. Fiecare setare are data ultimei modificări: la salvare, dacă altcineva (alt server, altă pornire) a scris între timp, setările se îmbină și câștigă mereu modificarea cea mai nouă. `cache-facturi.json` rămâne pentru facturile citite.
+
+
 Rezultatele scanărilor se salvează în fișierul `cache-facturi.json`, din folderul facturilor. La pornire, aplicația îl încarcă și citește doar facturile **noi sau modificate**. Facturile șterse din Drive dispar din aplicație, iar cele redenumite se actualizează fără să fie recitite.
 
 Configurare, o singură dată:

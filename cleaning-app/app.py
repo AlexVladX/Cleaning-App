@@ -60,9 +60,18 @@ APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 # cu service account-ul ca EDITOR. Gasit dupa ID sau dupa nume in folderul facturilor.
 CACHE_FILE_ID = os.environ.get("CACHE_FILE_ID", "").strip()
 CACHE_FILE_NAME = os.environ.get("CACHE_FILE_NAME", "cache-facturi.json").strip()
+# setarile (reguli, formule, coloane, intrebari, incasari...) stau intr-un fisier separat, mic,
+# salvat imediat si cu imbinare pe fiecare setare (cea mai noua castiga) -> nu se mai pot pierde
+SETTINGS_FILE_NAME = os.environ.get("SETTINGS_FILE_NAME", "setari-facturi.json").strip()
 CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 # Schimbati valoarea cand se modifica PARSERUL (citirea PDF) -> se recitesc toate facturile.
 # Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
+APP_VERSION = "2026-10-20"
+# cine scrie backup-ul (ca sa vedem daca mai e un ALT server care foloseste acelasi fisier din Drive)
+WRITER_ID = " · ".join(x for x in (
+    os.environ.get("RENDER_SERVICE_NAME") or os.environ.get("RAILWAY_SERVICE_NAME") or os.environ.get("FLY_APP_NAME") or "",
+    os.environ.get("RENDER_EXTERNAL_HOSTNAME") or os.environ.get("RAILWAY_PUBLIC_DOMAIN") or "",
+    socket.gethostname(), "v" + APP_VERSION) if x)
 PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
 
 cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False, "msg": "se încarcă",
@@ -619,7 +628,7 @@ def find_cache_file():
     set_stage(f"caut fisierul de backup '{CACHE_FILE_NAME}'")
     res = svc.files().list(
         q=f"name = '{name}' and '{FOLDER_ID}' in parents and trashed = false",
-        fields="files(id, name, size, modifiedTime, capabilities/canEdit)",
+        fields="files(id, name, size, modifiedTime, version, capabilities/canEdit)",
         orderBy="modifiedTime desc",
         supportsAllDrives=True, includeItemsFromAllDrives=True,
     ).execute(num_retries=DRIVE_RETRIES)
@@ -639,6 +648,7 @@ def find_cache_file():
                 f"doar cel mai nou ({editable[0].get('modifiedTime', '?')[:16].replace('T', ' ')}). "
                 "Șterge-le pe celelalte din Drive, altfel setările se pot amesteca.")
     cache["file_size"] = int(editable[0].get("size") or 0)
+    cache["drive_version"] = editable[0].get("version")
     return editable[0]["id"]
 
 
@@ -657,6 +667,10 @@ def load_cache():
         if msg != cache.get("msg"):
             add_log(f"⚠ Backup dezactivat: {msg} — reîncerc la fiecare scanare")
         cache["msg"] = msg
+        try:
+            load_settings_store()
+        except Exception as e:  # noqa: BLE001
+            add_log(f"⚠ Setări: {e}")
         cache["ready"] = True
         return
     cache.update({"file_id": fid, "enabled": True})
@@ -684,6 +698,12 @@ def load_cache():
         cache["msg"] = "backup-ul a venit gol din Drive, deși fișierul are conținut — reîncerc automat"
         raise RuntimeError(cache["msg"])
     apply_saved_settings(data.get("setari"))  # setarile raman valabile si cand se schimba parserul
+    try:
+        load_settings_store()                  # fisierul separat de setari are prioritate
+    except Exception as e:
+        cache["loaded"] = cache["enabled"] = False
+        cache["msg"] = f"nu am putut citi fișierul de setări ({e}) — reîncerc automat"
+        raise RuntimeError(cache["msg"]) from e
     cache["ready"] = True
     cache["msg"] = ""
     add_log(f"Reguli și setări încărcate din backup ({len(data.get('setari') or {})} chei)")
@@ -707,6 +727,113 @@ def load_cache():
 
 
 _save_cache_lock = threading.RLock()
+
+# ---------------------------------------------------------------- setarile: fisier separat
+# Fiecare setare are data ultimei modificari ("meta"). La salvare: daca fisierul a fost scris intre timp
+# de altcineva (alt server / alta pornire), il citim si IMBINAM: pentru fiecare setare castiga cea mai
+# noua modificare. Asa o copie veche a aplicatiei nu mai poate readuce coloanele / formulele vechi.
+sstore = {"file_id": None, "version": None, "hash": {}, "meta": {}, "msg": "se încarcă", "saved_at": None, "err": ""}
+
+
+def _skeys():
+    return RULE_KEYS + PERSIST_KEYS
+
+
+def _vhash(v):
+    import hashlib
+    return hashlib.md5(json.dumps(v, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+
+def _find_named(svc, name):
+    q = name.replace("'", "\\'")
+    res = svc.files().list(
+        q=f"name = '{q}' and '{FOLDER_ID}' in parents and trashed = false",
+        fields="files(id, version, modifiedTime, capabilities/canEdit)", orderBy="modifiedTime desc",
+        supportsAllDrives=True, includeItemsFromAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+    ok = [f for f in res.get("files", []) if f.get("capabilities", {}).get("canEdit")]
+    return ok[0] if ok else None
+
+
+def _read_json(fid):
+    raw = download_pdf(fid).read().decode("utf-8").strip()
+    return json.loads(raw) if raw else {}
+
+
+def load_settings_store():
+    """Citeste setarile din fisierul separat (sau il pregateste, mutand acolo setarile din backup)."""
+    svc = get_drive_service()
+    f = _find_named(svc, SETTINGS_FILE_NAME)
+    if not f:
+        try:     # incercam sa-l cream noi; unele conturi de serviciu nu au voie (fara spatiu propriu)
+            f = svc.files().create(body={"name": SETTINGS_FILE_NAME, "parents": [FOLDER_ID], "mimeType": "application/json"},
+                                   media_body=MediaIoBaseUpload(io.BytesIO(b"{}"), mimetype="application/json", resumable=False),
+                                   fields="id, version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+            add_log(f"Am creat fișierul de setări „{SETTINGS_FILE_NAME}” în folderul facturilor")
+        except Exception as e:  # noqa: BLE001
+            sstore.update(file_id=None, msg=f"lipsește fișierul „{SETTINGS_FILE_NAME}” din folderul facturilor "
+                                             f"(nu-l pot crea singur: {str(e)[:80]})")
+            add_log(f"⚠ Setări: {sstore['msg']} — creează în folder un fișier gol cu numele acesta")
+            return
+    data = _read_json(f["id"])
+    sstore.update(file_id=f["id"], version=f.get("version"), msg="", err="")
+    saved = data.get("setari") if isinstance(data, dict) else None
+    if isinstance(saved, dict) and saved:
+        for k in _skeys():
+            if k in saved:
+                settings[k] = saved[k]
+        sstore["meta"] = dict(data.get("meta") or {})
+        sstore["hash"] = {k: _vhash(settings.get(k)) for k in _skeys()}
+        add_log(f"Setări încărcate din „{SETTINGS_FILE_NAME}” (salvate {data.get('salvat_la', '?')} de {data.get('salvat_de', '?')})")
+    else:
+        # fisier nou / gol: mutam acolo setarile citite din backup-ul vechi (se scriu la prima salvare)
+        sstore["meta"], sstore["hash"] = {}, {}
+        add_log(f"Fișierul „{SETTINGS_FILE_NAME}” e gol — mut acolo setările din backup")
+        _save_async()
+
+
+def save_settings_store(force=False):
+    """Scrie setarile schimbate; daca altcineva a scris intre timp, imbina (cea mai noua setare castiga)."""
+    if not sstore.get("file_id") or not IS_PRIMARY or not cache.get("ready"):
+        return True
+    with _save_cache_lock:
+        changed = [k for k in _skeys() if _vhash(settings.get(k)) != sstore["hash"].get(k)]
+        if not changed and not force:
+            return True
+        now = time.time()
+        meta = dict(sstore["meta"])
+        for k in changed:
+            meta[k] = now
+        svc = get_drive_service()
+        try:
+            cur = svc.files().get(fileId=sstore["file_id"], fields="version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+            if sstore.get("version") and cur.get("version") != sstore["version"]:
+                remote = _read_json(sstore["file_id"])
+                rset, rmeta, taken = remote.get("setari") or {}, remote.get("meta") or {}, []
+                for k in _skeys():
+                    if k in rset and k not in changed and float(rmeta.get(k) or 0) > float(meta.get(k) or 0):
+                        settings[k] = rset[k]
+                        meta[k] = rmeta[k]
+                        taken.append(k)
+                if taken:
+                    add_log(f"Am preluat {len(taken)} setări mai noi scrise de {remote.get('salvat_de', '?')}: {', '.join(taken[:6])}")
+                    for k in ("geo_v", "cost_v", "ore_v", "folder_v"):
+                        settings[k] = settings.get(k, 0) + 1
+            payload = json.dumps({"versiune": 1, "salvat_de": WRITER_ID,
+                                  "salvat_la": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                                  "setari": {k: settings.get(k) for k in _skeys()}, "meta": meta},
+                                 ensure_ascii=False, default=str)
+            res = svc.files().update(fileId=sstore["file_id"],
+                                     media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
+                                                                  mimetype="application/json", resumable=False),
+                                     fields="id, version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+        except Exception as e:  # noqa: BLE001
+            sstore["err"] = str(e)[:200]
+            add_log(f"⚠ Nu am putut salva setările: {e} — reîncerc automat")
+            return False
+        sstore.update(version=(res or {}).get("version"), meta=meta, err="", saved_at=time.time(),
+                      hash={k: _vhash(settings.get(k)) for k in _skeys()})
+        add_log(f"✓ Setări salvate ({', '.join(changed[:5])}{'…' if len(changed) > 5 else ''})")
+        return True
 
 
 def save_cache(force=False, allow_empty=False):
@@ -733,17 +860,35 @@ def _save_cache(force=False, allow_empty=False):
     if refuse:   # (mesajul in afara lacatului: add_log il foloseste si el)
         add_log("⚠ Protecție: nu suprascriu backup-ul cu o listă goală de facturi")
         return
-    payload = json.dumps({"parser_version": PARSER_VERSION,
+    svc = get_drive_service()
+    try:
+        meta = svc.files().get(fileId=cache["file_id"], fields="version, modifiedTime",
+                               supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+        if cache.get("drive_version") and meta.get("version") != cache["drive_version"]:
+            other = "?"
+            try:
+                other = json.loads(download_pdf(cache["file_id"]).read().decode("utf-8")).get("salvat_de") \
+                    or "o versiune VECHE a aplicației (alt server sau alt serviciu Render)"
+            except Exception:  # noqa: BLE001
+                pass
+            if other != WRITER_ID:
+                cache["conflict"] = f"{other} (la {str(meta.get('modifiedTime', ''))[:16].replace('T', ' ')} UTC)"
+                add_log(f"⛔ Backup-ul a fost scris între timp de ALT server: {cache['conflict']}. "
+                        "Două aplicații folosesc același fișier și își suprascriu setările — oprește-o pe cealaltă.")
+    except Exception:  # noqa: BLE001
+        pass
+    payload = json.dumps({"parser_version": PARSER_VERSION, "salvat_de": WRITER_ID,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
                           "setari": {k: settings[k] for k in RULE_KEYS + PERSIST_KEYS},
                           "files": files}, ensure_ascii=False, default=str)
     try:
-        get_drive_service().files().update(
+        res = svc.files().update(
             fileId=cache["file_id"],
             media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
                                          mimetype="application/json", resumable=False),
-            supportsAllDrives=True,
+            fields="id, version", supportsAllDrives=True,
         ).execute(num_retries=DRIVE_RETRIES)
+        cache["drive_version"] = (res or {}).get("version") or cache.get("drive_version")
     except Exception as e:
         cache["dirty"] = True
         cache["save_err"] = str(e)[:200]
@@ -2054,7 +2199,9 @@ def api_state():
     s["data_key"] = data_key()  # dashboard-ul cere /api/analytics doar cand se schimba
     s["backup"] = {"ok": bool(cache["loaded"] and cache["enabled"]), "msg": cache.get("msg") or "",
                    "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"]),
-                   "duplicate": cache.get("duplicate") or 0, "procese": process_count()}
+                   "duplicate": cache.get("duplicate") or 0, "procese": process_count(),
+                   "conflict": cache.get("conflict") or "",
+                   "setari_msg": sstore.get("msg") or "", "setari_err": sstore.get("err") or ""}
     return jsonify(s)
 
 
@@ -2119,6 +2266,12 @@ def _saver_loop():
         _save_event.wait()
         time.sleep(3)                 # grupam modificarile facute una dupa alta
         _save_event.clear()
+        ok_settings = True
+        try:
+            ok_settings = save_settings_store()
+        except Exception as e:  # noqa: BLE001
+            ok_settings = False
+            add_log(f"⚠ Setări: {e}")
         try:
             if settings.get("ore_nescrise") and settings.get("coord_sheet"):
                 flush_hours()         # scrie orele si salveaza backup-ul
@@ -2127,7 +2280,7 @@ def _saver_loop():
         except Exception as e:  # noqa: BLE001
             cache["save_err"] = str(e)[:200]
             add_log(f"⚠ Salvare: {e}")
-        if cache["dirty"] and cache["enabled"] and cache["loaded"]:
+        if (cache["dirty"] and cache["enabled"] and cache["loaded"]) or not ok_settings:
             t = threading.Timer(30, _save_event.set)     # n-a mers: reincercam in 30 s
             t.daemon = True
             t.start()
@@ -2866,17 +3019,51 @@ def api_diagnostic():
                 "coloane": {k: (len(v) if isinstance(v, (list, dict)) else v) for k, v in col.items()},
                 "ascunse": col.get("ascunse") or [], "ordine": (col.get("props") or [])[:20],
                 "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or [])}
-    out = {"proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
+    out = {"eu": WRITER_ID, "conflict": cache.get("conflict") or "", "proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
            "gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
            "fisiere_backup": cache.get("duplicate") or 1, "nesalvat": bool(cache["dirty"]),
            "ultima_salvare": datetime.fromtimestamp(cache["saved_at"]).strftime("%d.%m %H:%M:%S") if cache.get("saved_at") else "—",
            "eroare_salvare": cache.get("save_err") or "", "in_memorie": summ(settings)}
+    out["fisier_setari"] = {"gasit": bool(sstore.get("file_id")), "mesaj": sstore.get("msg") or "", "eroare": sstore.get("err") or "",
+                            "ultima_salvare": datetime.fromtimestamp(sstore["saved_at"]).strftime("%d.%m %H:%M:%S") if sstore.get("saved_at") else "—"}
+    if sstore.get("file_id"):
+        try:
+            d = _read_json(sstore["file_id"])
+            out["in_fisierul_de_setari"] = {**summ(d.get("setari")), "salvat_la": d.get("salvat_la"), "salvat_de": d.get("salvat_de")}
+        except Exception as e:  # noqa: BLE001
+            out["in_fisierul_de_setari"] = f"nu pot citi: {e}"
     if cache.get("file_id"):
         try:
             data = json.loads(download_pdf(cache["file_id"]).read().decode("utf-8"))
-            out["in_drive"] = {**summ(data.get("setari")), "salvat_la": data.get("saved_at")}
+            out["in_drive"] = {**summ(data.get("setari")), "salvat_la": data.get("saved_at"),
+                               "salvat_de": data.get("salvat_de") or "versiune veche a aplicației (fără semnătură)"}
         except Exception as e:  # noqa: BLE001
             out["in_drive"] = f"nu pot citi: {e}"
+        # ultimele versiuni ale fisierului: cine a scris si ce aranjare avea (ca sa vedem cine o suprascrie)
+        try:
+            svc = get_drive_service()
+            revs = svc.revisions().list(fileId=cache["file_id"], fields="revisions(id, modifiedTime, size)",
+                                        pageSize=200).execute(num_retries=DRIVE_RETRIES).get("revisions") or []
+            istoric = []
+            for r in sorted(revs, key=lambda r: r.get("modifiedTime") or "", reverse=True)[:8]:
+                row = {"ora_utc": str(r.get("modifiedTime", ""))[:19].replace("T", " "), "kb": round(int(r.get("size") or 0) / 1024)}
+                try:
+                    buf = io.BytesIO()
+                    dl = MediaIoBaseDownload(buf, svc.revisions().get_media(fileId=cache["file_id"], revisionId=r["id"]))
+                    done = False
+                    while not done:
+                        _, done = dl.next_chunk(num_retries=DRIVE_RETRIES)
+                    d = json.loads(buf.getvalue().decode("utf-8"))
+                    col = (d.get("setari") or {}).get("coloane") or {}
+                    row.update(de=d.get("salvat_de") or "versiune VECHE (fără semnătură)",
+                               ordine=(col.get("props") or [])[:3], nume=len(col.get("nume") or {}), ts=col.get("_ts"))
+                    del d
+                except Exception as e:  # noqa: BLE001
+                    row["eroare"] = str(e)[:80]
+                istoric.append(row)
+            out["istoric_drive"] = istoric
+        except Exception as e:  # noqa: BLE001
+            out["istoric_drive"] = f"nu pot citi versiunile: {e}"
     return jsonify(out)
 
 
