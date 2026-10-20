@@ -66,7 +66,7 @@ SETTINGS_FILE_NAME = os.environ.get("SETTINGS_FILE_NAME", "setari-facturi.json")
 CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 # Schimbati valoarea cand se modifica PARSERUL (citirea PDF) -> se recitesc toate facturile.
 # Regulile de calcul (setarile de mai jos) NU cer recitire: se recalculeaza din randurile salvate.
-APP_VERSION = "2026-10-20"
+APP_VERSION = "2026-10-20b"
 # cine scrie backup-ul (ca sa vedem daca mai e un ALT server care foloseste acelasi fisier din Drive)
 WRITER_ID = " · ".join(x for x in (
     os.environ.get("RENDER_SERVICE_NAME") or os.environ.get("RAILWAY_SERVICE_NAME") or os.environ.get("FLY_APP_NAME") or "",
@@ -118,6 +118,10 @@ settings = {
     # intrebarile pastrate din tab-ul "Intrebari" (filtre/sortare pe indicatori + concluzii si istoric)
     "intrebari": [],
     "intrebari_ts": 0,
+    # textele explicative din pagina rescrise de utilizator: {id text: "text nou"} ("" = ascuns)
+    "texte": {},
+    # verificarea preturilor: clasarea si nota fiecarei alerte {id: {"clasa": "greseala", "nota": "..."}}
+    "preturi_note": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -309,6 +313,25 @@ def _watchdog(scan_id):
 
 
 # ---------------------------------------------------------------- autentificare
+
+@app.after_request
+def gzip_json(resp):
+    """Raspunsurile JSON mari (analytics) comprimate: de ~5 ori mai putin de descarcat pe telefon."""
+    try:
+        if (resp.mimetype == "application/json" and not resp.direct_passthrough and resp.status_code == 200
+                and "gzip" in (request.headers.get("Accept-Encoding") or "") and "Content-Encoding" not in resp.headers):
+            data = resp.get_data()
+            if len(data) > 20000:
+                import gzip
+                resp.set_data(gzip.compress(data, compresslevel=5))
+                resp.headers["Content-Encoding"] = "gzip"
+                resp.headers["Content-Length"] = str(len(resp.get_data()))
+                resp.headers.add("Vary", "Accept-Encoding")
+    except Exception:
+        pass
+    return resp
+
+
 @app.before_request
 def require_password():
     if not APP_PASSWORD or request.path == "/healthz":
@@ -526,7 +549,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -593,7 +616,7 @@ def merge_old_settings(old):
         if k in old and old[k] not in (None, "", [], {}) and empty_or_default(k) and old[k] != settings.get(k):
             settings[k] = old[k]
             got.append(k)
-    for k in ("alias", "coord_alias", "verificate", "incasari", "ore_estimate", "distante"):
+    for k in ("alias", "coord_alias", "verificate", "incasari", "ore_estimate", "distante", "texte", "preturi_note"):
         o = old.get(k)
         if isinstance(o, dict) and o:
             cur = settings.get(k) or {}
@@ -750,8 +773,23 @@ def _find_named(svc, name):
         q=f"name = '{q}' and '{FOLDER_ID}' in parents and trashed = false",
         fields="files(id, version, modifiedTime, capabilities/canEdit)", orderBy="modifiedTime desc",
         supportsAllDrives=True, includeItemsFromAllDrives=True).execute(num_retries=DRIVE_RETRIES)
-    ok = [f for f in res.get("files", []) if f.get("capabilities", {}).get("canEdit")]
+    found = res.get("files", [])
+    ok = [f for f in found if f.get("capabilities", {}).get("canEdit")]
+    if found and not ok:
+        sstore["fara_drept"] = True     # exista, dar contul de serviciu nu are voie sa-l modifice
     return ok[0] if ok else None
+
+
+def _similar_names(svc):
+    """Ce fisiere .json vede aplicatia in folder (ca sa-ti spunem exact ce nu se potriveste)."""
+    try:
+        res = svc.files().list(q=f"'{FOLDER_ID}' in parents and trashed = false and name contains 'json'",
+                               fields="files(name, capabilities/canEdit)", pageSize=20,
+                               supportsAllDrives=True, includeItemsFromAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+        return ", ".join(f"„{f['name']}”" + ("" if f.get("capabilities", {}).get("canEdit") else " (fără drept de editare)")
+                         for f in res.get("files", []))
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _read_json(fid):
@@ -766,8 +804,16 @@ def load_settings_store(late=False):
     doar le scriem in el (nu le inlocuim cu continutul lui, care e doar o copie).
     """
     svc = get_drive_service()
+    sstore["fara_drept"] = False
     f = _find_named(svc, SETTINGS_FILE_NAME)
-    if not f and late:
+    if not f and (late or sstore.get("fara_drept")):
+        seen = _similar_names(svc)
+        if sstore.get("fara_drept"):
+            sstore["msg"] = (f"„{SETTINGS_FILE_NAME}” există, dar aplicația nu are drept de EDITARE pe el — în Drive: click dreapta "
+                             f"pe fișier → Distribuie → adaugă {service_account_email() or 'emailul contului de serviciu'} ca Editor")
+        else:
+            sstore["msg"] = (f"nu găsesc „{SETTINGS_FILE_NAME}” în folderul facturilor" + (f" — văd doar: {seen}" if seen else ""))
+        add_log(f"⚠ Setări: {sstore['msg']}")
         return
     if not f:
         try:     # incercam sa-l cream noi; unele conturi de serviciu nu au voie (fara spatiu propriu)
@@ -1525,6 +1571,9 @@ def sync_dist_matrix(base, coords):
     settings["geo_v"] = settings.get("geo_v", 0) + 1
 
 
+NO_COORDS = "-"     # legare manuala "fara coordonate": casa nu se potriveste cu niciun rand din Sheet
+
+
 def geo_for_props(props, all_names=None):
     """Ataseaza distanta/zona fiecarei proprietati; intoarce si lista caselor fara coordonate."""
     sheet = {}
@@ -1536,6 +1585,10 @@ def geo_for_props(props, all_names=None):
     for p in props:
         c = by_name.get(manual.get(p["key"])) if p["key"] in manual else sheet.get(p["key"])
         p["in_sheet"] = bool(c)
+        auto = sheet.get(p["key"])
+        p["coord_link"] = {"nume": c["nume"] if c else None, "manual": p["key"] in manual,
+                           "fara": manual.get(p["key"]) == NO_COORDS, "auto": auto["nume"] if auto else None,
+                           "ll": [c["lat"], c["lng"]] if c else None}
         d = dist.get(geo.coord_key(c["lat"], c["lng"])) if c else None
         if d:
             p.update({"distanta_km": d[0], "timp_min": d[1], "dist_sursa": d[2],
@@ -1620,6 +1673,8 @@ def house_points():
     for k, nume in (settings.get("coord_alias") or {}).items():
         if nume in by_name:
             out[k] = by_name[nume]
+        else:                       # legata manual de „fara coordonate” (sau de un rand sters din Sheet)
+            out.pop(k, None)
     return out
 
 
@@ -1753,6 +1808,7 @@ def profit_block(ivs_period, ivs_all, period, props):
         "marja": round((venit - chelt) / venit * 100, 1) if venit else None,
         "personal": personal, "ramas": round(venit - chelt - personal, 2),
         "motorina": {"reala": fuel_real, "estimata": fuel_est, "km": round(km_total), "zile_fara_coordonate": fara,
+                     "scalare": round(scale, 4),
                      "consum": settings.get("consum"), "pret": settings.get("pret_motorina"),
                      "sursa_distante": (settings.get("dist_matrix") or {}).get("sursa")},
         "categorii": cat_rows,
@@ -1760,6 +1816,80 @@ def profit_block(ivs_period, ivs_all, period, props):
         # perioada incepe inainte de prima cheltuiala trecuta -> profitul acelor luni e supraestimat
         "acoperire": _first_cost_month(rows),
     }
+
+
+def drive_speed():
+    """Viteza medie de drum (km/h) din distantele reale de la baza; altfel 45 km/h."""
+    km = mins = 0.0
+    for d in (settings.get("distante") or {}).values():
+        if d and d[0] and d[1] and (len(d) < 3 or d[2] != "estimat"):
+            km += d[0]
+            mins += d[1]
+    return round(km / mins * 60, 1) if mins > 30 and km > 0 else float(geo.AVG_SPEED_KMH)
+
+
+def days_table(ivs, ivs_all, props, prop_display, scale):
+    """
+    Un rand pe zi lucrata, cu aceleasi variabile ca la case (ca formulele proprii sa mearga si pe zile):
+    interventii, menaje, interm, incasari, km_drum, motorina, ore_lucru ... + ore_drum, clienti, case.
+    """
+    km_day, _, _ = fuel_routes(ivs_all)
+    fkm = fuel_per_km() * (scale or 1.0)
+    speed = drive_speed()
+    ore = settings.get("ore_estimate") or {}
+    known = house_points() if settings.get("coords") else {}
+    dist = {p["key"]: p.get("distanta_km") for p in props}
+    days = {}
+    for iv in ivs:
+        d = iv.get("data_iso")
+        if not d:
+            continue
+        r = days.setdefault(d, {"data": d, "interventii": 0, "menaje": 0, "interm": 0, "incasari": 0.0,
+                                "incasari_inter": 0.0, "ore_lucru": 0.0, "ore_lipsa": 0, "ore_inter": 0.0,
+                                "ore_facturate": 0.0, "case": {}, "clienti": {}, "fara_coord": 0})
+        raw = re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip()) or "Necunoscut"
+        k = prop_key(raw)
+        suma = float(iv.get("suma") or 0)
+        r["interventii"] += 1
+        r["incasari"] += suma
+        if iv.get("tip_facturare") == "heure":
+            r["ore_facturate"] += float(iv.get("ore") or 0)
+        if (iv.get("tip_menaj") or "standard") == "intermediaire":
+            r["interm"] += 1
+            r["incasari_inter"] += suma
+            r["ore_inter"] += float(iv.get("ore") or 0)
+        else:
+            r["menaje"] += 1
+            h = ore.get(k)
+            if h:
+                r["ore_lucru"] += float(h)
+            else:
+                r["ore_lipsa"] += 1
+        r["case"][k] = prop_display(raw)
+        cl = (iv.get("client") or "—").strip() or "—"
+        r["clienti"][cl] = round(r["clienti"].get(cl, 0.0) + suma, 2)
+        if k not in known:
+            r["fara_coord"] += 1
+    out, nm_idx, cl_idx = [], {}, {}     # numele caselor / clientilor o singura data (raspuns mai mic)
+    for d in sorted(days):
+        r = days[d]
+        km = km_day.get(d)
+        ds = [dist[k] for k in r["case"] if dist.get(k) is not None]
+        r["clienti"] = [[cl_idx.setdefault(c, len(cl_idx)), v] for c, v in r["clienti"].items()]
+        r.update({
+            "incasari": round(r["incasari"], 2), "incasari_inter": round(r["incasari_inter"], 2),
+            "incasari_fara_inter": round(r["incasari"] - r["incasari_inter"], 2),
+            "ore_lucru": round(r["ore_lucru"], 2) if r["menaje"] and r["ore_lucru"] else None,
+            "ore_inter": round(r["ore_inter"], 2), "ore_facturate": round(r["ore_facturate"], 2),
+            "km_drum": km, "ore_drum": round(km / speed, 2) if km is not None else None,
+            "motorina": round(km * fkm, 2) if km is not None and fkm else None,
+            "distanta": max(ds) if ds else None,
+            "case": [nm_idx.setdefault(n, len(nm_idx)) for n in sorted(r["case"].values(), key=str.casefold)],
+            "n_case": len(r["case"]),
+            "zi": datetime.fromisoformat(d).weekday(),
+        })
+        out.append(r)
+    return {"zile": out, "case": list(nm_idx), "clienti": list(cl_idx), "viteza": speed, "pret_km": round(fkm, 4)}
 
 
 def monthly_profit(months, ivs_all):
@@ -1900,7 +2030,9 @@ def _compute_analytics_base(period_key="all"):
         excluse.append({"key": k, "name": k, "randuri": 0, "total": 0, "manual": True, "clienti": "",
                         "ultima": "", "in_sheet": k in sk})
 
-    names_all = {p["key"]: p["name"] for p in aggregate_props(ivs_all)}
+    props_all = aggregate_props(ivs_all)
+    names_all = {p["key"]: p["name"] for p in props_all}
+    geo_for_props(props_all)       # pentru lista de asocieri casa <-> rand din Sheet (toate casele, nu doar perioada)
 
     def prop_display(name):
         return names_all.get(prop_key(name), name)
@@ -1952,7 +2084,9 @@ def _compute_analytics_base(period_key="all"):
         "clients": clients, "top3": top3,
         "monthly": with_monthly_profit(analytics.monthly_series(ivs_all, chart_months, prop_key), ivs_all),
         "luna_selectata": months[-1] if period.get("key", "").startswith("m") and months else None,
-        "calendar": analytics.calendar_data(ivs, prop_display),
+        # harta zilelor se face in pagina din "zile" (aceleasi date) -> aici doar clasamentul si mediile
+        "calendar": {k: v for k, v in analytics.calendar_data(ivs, prop_display).items() if k != "zile"},
+        "zile": days_table(ivs, ivs_all, props, prop_display, (profit.get("motorina") or {}).get("scalare")),
         "prices": prices,
         "zones": zones_table(props),
         "costly": costly_houses(props),
@@ -1964,6 +2098,11 @@ def _compute_analytics_base(period_key="all"):
             "fara_coordonate": [{"key": p["key"], "name": p["name"], "interventii": p["interventii"],
                                  "total": p["total"]} for p in sorted(missing, key=lambda x: -x["total"])],
             "nume_sheet": sheet_names,
+            # toate casele cu randul din Sheet de care sunt legate (automat sau manual), pentru verificare
+            "asocieri": [{"key": p["key"], "name": p["name"], "total": p["total"], "interventii": p["interventii"],
+                          "km": p.get("distanta_km"), "aprox": bool(p["coord_link"]["nume"] and not p["coord_link"]["manual"]
+                                                                     and norm_text(p["coord_link"]["nume"]) != norm_text(p["name"])),
+                          **p["coord_link"]} for p in sorted(props_all, key=lambda x: -x["total"])],
             "ultima_citire": settings.get("geo_sync"),
         },
     }
@@ -2227,6 +2366,7 @@ def api_analytics():
     # formulele si ordinea coloanelor se iau mereu din setarile curente (rezultatul de mai sus e tinut in memorie)
     return jsonify({**val, "formule": settings.get("formule") or [], "coloane": settings.get("coloane") or {},
                     "intrebari": settings.get("intrebari") or [], "intrebari_ts": settings.get("intrebari_ts") or 0,
+                    "texte": settings.get("texte") or {}, "preturi_note": settings.get("preturi_note") or {},
                     "setari_gata": bool(cache.get("ready"))})
 
 
@@ -2422,6 +2562,8 @@ def api_geo_link():
     key, nume = data.get("key"), (data.get("nume") or "").strip()
     if not key:
         return jsonify({"ok": False, "error": "Lipseste casa"}), 400
+    if nume and nume != NO_COORDS and nume not in {c["nume"] for c in settings.get("coords") or []}:
+        return jsonify({"ok": False, "error": "Rândul nu mai există în Sheet — reîncarcă coordonatele"}), 400
     if nume:
         settings.setdefault("coord_alias", {})[key] = nume
     else:
@@ -3011,6 +3153,29 @@ def api_coloane():
     return jsonify({"ok": True, "coloane": cur})
 
 
+@app.route("/api/texte", methods=["POST"])
+def api_texte():
+    """Un text explicativ din pagina, rescris de utilizator. text null = revine la cel original, "" = ascuns."""
+    d = request.json or {}
+    tid, text = str(d.get("id") or ""), d.get("text")
+    if not re.fullmatch(r"[a-z0-9-]{1,40}", tid):
+        return jsonify({"ok": False, "error": "Text necunoscut"}), 400
+    cur = dict(settings.get("texte") or {})
+    if text is None:
+        cur.pop(tid, None)
+    else:
+        if not isinstance(text, str) or len(text) > 2000:
+            return jsonify({"ok": False, "error": "Textul e prea lung (cel mult 2000 de caractere)"}), 400
+        if tid not in cur and len(cur) >= 300:
+            return jsonify({"ok": False, "error": "Prea multe texte modificate"}), 400
+        cur[tid] = text.strip()
+    if cur != settings.get("texte"):
+        settings["texte"] = cur
+        cache["dirty"] = True
+        _save_async()
+    return jsonify({"ok": True, "texte": cur})
+
+
 @app.route("/api/formule", methods=["POST"])
 def api_formule():
     """Salveaza indicatorii proprii ('Nume = expresie' pe fiecare rand). Cu greseli: nu salveaza nimic."""
@@ -3258,7 +3423,8 @@ def calendar_report():
     for c in settings.get("coords") or []:            # numele din Sheet ajuta si ele la potrivire
         names.setdefault(prop_key(c["nume"]), []).append(c["nume"])
     for k, nume in (settings.get("coord_alias") or {}).items():
-        names.setdefault(k, []).append(nume)
+        if nume != NO_COORDS:
+            names.setdefault(k, []).append(nume)
     display = {p["key"]: p["name"] for p in props}
     inv = {}
     for iv in ivs:
@@ -3402,6 +3568,39 @@ def api_prices_ok():
     cache["dirty"] = True
     _save_async()
     return jsonify({"ok": True, "n": len(ids)})
+
+
+PRET_CLASE = ("greseala", "corectata", "tarif", "special", "intrebat")
+
+
+@app.route("/api/preturi-note", methods=["POST"])
+def api_preturi_note():
+    """Clasarea si/sau nota unor semnalari de pret: {ids: [...], clasa: "greseala" | "", nota: "..."}."""
+    d = request.json or {}
+    ids = [str(i)[:200] for i in (d.get("ids") or []) if isinstance(i, (str, int))][:2000]
+    if not ids:
+        return jsonify({"ok": False, "error": "Lipsesc semnalările"}), 400
+    if "clasa" in d and (d["clasa"] or "") not in ("",) + PRET_CLASE:
+        return jsonify({"ok": False, "error": "Clasare necunoscută"}), 400
+    cur = {k: dict(v) for k, v in (settings.get("preturi_note") or {}).items()}
+    for i in ids:
+        e = cur.get(i, {})
+        if "clasa" in d:
+            e["clasa"] = d["clasa"] or ""
+        if "nota" in d:
+            e["nota"] = str(d.get("nota") or "").strip()[:300]
+        e = {k: v for k, v in e.items() if v}
+        if e:
+            cur[i] = e
+        else:
+            cur.pop(i, None)
+    if len(cur) > 5000:
+        return jsonify({"ok": False, "error": "Prea multe note"}), 400
+    if cur != settings.get("preturi_note"):
+        settings["preturi_note"] = cur
+        cache["dirty"] = True
+        _save_async()
+    return jsonify({"ok": True, "preturi_note": cur})
 
 
 @app.route("/api/ignore-suggestion", methods=["POST"])
