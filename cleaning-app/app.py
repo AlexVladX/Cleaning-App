@@ -759,24 +759,35 @@ def _read_json(fid):
     return json.loads(raw) if raw else {}
 
 
-def load_settings_store():
-    """Citeste setarile din fisierul separat (sau il pregateste, mutand acolo setarile din backup)."""
+def load_settings_store(late=False):
+    """
+    Citeste setarile din fisierul separat (sau il pregateste, mutand acolo setarile din backup).
+    late=True: fisierul a aparut dupa pornire (l-ai creat tu) -> setarile din aplicatie sunt cele bune,
+    doar le scriem in el (nu le inlocuim cu continutul lui, care e doar o copie).
+    """
     svc = get_drive_service()
     f = _find_named(svc, SETTINGS_FILE_NAME)
+    if not f and late:
+        return
     if not f:
         try:     # incercam sa-l cream noi; unele conturi de serviciu nu au voie (fara spatiu propriu)
             f = svc.files().create(body={"name": SETTINGS_FILE_NAME, "parents": [FOLDER_ID], "mimeType": "application/json"},
                                    media_body=MediaIoBaseUpload(io.BytesIO(b"{}"), mimetype="application/json", resumable=False),
                                    fields="id, version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
             add_log(f"Am creat fișierul de setări „{SETTINGS_FILE_NAME}” în folderul facturilor")
-        except Exception as e:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             sstore.update(file_id=None, msg=f"lipsește fișierul „{SETTINGS_FILE_NAME}” din folderul facturilor "
-                                             f"(nu-l pot crea singur: {str(e)[:80]})")
+                                             "(contul de serviciu nu are voie să creeze fișiere)")
             add_log(f"⚠ Setări: {sstore['msg']} — creează în folder un fișier gol cu numele acesta")
             return
     data = _read_json(f["id"])
     sstore.update(file_id=f["id"], version=f.get("version"), msg="", err="")
     saved = data.get("setari") if isinstance(data, dict) else None
+    if late and not (isinstance(data, dict) and data.get("meta")):
+        sstore["meta"], sstore["hash"] = {}, {}
+        add_log(f"Am găsit „{SETTINGS_FILE_NAME}” — scriu în el setările tale actuale")
+        _save_async()
+        return
     if isinstance(saved, dict) and saved:
         for k in _skeys():
             if k in saved:
@@ -1181,6 +1192,11 @@ def scan_folder(retry_errors=False):
     try:
         if not cache["loaded"] or not cache["enabled"]:
             load_cache()      # si cand backup-ul lipsea: il cautam din nou la fiecare scanare
+        elif cache.get("ready") and not sstore.get("file_id"):
+            try:              # fisierul de setari lipsea la pornire: poate l-ai creat intre timp
+                load_settings_store(late=True)
+            except Exception as e:  # noqa: BLE001
+                add_log(f"⚠ Setări: {e}")
         files = list_pdf_files(FOLDER_ID)
         with state_lock:
             state["scan"]["phase"] = "procesare"
