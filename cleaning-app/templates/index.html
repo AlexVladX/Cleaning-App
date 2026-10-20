@@ -447,9 +447,13 @@
 </div>
 
 <div class="main">
+  <div class="bk-warn bk-red" id="bk-conf" role="alert" hidden><div><b>⛔ Un ALT server scrie în același backup din Drive:</b> <span id="bk-conf-who"></span>.<br>
+    De aceea revin setările vechi: cele două aplicații își suprascriu una alteia setările. Caută și oprește (sau șterge) cealaltă aplicație — de ex. un al doilea serviciu în Render, un deploy vechi pe Railway / alt site — sau schimbă-i folderul din Drive.</div></div>
   <div class="bk-warn bk-red" id="bk-proc" role="alert" hidden><div><b>⛔ Serverul rulează în <span id="bk-proc-n"></span> procese în loc de unul.</b> Fiecare proces are propria copie a setărilor și se suprascriu una pe alta în Drive — de aceea „se pierd” modificări.<br>
     Remediere: în Render → serviciul <b>facturi-curatenie</b> → <b>Settings</b> → <b>Start Command</b>, pune exact: <code>gunicorn app:app --workers 1 --threads 4 --timeout 120</code> → Save. Dacă în <b>Environment</b> există <b>WEB_CONCURRENCY</b>, pune-l pe <b>1</b> (sau șterge-l).</div></div>
   <div class="bk-warn" id="bk-save" role="alert" hidden><div><b>⚠ Ultimele modificări nu s-au putut salva în Drive.</b> Reîncerc automat la 30 de secunde; nu închide aplicația până dispare mesajul.<br><span style="font-size:12px" id="bk-save-msg"></span></div></div>
+  <div class="bk-warn" id="bk-set" role="alert" hidden><div><b>⚠ Setările nu au încă fișierul lor în Drive:</b> <span id="bk-set-msg"></span>.<br>
+    Remediere (o singură dată): în Google Drive, în folderul facturilor → <b>Nou → Încărcare fișier</b> cu un fișier gol numit exact <code>setari-facturi.json</code> (sau copiază <b>cache-facturi.json</b> și redenumește copia). Apoi apasă <b>↻ Scanează</b> sus.</div></div>
   <div class="bk-warn" id="bk-dup" role="alert" hidden><div><b>⚠ În folderul facturilor sunt <span id="bk-dup-n"></span> fișiere „cache-facturi.json”.</b> Aplicația folosește doar pe cel mai nou. Deschide folderul în Google Drive și șterge-le pe celelalte (cele mai vechi), ca setările să nu se mai amestece.</div></div>
   <div class="bk-warn" id="bk-warn" role="alert" hidden>
     <div><b>⚠ Regulile și setările tale nu sunt încărcate încă din backup-ul din Drive.</b> <span id="bk-msg"></span><br>
@@ -901,6 +905,8 @@ function renderState(filesChanged = true) {
   const bk = s.backup || {ok: true};
   $('bk-warn').hidden = !!bk.ok; $('bk-msg').textContent = bk.msg ? `Motiv: ${bk.msg}.` : '';
   $('bk-save').hidden = !(bk.ok && bk.eroare_salvare); $('bk-save-msg').textContent = bk.eroare_salvare || '';
+  $('bk-set').hidden = !(bk.ok && bk.setari_msg); $('bk-set-msg').textContent = bk.setari_msg || '';
+  $('bk-conf').hidden = !bk.conflict; $('bk-conf-who').textContent = bk.conflict || '';
   $('bk-proc').hidden = !(bk.procese > 1); $('bk-proc-n').textContent = bk.procese || '';
   $('bk-dup').hidden = !(bk.duplicate > 1); $('bk-dup-n').textContent = bk.duplicate || '';
   dot.className = s.monitoring ? 'dot live' : 'dot';
