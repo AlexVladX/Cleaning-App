@@ -746,10 +746,19 @@ def load_cache():
     recompute_all()
     cache["dirty"] = False
     cache["known_files"] = len(files)
+    with state_lock:            # backup-ul din Drive = exact facturile de acum -> nu-l reurcam dupa fiecare pornire
+        cache["files_hash"] = _vhash(_cache_files())
     add_log(f"Backup incarcat: {len(files)} facturi (salvat {data.get('saved_at', '?')})")
 
 
 _save_cache_lock = threading.RLock()
+
+
+def _cache_files():
+    """Facturile asa cum intra in backup (apelat sub state_lock)."""
+    return {fid: {k: f.get(k) for k in CACHE_KEYS}
+            for fid, f in state["files"].items()
+            if f.get("status") in ("done", "warning", "duplicate", "error")}
 
 # ---------------------------------------------------------------- setarile: fisier separat
 # Fiecare setare are data ultimei modificari ("meta"). La salvare: daca fisierul a fost scris intre timp
@@ -908,9 +917,7 @@ def _save_cache(force=False, allow_empty=False):
     if not cache["loaded"]:
         return          # backup-ul nu a fost inca citit: nu-l suprascriem cu o stare incompleta
     with state_lock:
-        files = {fid: {k: f.get(k) for k in CACHE_KEYS}
-                 for fid, f in state["files"].items()
-                 if f.get("status") in ("done", "warning", "duplicate", "error")}
+        files = _cache_files()
         refuse = not files and cache.get("known_files") and not allow_empty
         # doar setarile s-au schimbat (facturile sunt aceleasi) si fisierul de setari merge -> nu mai urcam
         # tot backup-ul (~1-2 MB) la fiecare click: asta consuma traficul gratuit al Render-ului
