@@ -321,7 +321,7 @@ def gzip_json(resp):
         if (resp.mimetype == "application/json" and not resp.direct_passthrough and resp.status_code == 200
                 and "gzip" in (request.headers.get("Accept-Encoding") or "") and "Content-Encoding" not in resp.headers):
             data = resp.get_data()
-            if len(data) > 20000:
+            if len(data) > 1500:
                 import gzip
                 resp.set_data(gzip.compress(data, compresslevel=5))
                 resp.headers["Content-Encoding"] = "gzip"
@@ -912,8 +912,15 @@ def _save_cache(force=False, allow_empty=False):
                  for fid, f in state["files"].items()
                  if f.get("status") in ("done", "warning", "duplicate", "error")}
         refuse = not files and cache.get("known_files") and not allow_empty
+        # doar setarile s-au schimbat (facturile sunt aceleasi) si fisierul de setari merge -> nu mai urcam
+        # tot backup-ul (~1-2 MB) la fiecare click: asta consuma traficul gratuit al Render-ului
+        fhash = None if refuse else _vhash(files)
+        skip = (not refuse and not force and fhash == cache.get("files_hash") and sstore.get("file_id")
+                and not sstore.get("err") and not sstore.get("fara_drept"))
         if not refuse:
             cache["dirty"] = False
+    if skip:
+        return
     if refuse:   # (mesajul in afara lacatului: add_log il foloseste si el)
         add_log("⚠ Protecție: nu suprascriu backup-ul cu o listă goală de facturi")
         return
@@ -952,6 +959,7 @@ def _save_cache(force=False, allow_empty=False):
         add_log(f"⚠ Nu am putut salva backup-ul: {e} — reîncerc automat")
         return
     cache["known_files"] = len(files)
+    cache["files_hash"] = fhash
     cache["save_err"] = ""
     cache["saved_at"] = time.time()
     nf = len(settings.get("formule") or [])
@@ -2339,6 +2347,7 @@ def api_state():
     (files_v) — pe serverul gratuit (0,1 CPU) asta conteaza mult.
     """
     client_v = request.args.get("files_v")
+    client_log = request.args.get("log_v")
     with state_lock:
         sig = hash((tuple((fid, f.get("status"), f.get("processed_at"), f.get("name"), len(f.get("avertismente") or []))
                           for fid, f in state["files"].items()),
@@ -2358,9 +2367,13 @@ def api_state():
             "now": time.time(),
             "last_scan": state["last_scan"],
             "monitoring": state["monitoring"],
-            "log": state["log"][-50:],
             "scan": dict(state["scan"]),
         }
+        # jurnalul se trimite doar cand are randuri noi (pagina intreaba la cateva secunde)
+        log_v = f"{len(state['log'])}-{hash(state['log'][-1]) if state['log'] else 0}"
+        s["log_v"] = log_v
+        if client_log != log_v:
+            s["log"] = state["log"][-50:]
     if send_files:
         s["files"] = files
     s["metrics"] = {**counts,
