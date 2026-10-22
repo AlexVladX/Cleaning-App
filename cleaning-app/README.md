@@ -127,6 +127,21 @@ Cum funcționează:
 - **€ pe km** = media încasată pe intervenție / (2 × distanța), adică la un drum dus-întors.
 - Linkul Sheet-ului se salvează în backup, nu în cod.
 
+## Server propriu gratuit: Oracle Cloud (Always Free)
+
+Alternativa la Render: un server Ubuntu care nu adoarme, cu trafic mare inclus.
+
+1. Cont pe cloud.oracle.com (cere card pentru verificare). Regiunea de acasă nu se mai poate schimba: alege una apropiată (ex. Frankfurt, Paris, Marseille).
+2. Compute → Instances → Create: imagine **Ubuntu 24.04**, formă **VM.Standard.A1.Flex** (1 OCPU, 6 GB) sau, dacă nu e capacitate, **VM.Standard.E2.1.Micro**. Descarcă cheia SSH privată.
+3. Rețea: în Security List-ul subrețelei adaugă reguli Ingress TCP pentru porturile **80** și **443** (sursa `0.0.0.0/0`).
+4. Conectare: `chmod 600 cheie.key && ssh -i cheie.key ubuntu@IP-UL-SERVERULUI`
+5. Instalare (o singură comandă; cere parola, folderul Drive, cheia Groq și cheia Google):
+   `curl -fsSL https://raw.githubusercontent.com/AlexVladX/cleaning-app/main/cleaning-app/oracle-setup.sh | sudo bash`
+6. Pagina: `https://IP-cu-liniute.sslip.io` (HTTPS automat prin Caddy).
+7. **Oprește serviciul de pe Render** (Settings → Suspend sau Delete): două servere ar scrie în același backup din Drive.
+
+Actualizări: urci fișierele în GitHub ca până acum; serverul verifică GitHub la 5 minute și se actualizează singur. Jurnal: `sudo journalctl -u facturi -f`. Cheile stau în `/etc/facturi` (doar pe server). Variabile în plus: `/etc/facturi/extra.env`, apoi `sudo systemctl restart facturi`.
+
 ## Backup în Google Drive (recomandat)
 
 **Setările** (reguli, formule, coloane, întrebări, încasări, ore…) stau separat în **`setari-facturi.json`**, în același folder. Fișierul se creează singur; dacă service account-ul nu are voie să creeze fișiere, creezi tu o dată un fișier gol cu numele acesta. Fiecare setare are data ultimei modificări: la salvare, dacă altcineva (alt server, altă pornire) a scris între timp, setările se îmbină și câștigă mereu modificarea cea mai nouă. `cache-facturi.json` rămâne pentru facturile citite.

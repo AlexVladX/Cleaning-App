@@ -41,6 +41,13 @@ app = Flask(__name__)
 
 # ---------------------------------------------------------------- configurare
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
+if not GOOGLE_CREDENTIALS_JSON and os.environ.get("GOOGLE_CREDENTIALS_FILE"):
+    # pe un server propriu (ex. Oracle Cloud) cheia sta intr-un fisier protejat, nu intr-o variabila
+    try:
+        with open(os.environ["GOOGLE_CREDENTIALS_FILE"], encoding="utf-8") as _fh:
+            GOOGLE_CREDENTIALS_JSON = _fh.read()
+    except OSError:
+        pass
 FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "120"))
 # monitorizarea (facturi noi din Drive) porneste singura; MONITOR=0 o opreste
@@ -69,8 +76,9 @@ CACHE_SAVE_EVERY = 20  # salvam progresul la fiecare N facturi procesate
 APP_VERSION = "2026-10-20b"
 # cine scrie backup-ul (ca sa vedem daca mai e un ALT server care foloseste acelasi fisier din Drive)
 WRITER_ID = " · ".join(x for x in (
-    os.environ.get("RENDER_SERVICE_NAME") or os.environ.get("RAILWAY_SERVICE_NAME") or os.environ.get("FLY_APP_NAME") or "",
-    os.environ.get("RENDER_EXTERNAL_HOSTNAME") or os.environ.get("RAILWAY_PUBLIC_DOMAIN") or "",
+    os.environ.get("RENDER_SERVICE_NAME") or os.environ.get("RAILWAY_SERVICE_NAME") or os.environ.get("FLY_APP_NAME")
+    or os.environ.get("APP_SERVER_NAME") or "",
+    os.environ.get("RENDER_EXTERNAL_HOSTNAME") or os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("APP_DOMAIN") or "",
     socket.gethostname(), "v" + APP_VERSION) if x)
 PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
 
@@ -442,7 +450,7 @@ def get_drive_service():
     if svc is not None:
         return svc
     if not GOOGLE_CREDENTIALS_JSON:
-        raise ValueError("GOOGLE_CREDENTIALS_JSON nu e setat in Render → Environment")
+        raise ValueError("GOOGLE_CREDENTIALS_JSON nu e setat (Render → Environment, sau GOOGLE_CREDENTIALS_FILE pe serverul propriu)")
     t0 = time.time()
     set_stage("citesc cheia Google (GOOGLE_CREDENTIALS_JSON)")
     try:
