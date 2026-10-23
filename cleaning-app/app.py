@@ -1503,6 +1503,9 @@ def read_coords_sheet(sheet_id):
                            f"service account-ul. Detalii: {first_err}")
 
 
+GEO_KEYS = ("coords", "ore_estimate", "ore_nescrise", "distante", "distante_baza", "dist_matrix")
+
+
 def sync_geo(force_routes=False):
     """Citeste coordonatele si calculeaza traseele lipsa. Pastreaza DOAR nume/lat/lng."""
     sid = sheet_id_from(settings.get("coord_sheet"))
@@ -1510,6 +1513,7 @@ def sync_geo(force_routes=False):
     if not sid or not base:
         return
     set_stage("citesc coordonatele caselor")
+    before = _vhash({k: settings.get(k) for k in GEO_KEYS})
     text, how = read_coords_sheet(sid)
     coords, err = geo.parse_coords_csv(text)
     del text  # CSV-ul complet (cu eventuale coduri) nu e pastrat nicaieri
@@ -1544,7 +1548,7 @@ def sync_geo(force_routes=False):
     settings["coords"] = coords
     if pending:
         _save_async()
-    settings["geo_sync"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+    state["geo_citit"] = datetime.now().strftime("%d/%m/%Y %H:%M")
     base_k = geo.coord_key(*base)
     if settings.get("distante_baza") != base_k or force_routes:
         settings["distante"], settings["distante_baza"] = {}, base_k
@@ -1571,7 +1575,13 @@ def sync_geo(force_routes=False):
         sync_dist_matrix(base, coords)
     except Exception as e:  # noqa: BLE001 - motorina estimata nu are voie sa strice restul
         add_log(f"⚠ Matricea de distante: {e}")
-    cache["dirty"] = True
+    # Sheet-ul se citeste la fiecare scanare (la 1-2 minute). Salvam DOAR daca s-a schimbat ceva:
+    # inainte fiecare citire marca backup-ul ca modificat -> ~2 MB urcati in Drive la fiecare minut,
+    # adica aproape tot traficul lunar gratuit al Render-ului (5 GB) consumat fara sa folosesti aplicatia.
+    if _vhash({k: settings.get(k) for k in GEO_KEYS}) != before:
+        settings["geo_sync"] = state["geo_citit"]
+        cache["dirty"] = True
+        _save_async()
 
 
 def sync_dist_matrix(base, coords):
@@ -2142,7 +2152,7 @@ def _compute_analytics_base(period_key="all"):
                           "km": p.get("distanta_km"), "aprox": bool(p["coord_link"]["nume"] and not p["coord_link"]["manual"]
                                                                      and norm_text(p["coord_link"]["nume"]) != norm_text(p["name"])),
                           **p["coord_link"]} for p in sorted(props_all, key=lambda x: -x["total"])],
-            "ultima_citire": settings.get("geo_sync"),
+            "ultima_citire": state.get("geo_citit") or settings.get("geo_sync"),
         },
     }
     with _an_lock:
