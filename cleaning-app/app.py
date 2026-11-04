@@ -708,7 +708,7 @@ def load_cache():
     cache.update({"file_id": fid, "enabled": True})
     try:
         set_stage("descarc backup-ul")
-        raw = download_pdf(fid).read().decode("utf-8").strip()
+        raw = download_pdf(fid).read().decode("utf-8-sig").strip()
     except Exception as e:
         # problema de retea / Google: NU refacem backup-ul de la zero (s-ar pierde tot), reincercam
         cache["loaded"] = cache["enabled"] = False
@@ -719,13 +719,15 @@ def load_cache():
         if not isinstance(data, dict):
             raise ValueError("format neasteptat")
     except ValueError as e:
-        if raw or cache.get("file_size"):
+        if (raw and len(raw) > 2) or (cache.get("file_size") or 0) > 64:
             # fisierul are continut, dar l-am primit stricat: reincercam, NU il suprascriem
             cache["loaded"] = cache["enabled"] = False
             cache["msg"] = f"backup-ul s-a descărcat incomplet ({e}) — reîncerc automat"
             raise RuntimeError(cache["msg"]) from e
         data = {}
-    if not data and cache.get("file_size"):
+    # un fisier care chiar e gol ("{}" pus la instalare) inseamna backup nou; protectia e doar pentru
+    # cand un backup real (zeci de KB) ajunge gol la descarcare
+    if not data and (cache.get("file_size") or 0) > 64 and len(raw) <= 2:
         cache["loaded"] = cache["enabled"] = False
         cache["msg"] = "backup-ul a venit gol din Drive, deși fișierul are conținut — reîncerc automat"
         raise RuntimeError(cache["msg"])
@@ -811,7 +813,7 @@ def _similar_names(svc):
 
 
 def _read_json(fid):
-    raw = download_pdf(fid).read().decode("utf-8").strip()
+    raw = download_pdf(fid).read().decode("utf-8-sig").strip()
     return json.loads(raw) if raw else {}
 
 
