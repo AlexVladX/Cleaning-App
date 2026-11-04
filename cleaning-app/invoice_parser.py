@@ -603,6 +603,9 @@ def parse_invoice(pdf_source, rules=None):
         if len(full_text.strip()) < 20:
             raise ParseError("PDF fara text (probabil scanat)")
 
+        if is_villas_format(full_text):
+            return _parse_villas(pdf_source, rules)
+
         header = _parse_header(pages_words, full_text)
 
         rows, totals = None, None
@@ -637,6 +640,40 @@ def parse_invoice(pdf_source, rules=None):
         "interventii": interventii,
         "avertismente": calc_warnings + inv_warnings,
         "avertismente_factura": inv_warnings,
+    }
+
+
+# --------------------------------------------------------------------------- al doilea format
+from parser_tabel_villas import is_format as is_villas_format, parse as _parse_villas_raw  # noqa: E402
+
+
+def _parse_villas(pdf_source, rules=None):
+    """Facturi cu tabelul 'Nom des villas | Date de menage | Quantite | Prix | Total'."""
+    head, rows, adjust, warns, total_table, total_doc = _parse_villas_raw(pdf_source, MAX_PAGES)
+    if not rows:
+        raise ParseError("Tabelul 'Nom des villas' nu contine randuri")
+    if not head.get("client"):
+        raise ParseError("Clientul nu a fost gasit (blocul din dreapta, sub data)")
+    rows_sum = round(sum(r.get("total") or 0 for r in rows), 2)
+    aj = round(sum(a["suma"] or 0 for a in adjust), 2)
+    total = total_doc if total_doc is not None else (round(rows_sum + aj, 2) if total_table is None else total_table)
+    inv_w = list(warns)
+    if aj:
+        inv_w.append("Ajustări de {:.2f} € ({}) — nu sunt repartizate pe intervenții".format(
+            aj, ", ".join(f"{a['casa']} {a['data']}" for a in adjust)))
+    if total is not None and abs(rows_sum + aj - total) > 0.01:
+        inv_w.append(f"Suma rândurilor {rows_sum:.2f} € (cu ajustări {rows_sum + aj:.2f} €) ≠ total factură {total:.2f} €")
+    totals = {"subtotal": rows_sum, "ajustari": aj, "total": total}
+    interventii, calc_w = compute_interventions(rows, head, rules)
+    return {
+        "metoda": "parser-villas",
+        "antet": {**head, "data_emitere": head["data_emitere"].strftime("%d/%m/%Y") if head.get("data_emitere") else None,
+                  "scadenta": None},
+        "randuri": rows,
+        "totaluri": totals,
+        "interventii": interventii,
+        "avertismente": calc_w + inv_w,
+        "avertismente_factura": inv_w,
     }
 
 

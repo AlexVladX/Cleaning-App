@@ -40,6 +40,7 @@ from invoice_parser import (
 app = Flask(__name__)
 
 # ---------------------------------------------------------------- configurare
+COMPANY_NAME = os.environ.get("COMPANY_NAME", "SimNettoyage").strip() or "SimNettoyage"   # numele firmei, sus in pagina
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 if not GOOGLE_CREDENTIALS_JSON and os.environ.get("GOOGLE_CREDENTIALS_FILE"):
     # pe un server propriu (ex. Oracle Cloud) cheia sta intr-un fisier protejat, nu intr-o variabila
@@ -865,6 +866,66 @@ def load_settings_store(late=False):
         _save_async()
 
 
+# ---------------------------------------------------------------- plafon de trafic
+# Render gratuit include 5 GB/luna de trafic trimis de server (aproape tot = urcarile in Drive).
+# Orice bucla nevazuta (o reincercare, o salvare repetata) l-ar putea consuma din nou in cateva zile.
+# Plafonul: masuram ce urcam si, peste limita zilnica, amanam urcarile neesentiale.
+# Datele raman in memorie si se urca mai tarziu - nu se pierde nimic.
+UPLOAD_LIMIT_MB_DAY = float(os.environ.get("UPLOAD_LIMIT_MB_DAY", "120") or 120)
+traffic = {"day": "", "bytes": 0, "total": 0, "uploads": 0, "postponed": 0, "limited": False,
+           "last_cache": 0.0, "last_settings": 0.0}
+
+
+def _traffic_roll():
+    d = date.today().isoformat()
+    if traffic["day"] != d:
+        traffic.update(day=d, bytes=0, uploads=0, postponed=0, limited=False)
+
+
+def upload_allowed(kind, nbytes, important=True):
+    """kind: 'cache' (backup mare) / 'settings'. Fals = amanam (se reincearca singur, cu pauze tot mai mari)."""
+    _traffic_roll()
+    now = time.time()
+    over = traffic["bytes"] + nbytes > UPLOAD_LIMIT_MB_DAY * 1024 * 1024
+    # normal: cel mult N urcari de acelasi fel in 10 minute (o bucla nu poate urca la nesfarsit);
+    # peste plafonul zilnic: cel mult o urcare la 30 de minute, si doar daca e importanta
+    hist = [t for t in traffic.setdefault("hist_" + kind, []) if now - t < 600]
+    traffic["hist_" + kind] = hist
+    if over:
+        gap = 7200 if kind == "cache" else 1800     # backup-ul mare: cel mult o data la 2 ore
+        ok = important and now - traffic["last_" + kind] >= gap
+    else:
+        cap = 6 if kind == "cache" else 30
+        gap = 600 - (now - hist[0]) if len(hist) >= cap else 0
+        ok = len(hist) < cap
+    if not ok:
+        traffic["postponed"] += 1
+        # cand se poate urca din nou (amanarea nu e o eroare: nu marim pauza de reincercare)
+        wait = gap - (now - traffic["last_" + kind]) if over else gap
+        traffic["retry_in"] = min(traffic.get("retry_in") or 1e9, max(5.0, wait))
+        if over and not traffic["limited"]:
+            traffic["limited"] = True
+            add_log(f"⚠ Plafon de trafic: azi s-au urcat deja {traffic['bytes'] / 1048576:.0f} MB în Drive "
+                    f"(limita {UPLOAD_LIMIT_MB_DAY:.0f} MB/zi). Până mâine salvez doar ce e important, rar (setările la 30 min, backup-ul mare la 2 ore).")
+    return ok
+
+
+def upload_done(kind, nbytes):
+    _traffic_roll()
+    traffic["bytes"] += nbytes
+    traffic["total"] += nbytes
+    traffic["uploads"] += 1
+    traffic["last_" + kind] = time.time()
+    traffic.setdefault("hist_" + kind, []).append(traffic["last_" + kind])
+
+
+def traffic_info():
+    _traffic_roll()
+    return {"azi_mb": round(traffic["bytes"] / 1048576, 1), "de_la_pornire_mb": round(traffic["total"] / 1048576, 1),
+            "urcari_azi": traffic["uploads"], "amanate_azi": traffic["postponed"],
+            "limita_mb_zi": UPLOAD_LIMIT_MB_DAY, "limitat": traffic["limited"]}
+
+
 def save_settings_store(force=False):
     """Scrie setarile schimbate; daca altcineva a scris intre timp, imbina (cea mai noua setare castiga)."""
     if not sstore.get("file_id") or not IS_PRIMARY or not cache.get("ready"):
@@ -878,6 +939,7 @@ def save_settings_store(force=False):
         for k in changed:
             meta[k] = now
         svc = get_drive_service()
+        payload = None
         try:
             cur = svc.files().get(fileId=sstore["file_id"], fields="version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
             if sstore.get("version") and cur.get("version") != sstore["version"]:
@@ -895,12 +957,16 @@ def save_settings_store(force=False):
             payload = json.dumps({"versiune": 1, "salvat_de": WRITER_ID,
                                   "salvat_la": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                                   "setari": {k: settings.get(k) for k in _skeys()}, "meta": meta},
-                                 ensure_ascii=False, default=str)
+                                 ensure_ascii=False, default=str).encode("utf-8")
+            if not force and not upload_allowed("settings", len(payload)):
+                return False            # amanat (plafon / prea des) -> se reincearca automat
             res = svc.files().update(fileId=sstore["file_id"],
-                                     media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
+                                     media_body=MediaIoBaseUpload(io.BytesIO(payload),
                                                                   mimetype="application/json", resumable=False),
                                      fields="id, version", supportsAllDrives=True).execute(num_retries=DRIVE_RETRIES)
+            upload_done("settings", len(payload))
         except Exception as e:  # noqa: BLE001
+            upload_done("settings", len(payload) if isinstance(payload, bytes) else 0)   # trimis oricum (o parte)
             sstore["err"] = str(e)[:200]
             add_log(f"⚠ Nu am putut salva setările: {e} — reîncerc automat")
             return False
@@ -959,16 +1025,21 @@ def _save_cache(force=False, allow_empty=False):
     payload = json.dumps({"parser_version": PARSER_VERSION, "salvat_de": WRITER_ID,
                           "saved_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
                           "setari": {k: settings[k] for k in RULE_KEYS + PERSIST_KEYS},
-                          "files": files}, ensure_ascii=False, default=str)
+                          "files": files}, ensure_ascii=False, default=str).encode("utf-8")
+    if not force and not upload_allowed("cache", len(payload), important=fhash != cache.get("files_hash")):
+        cache["dirty"] = True           # amanat: se reincearca singur mai tarziu
+        return
     try:
         res = svc.files().update(
             fileId=cache["file_id"],
-            media_body=MediaIoBaseUpload(io.BytesIO(payload.encode("utf-8")),
+            media_body=MediaIoBaseUpload(io.BytesIO(payload),
                                          mimetype="application/json", resumable=False),
             fields="id, version", supportsAllDrives=True,
         ).execute(num_retries=DRIVE_RETRIES)
+        upload_done("cache", len(payload))
         cache["drive_version"] = (res or {}).get("version") or cache.get("drive_version")
     except Exception as e:
+        upload_done("cache", len(payload))
         cache["dirty"] = True
         cache["save_err"] = str(e)[:200]
         add_log(f"⚠ Nu am putut salva backup-ul: {e} — reîncerc automat")
@@ -993,7 +1064,7 @@ def llm_extract(pdf_bytes, max_retries=3):
 
     prompt = (
         "Extract the data from this French cleaning-company invoice. "
-        "The issuer is SimNettoyage — ignore its address and bank details.\n"
+        f"The issuer is {COMPANY_NAME} — ignore its address and bank details.\n"
         "Return ONLY a JSON object, no markdown, with this shape:\n"
         '{"client": "name right under \'Facture pour\' (first line only, no address)",'
         ' "numar": "invoice number after \'Facture #\'",'
@@ -2362,7 +2433,7 @@ def _file_sort_key(f):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", firma=COMPANY_NAME)
 
 
 @app.route("/api/state")
@@ -2410,7 +2481,8 @@ def api_state():
                    "eroare_salvare": cache.get("save_err") or "", "nesalvat": bool(cache["dirty"]),
                    "duplicate": cache.get("duplicate") or 0, "procese": process_count(),
                    "conflict": cache.get("conflict") or "",
-                   "setari_msg": sstore.get("msg") or "", "setari_err": sstore.get("err") or ""}
+                   "setari_msg": sstore.get("msg") or "", "setari_err": sstore.get("err") or "",
+                   "trafic": traffic_info()}
     return jsonify(s)
 
 
@@ -2461,6 +2533,7 @@ def api_export():
 
 # ---------------------------------------------------------------- setari & unire proprietati
 _save_event = threading.Event()
+_retry_delay = 30
 _saver_started = False
 _saver_lock = threading.Lock()
 
@@ -2472,6 +2545,7 @@ def _saver_loop():
     pana la limita de 512 MB cand se introduceau multe ore una dupa alta.
     """
     import gc
+    global _retry_delay
     while True:
         _save_event.wait()
         time.sleep(3)                 # grupam modificarile facute una dupa alta
@@ -2490,10 +2564,21 @@ def _saver_loop():
         except Exception as e:  # noqa: BLE001
             cache["save_err"] = str(e)[:200]
             add_log(f"⚠ Salvare: {e}")
-        if (cache["dirty"] and cache["enabled"] and cache["loaded"]) or not ok_settings:
-            t = threading.Timer(30, _save_event.set)     # n-a mers: reincercam in 30 s
+        later = traffic.pop("retry_in", None)
+        if later and ((cache["dirty"] and cache["enabled"] and cache["loaded"]) or not ok_settings) \
+                and not cache.get("save_err") and not sstore.get("err"):
+            t = threading.Timer(min(later + 1, 900), _save_event.set)   # amanat de plafon: revenim exact cand se poate
             t.daemon = True
             t.start()
+        elif (cache["dirty"] and cache["enabled"] and cache["loaded"]) or not ok_settings:
+            # n-a mers (sau e amanat): reincercam cu pauze tot mai mari (30 s, 1, 2, 4 ... cel mult 15 min),
+            # ca o eroare care nu trece singura sa nu urce date in Drive la fiecare 30 de secunde
+            t = threading.Timer(_retry_delay, _save_event.set)
+            t.daemon = True
+            t.start()
+            _retry_delay = min(_retry_delay * 2, 900)
+        else:
+            _retry_delay = 30
         gc.collect()
 
 
@@ -3254,7 +3339,7 @@ def api_diagnostic():
                 "coloane": {k: (len(v) if isinstance(v, (list, dict)) else v) for k, v in col.items()},
                 "ascunse": col.get("ascunse") or [], "ordine": (col.get("props") or [])[:20],
                 "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or [])}
-    out = {"eu": WRITER_ID, "conflict": cache.get("conflict") or "", "proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
+    out = {"eu": WRITER_ID, "trafic": traffic_info(), "conflict": cache.get("conflict") or "", "proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
            "gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
            "fisiere_backup": cache.get("duplicate") or 1, "nesalvat": bool(cache["dirty"]),
            "ultima_salvare": datetime.fromtimestamp(cache["saved_at"]).strftime("%d.%m %H:%M:%S") if cache.get("saved_at") else "—",
