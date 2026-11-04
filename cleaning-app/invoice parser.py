@@ -588,7 +588,7 @@ def invoice_warnings(rows, totals):
     return warnings
 
 
-def parse_invoice(pdf_source, rules=None, file_name=None):
+def parse_invoice(pdf_source, rules=None, file_name=None, invoice_format="simnettoyage"):
     """
     pdf_source: cale sau file-like (BytesIO).
     Intoarce dict cu antet, randuri, totaluri, interventii, avertismente.
@@ -603,8 +603,9 @@ def parse_invoice(pdf_source, rules=None, file_name=None):
         if len(full_text.strip()) < 20:
             raise ParseError("PDF fara text (probabil scanat)")
 
-        if is_villas_format(full_text) or (re.search(r"(?i)nom\s+des\s+villas", full_text)
-                                           and "Détail des prestations" not in full_text):
+        fmt = (invoice_format or "simnettoyage").strip().casefold()
+        if fmt == "villas" or (fmt == "auto" and (is_villas_format(full_text) or (
+                re.search(r"(?i)nom\s+des\s+villas", full_text) and "Détail des prestations" not in full_text))):
             return _parse_villas(pdf_source, rules, file_name)
 
         header = _parse_header(pages_words, full_text)
