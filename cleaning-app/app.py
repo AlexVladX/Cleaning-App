@@ -81,7 +81,7 @@ WRITER_ID = " · ".join(x for x in (
     or os.environ.get("APP_SERVER_NAME") or "",
     os.environ.get("RENDER_EXTERNAL_HOSTNAME") or os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("APP_DOMAIN") or "",
     socket.gethostname(), "v" + APP_VERSION) if x)
-PARSER_VERSION = "2026-10-11c"  # c: an din 2 cifre, randuri fara fundal
+PARSER_VERSION = "2026-11-04"  # facturi Word (tabel "Nom des villas" si rezumat) -> recitire o singura data
 
 cache = {"file_id": None, "loaded": False, "dirty": False, "enabled": False, "msg": "se încarcă",
          # ready = regulile din backup sunt aplicate; pana atunci nu primim modificari (testele locale: gata din start)
@@ -97,7 +97,7 @@ settings = {
     "verificate": {},  # factura -> amprenta avertismentelor marcate "Am verificat"
     "preturi_ok": [],  # semnalari de pret marcate "E corect"
     "excluse": [],     # proprietati scoase manual din lista (ex. produse de curatenie facturate)
-    "cuvinte_produse": ["produit", "fourniture"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
+    "cuvinte_produse": ["produit", "fourniture", "location linge"],  # randuri cu aceste cuvinte in nume/tip = produse, nu menaj
     "pastrate": [],    # proprietati puse inapoi manual: cuvintele de produse nu le mai scot
     # clienti grupati: [{"nume": "Client X", "potriviri": ["dupont", "martin", ...]}]
     # o factura intra in grup daca numele clientului SAU folderul din Drive contine o potrivire
@@ -1210,7 +1210,7 @@ def process_file(file_info, idx=None, total=None):
         pdf_bytes = download_pdf(file_id)
         set_stage(f"citesc {name}")
         try:
-            result = parse_invoice(pdf_bytes, current_rules())
+            result = parse_invoice(pdf_bytes, current_rules(), name)
         except ParseError as pe:
             if not LLM_API_KEY:
                 raise ValueError(f"{pe} (nicio cheie AI pentru rezerva)")
