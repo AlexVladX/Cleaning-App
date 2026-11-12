@@ -323,6 +323,9 @@
   .fn-table .lipsa{border-color:var(--bad-ink);background:var(--bad-bg)}
   .fn-sub{font-size:11px;color:var(--muted);margin-top:2px;min-height:13px;white-space:normal}
   .fn-sub a{color:var(--brand);cursor:pointer;text-decoration:underline}
+  .fn-grid[hidden]{display:none}
+  .fn-more{font-size:12px;color:var(--muted);margin-top:8px}
+  .fn-more a{color:var(--brand);cursor:pointer;text-decoration:underline}
   .fn-total{margin-top:12px;font-size:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
   .fn-total b.big{font-size:20px;color:var(--brand)}
   .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
@@ -817,10 +820,13 @@
             <label>Client<select id="fn-client" class="search"></select></label>
             <label>Format / cont<select id="fn-format" class="search"></select></label>
             <label>Număr factură<input id="fn-numar" class="search" autocomplete="off"></label>
+            <label>Luna menajelor<input id="fn-luna" class="search" type="month"></label>
+          </div>
+          <div class="fn-more" id="fn-more-sum"></div>
+          <div class="fn-grid" id="fn-more" hidden style="margin-top:8px">
             <label>Data facturii<input id="fn-data" class="search" type="date"></label>
             <label>Scadență (zile)<input id="fn-zile" class="search" type="number" min="0" max="90" value="10"></label>
             <label>Tarife din lista<select id="fn-tarife" class="search"></select></label>
-            <label>Luna menajelor<input id="fn-luna" class="search" type="month"></label>
           </div>
           <div class="hint" id="fn-client-info" style="margin:6px 0 10px"></div>
           <div class="table-wrap" style="overflow:visible;max-height:none;height:auto"><table class="t fn-table">
@@ -831,9 +837,10 @@
             <select id="fn-add" class="search" style="width:auto;max-width:260px" aria-label="Adaugă o casă"></select>
             <button class="btn btn-sm" type="button" id="fn-add-free">＋ Rând liber</button>
             <button class="btn btn-sm" type="button" id="fn-reload" title="Recitește clienții și tarifele din Sheet">↻ Tarife</button>
+            <button class="btn btn-sm" type="button" id="fn-aj-show">＋ Reducere / majorare</button>
             <button class="btn btn-sm" type="button" id="fn-clear">Golește</button>
           </div>
-          <div class="fn-grid" style="margin-top:12px">
+          <div class="fn-grid" id="fn-aj" hidden style="margin-top:12px">
             <label>Reducere / majorare<select id="fn-aj-mod" class="search"><option value="">fără</option><option value="-pct">reducere %</option><option value="-eur">reducere €</option><option value="+pct">majorare %</option><option value="+eur">majorare €</option></select></label>
             <label>Valoare<input id="fn-aj-val" class="search" type="number" min="0" step="0.01"></label>
             <label style="grid-column:span 2">Motiv (apare pe factură, opțional)<input id="fn-aj-motiv" class="search" maxlength="80"></label>
@@ -2134,7 +2141,8 @@ function fnRenderRows() {
     return `<tr data-i="${i}">
       <td><input class="search" data-f="nom" value="${esc(r.nom)}" list="${r.liber ? 'fn-dl-sp' : 'fn-dl-case'}" placeholder="${r.liber ? 'descriere (ex. Repassage)' : 'casa'}" aria-label="Casă">
         <div class="fn-sub">${esc(t.info || '')}${vari ? ' · ' + vari : ''}</div></td>
-      <td><select class="search" data-f="type" aria-label="Tip">${tipuri.map(x => `<option${x === r.type ? ' selected' : ''}>${x}</option>`).join('')}</select></td>
+      <td>${r.tl ? `<input class="search${r.type ? '' : ' lipsa'}" data-f="type" value="${esc(r.type)}" maxlength="40" placeholder="scrie tipul" aria-label="Tip scris de mână"><div class="fn-sub"><a data-ft="${i}">↺ din listă</a></div>`
+        : `<select class="search" data-f="type" aria-label="Tip">${tipuri.map(x => `<option${x === r.type ? ' selected' : ''}>${x}</option>`).join('')}<option value="__alt">✎ Alt tip…</option></select>`}</td>
       <td><input class="search${d.bad.length || (r.nom && !d.ok.length) ? ' lipsa' : ''}" data-f="zile" value="${esc(r.zile)}" placeholder="3, 10, 17" inputmode="text" aria-label="Zile">
         <div class="fn-sub">${d.bad.length ? 'nu înțeleg: ' + esc(d.bad.join(', ')) : d.ok.map(x => x.slice(8) + '/' + x.slice(5, 7)).join(' · ')}</div></td>
       <td><input class="search num${r.mq ? ' manual' : ''}${r.nom && r.qty == null ? ' lipsa' : ''}" data-f="qty" value="${r.qty ?? ''}" inputmode="decimal" aria-label="Cantitate sau ore">
@@ -2144,8 +2152,15 @@ function fnRenderRows() {
       <td class="num" style="padding-top:11px!important"><b>${tot == null ? '—' : eur2(tot)}</b></td>
       <td><button class="btn btn-sm" type="button" data-fd="${i}" title="Șterge rândul" aria-label="Șterge rândul">✕</button></td></tr>`;
   }).join('') || '<tr><td colspan="7" class="empty">Adaugă o casă din listă sau un rând liber.</td></tr>';
-  fnTotals(); fnSave();
+  fnTotals(); fnSave(); fnMore();
 }
+function fnMore() {
+  const d = $('fn-data').value, c = (FN.clienti || []).find(x => x.nume === $('fn-client').value);
+  const ghicit = c && $('fn-tarife').value && !c.tarife_confirmat;
+  $('fn-more-sum').innerHTML = `Data facturii ${d ? d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : '—'} · scadență la ${esc($('fn-zile').value || '0')} zile · tarife: ${ghicit ? '<b style="color:var(--warn-ink,#92400E)">' : '<b>'}${esc($('fn-tarife').value || 'nealese')}${ghicit ? ' (ghicit, verifică)' : ''}</b> · <a id="fn-more-t">${$('fn-more').hidden ? 'schimbă' : 'ascunde'}</a>`;
+  $('fn-more-t').onclick = () => { $('fn-more').hidden = !$('fn-more').hidden; fnMore(); };
+}
+function fnAjShow(on) { $('fn-aj').hidden = !on; $('fn-aj-show').hidden = on; }
 function fnAdjust(sub) {
   const mod = $('fn-aj-mod').value, v = fnNum($('fn-aj-val').value) || 0;
   if (!mod || !v) return {amount: 0, body: null};
@@ -2175,7 +2190,8 @@ function fnClientChanged(keepRows) {
   const f = FN.formate.find(x => x.id === c.format) || FN.formate[0];
   if (f) { $('fn-format').value = f.id; $('fn-numar').value = f.urmator; }
   $('fn-client-info').innerHTML = `${esc(c.adresa)}${c.siret ? ' · ' + esc(c.siret) : ''}`
-    + (c.tarife ? (c.tarife_confirmat ? '' : ` · <b style="color:var(--warn-ink)">lista de tarife „${esc(c.tarife)}” e ghicită: verific-o</b>`) : ' · <b style="color:var(--warn-ink)">alege lista de tarife</b>');
+    + (c.tarife ? '' : ' · <b style="color:var(--warn-ink)">alege lista de tarife</b>');
+  if (!c.tarife) $('fn-more').hidden = false;
   fnFillLists();
   if (!keepRows) {
     FNR = [];
@@ -2202,7 +2218,7 @@ async function fnLoad(force) {
   $('fn-luna').value = (draft && draft.luna) || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   if (draft && draft.client && j.clienti.some(c => c.nume === draft.client)) {
     $('fn-client').value = draft.client; FNR = draft.rows || [];
-    [$('fn-aj-mod').value, $('fn-aj-val').value, $('fn-aj-motiv').value] = draft.aj || ['', '', ''];
+    [$('fn-aj-mod').value, $('fn-aj-val').value, $('fn-aj-motiv').value] = draft.aj || ['', '', '']; fnAjShow(!!$('fn-aj-mod').value);
     fnClientChanged(true);
   } else { fnFillLists(); fnRenderRows(); }
 }
@@ -2221,12 +2237,15 @@ $('fn-rows').addEventListener('change', e => {
   const r = FNR[+tr.dataset.i];
   if (f === 'qty') { r.qty = fnNum(e.target.value); r.mq = r.qty != null; }
   else if (f === 'pu') { r.pu = fnNum(e.target.value); r.mp = r.pu != null; }
+  else if (f === 'type' && e.target.value === '__alt') { r.tl = true; r.type = ''; fnRenderRows(); $('fn-rows').querySelector(`tr[data-i="${tr.dataset.i}"] [data-f=type]`).focus(); return; }
   else { r[f] = e.target.value.trim(); if (f === 'nom') { r._src = r.nom; r.mp = r.mq = false; } if (f === 'type') r.mp = r.mq = false; }
   fnRenderRows();
 });
 $('fn-rows').addEventListener('click', e => {
   const del = e.target.closest('[data-fd]'), rs = e.target.closest('[data-fr]'), va = e.target.closest('[data-fv]');
   if (del) { const i = +del.dataset.fd, old = FNR[i]; FNR.splice(i, 1); fnRenderRows(); showToast('Rând șters', () => { FNR.splice(i, 0, old); fnRenderRows(); }); }
+  const tl = e.target.closest('[data-ft]');
+  if (tl) { const r = FNR[+tl.dataset.ft]; r.tl = false; r.type = 'Standard'; r.mp = r.mq = false; fnRenderRows(); }
   if (rs) { FNR[+rs.dataset.fr][rs.dataset.k] = false; fnRenderRows(); }
   if (va) { const r = FNR[+va.dataset.fv]; r.pu = +va.dataset.p; r.mp = true; fnRenderRows(); }
 });
@@ -2238,8 +2257,8 @@ function fnBody(final) {
 }
 async function fnMake(final, force) {
   const body = fnBody(final); if (force) body.forteaza = true;
-  const bad = FNR.find(r => r.nom && (fnDates(r.zile).bad.length || !fnDates(r.zile).ok.length || r.qty == null || r.pu == null));
-  if (bad) { $('fn-result').innerHTML = `<b style="color:var(--bad-ink)">Completează rândul „${esc(bad.nom)}”: zilele, cantitatea și prețul.</b>`; return; }
+  const bad = FNR.find(r => r.nom && ((r.tl && !r.type) || fnDates(r.zile).bad.length || !fnDates(r.zile).ok.length || r.qty == null || r.pu == null));
+  if (bad) { $('fn-result').innerHTML = `<b style="color:var(--bad-ink)">Completează rândul „${esc(bad.nom)}”: tipul, zilele, cantitatea și prețul.</b>`; return; }
   $('fn-result').textContent = 'Se construiește factura…';
   const r = await fetch('/api/facturare/pdf', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const j = await r.json();
@@ -2252,12 +2271,14 @@ async function fnMake(final, force) {
     const a = document.createElement('a'); a.href = url; a.download = j.nume; document.body.appendChild(a); a.click(); a.remove();
     $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> descărcată · total ${eur2(j.total)} · ${check}<br>Pune fișierul în folderul de facturi din Drive, ca să apară în aplicație. <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
     try { localStorage.removeItem(fnDraftKey); } catch (e) {}
-    const keep = $('fn-result').innerHTML; FNR = []; await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep;
+    const keep = $('fn-result').innerHTML; FNR = []; $('fn-aj-mod').value = $('fn-aj-val').value = $('fn-aj-motiv').value = ''; fnAjShow(false); await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep;
   } else {
     $('fn-result').innerHTML = `Previzualizare gata · total ${eur2(j.total)} · ${check} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
     window.open(url, '_blank');
   }
 }
+$('fn-aj-show').addEventListener('click', () => { fnAjShow(true); $('fn-aj-mod').focus(); });
+['fn-data', 'fn-zile'].forEach(id => $(id).addEventListener('input', fnMore));
 $('fn-preview').addEventListener('click', () => fnMake(false));
 $('fn-gen').addEventListener('click', () => fnMake(true));
 

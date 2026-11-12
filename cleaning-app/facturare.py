@@ -210,7 +210,7 @@ def build_rows(lines):
         nom = re.sub(r"\s+", " ", str(ln.get("nom") or "")).strip()
         if not nom:
             continue
-        typ = str(ln.get("type") or "Standard").strip()
+        typ = re.sub(r"\s+", " ", str(ln.get("type") or "Standard")).strip()[:40]
         dates = []
         for d in ln.get("dates") or []:
             try:
@@ -465,8 +465,9 @@ def build_pdf(doc):
     for r in rows:
         nlines = _wrap(r["nom"], f["R"], 9.5, NAME_W)
         dlines = [fmt_date(d) for d in r["dates"]] or [""]
-        hgt = max(ROW_H, 7.2 + LINE * max(len(nlines), len(dlines)))
-        prepared.append((r, nlines, dlines, hgt))
+        tlines = _wrap(r["type"], f["R"], 9.5, 60.0) if r["type"] else []
+        hgt = max(ROW_H, 7.2 + LINE * max(len(nlines), len(dlines), len(tlines)))
+        prepared.append((r, nlines, dlines, hgt, tlines))
     Y_TAB = 270.0
     need = Y_TAB + sum(x[3] for x in prepared) + 150
     h2 = max(PAGE_H, need)
@@ -481,7 +482,7 @@ def build_pdf(doc):
     p.text(X_PU_R, 249.9, "Prix unitaire", size=11.5, font="B", color=DARK, align="r")
     p.text(X_TOT_R, 249.9, "Prix total", size=11.5, font="B", color=DARK, align="r")
     y = Y_TAB
-    for i, (r, nlines, dlines, hgt) in enumerate(prepared):
+    for i, (r, nlines, dlines, hgt, tlines) in enumerate(prepared):
         p.rect(ROW_X0, y, ROW_X1, y + hgt, ZEBRA if i % 2 == 0 else (1, 1, 1))
         n = max(len(nlines), len(dlines))
         mid = y + hgt / 2
@@ -492,8 +493,9 @@ def build_pdf(doc):
         t = col_top(len(nlines))
         for j, ln in enumerate(nlines):
             p.text(X0, t + j * LINE, ln, color=(0, 0, 0))
-        if r["type"]:
-            p.text(174.8, col_top(1), r["type"], color=(0, 0, 0))
+        t = col_top(len(tlines))
+        for j, ln in enumerate(tlines):
+            p.text(174.8, t + j * LINE, ln, color=(0, 0, 0))
         t = col_top(len(dlines))
         for j, ln in enumerate(dlines):
             p.text(239.2, t + j * LINE, ln, color=(0, 0, 0))
