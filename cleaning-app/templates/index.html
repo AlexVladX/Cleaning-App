@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analizator Facturi Curățenie</title>
 <style>
-  :root{
-    --ink:#132A2B; --ink-2:#36504F; --muted:#5F7372; --faint:#94A3A2;
-    --line:#E0E8E6; --line-2:#F0F5F4; --bg:#F3F7F6; --card:#fff;
-    --brand:#0F766E; --brand-2:#115E59; --brand-bg:#E6F4F1; --brand-deep:#0B3534;
-    --money:#047857; --money-bg:#D1FAE5; --mark:#C7F0DF;
-    --series:#0F8A7E; --series-dim:#A7DCD5;
-    --h0:#EDF3F2; --h1:#C9EBE4; --h2:#97D8CD; --h3:#5FC1B2; --h4:#2BA394; --h5:#13857A; --h6:#0B5F58;
-    --bad:#d03b3b; --bad-bg:#FEE2E2; --bad-ink:#991B1B;
-    --warn-bg:#FEF3C7; --warn-ink:#92400E; --ok-bg:#D1FAE5; --ok-ink:#065F46;
+:root{
+    --ink:#171A21; --ink-2:#3C4250; --muted:#7A8190; --faint:#A3A9B6;
+    --line:#E8EAEF; --line-2:#F3F4F7; --bg:#F4F5F8; --card:#fff;
+    --brand:#2F5BEA; --brand-2:#2347C5; --brand-bg:#EBF0FF; --brand-deep:#1B2B6B;
+    --money:#171A21; --money-bg:#E3F5EC; --mark:#DCE5FF;
+    --series:#2F5BEA; --series-dim:#C5D2FA;
+    --h0:#EEF0F4; --h1:#DCE5FF; --h2:#B4C6FB; --h3:#869FF5; --h4:#5A7BEF; --h5:#2F5BEA; --h6:#1E3FB0;
+    --bad:#D03B3B; --bad-bg:#FDE7E8; --bad-ink:#B4232C;
+    --warn-bg:#FFF1D1; --warn-ink:#9A6200; --ok-bg:#E3F5EC; --ok-ink:#12805C;
+    --shadow:0 1px 2px rgba(23,26,33,.04),0 8px 24px -16px rgba(23,26,33,.14);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{max-width:100%}
@@ -38,7 +39,7 @@
   .main>*{min-width:0}
 
   .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .btn{border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .btn{border:1px solid #DADDE5;background:#fff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .btn:hover{background:var(--line-2)}
   .btn-dark{background:var(--brand);color:#fff;border-color:var(--brand)}.btn-dark:hover{background:var(--brand-2)}
   .btn-green{background:#059669;color:#fff;border-color:#059669}
@@ -46,7 +47,7 @@
   .btn-sm{padding:3px 9px;font-size:12px}
   .period{display:flex;align-items:center;gap:6px;margin-left:auto}
   .period label{font-size:12px;color:var(--muted)}
-  .period select{border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
+  .period select{border:1px solid #DADDE5;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:#fff;max-width:220px}
 
   .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
   .metric[hidden]{display:none}
@@ -63,32 +64,32 @@
   .metric-grid .metric-value{font-size:22px}
   .metric.money .metric-value{color:var(--money)}
   .metric.alert{border-color:#FCA5A5;--acc:#DC2626;--acc-bg:#FEE2E2;background:#FFFBFB}.metric.alert .metric-value{color:var(--bad-ink)}
-  .metric.click{cursor:pointer;transition:box-shadow .15s,transform .15s}.metric.click:hover{box-shadow:0 4px 14px rgba(15,118,110,.12);transform:translateY(-1px)}
+  .metric.click{cursor:pointer;transition:box-shadow .15s,transform .15s}.metric.click:hover{box-shadow:0 4px 14px rgba(47,91,234,.12);transform:translateY(-1px)}
   .metric.click::after{content:'→';position:absolute;right:12px;top:12px;color:var(--faint);font-size:13px}
   .m-green{--acc:#059669;--acc-bg:#D1FAE5}.m-teal{--acc:#0F766E;--acc-bg:#CCFBF1}.m-blue{--acc:#2563EB;--acc-bg:#DBEAFE}
   .m-amber{--acc:#D97706;--acc-bg:#FEF3C7}.m-violet{--acc:#7C3AED;--acc-bg:#EDE9FE}.m-rose{--acc:#E11D48;--acc-bg:#FFE4E6}
   .money{color:var(--money) !important;font-weight:700}
   .hl-mark{background:linear-gradient(transparent 58%,var(--mark) 58%);padding:0 2px;border-radius:2px}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0;box-shadow:0 1px 2px rgba(19,42,43,.04)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0;box-shadow:0 1px 2px rgba(23,26,33,.04)}
   .card-title{font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   .count{font-weight:500;color:var(--faint);text-transform:none;letter-spacing:0}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .colpick{position:relative}
-  .colpick-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(19,42,43,.15);padding:12px;width:300px;max-width:calc(100vw - 32px)}
+  .colpick-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(23,26,33,.15);padding:12px;width:300px;max-width:calc(100vw - 32px)}
   .colpick-acts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
   .colpick-menu label{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;font-size:13px;cursor:pointer;border-radius:6px}
   .colpick-menu label:hover{background:var(--line-2)}
   .colpick-menu label small{display:block;color:var(--muted);font-size:11px}
-  .ore-in{width:64px;border:1px solid #CFDAD8;border-radius:7px;padding:4px 6px;font:inherit;font-size:13px;text-align:right;background:#FFFDF5}
+  .ore-in{width:64px;border:1px solid #DADDE5;border-radius:7px;padding:4px 6px;font:inherit;font-size:13px;text-align:right;background:#FFFDF5}
   .ore-in:focus{outline:2px solid var(--brand);border-color:var(--brand)}
   .ore-in.miss{border-color:#FCD34D;background:#FFFBEB}
   .ore-in.saved{border-color:#6EE7B7;background:#ECFDF5}
-  .cl-link{border:none;background:none;padding:0;font:inherit;font-weight:600;color:var(--brand-2);cursor:pointer;text-align:left;text-decoration:underline;text-decoration-color:#A7DCD5;text-underline-offset:3px}
+  .cl-link{border:none;background:none;padding:0;font:inherit;font-weight:600;color:var(--brand-2);cursor:pointer;text-align:left;text-decoration:underline;text-decoration-color:#C5D2FA;text-underline-offset:3px}
   .cl-link:hover{color:var(--brand)}
   select.search.on{border-color:var(--brand);background:var(--brand-bg);font-weight:600;color:var(--brand-2)}
-  .search{border:1px solid #D1D5DB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;width:220px;max-width:100%}
+  .search{border:1px solid #DADDE5;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;width:220px;max-width:100%}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
   .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--ink-2);border-right:1px solid var(--line)}
   .seg button:last-child{border-right:none}
@@ -121,7 +122,7 @@
   .q-sec span{text-transform:none;letter-spacing:0;font-weight:400}
   .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:12px;align-items:start}
   .qcard.compact{cursor:pointer;padding:12px 14px;gap:6px;transition:border-color .15s,box-shadow .15s}
-  .qcard.compact:hover{border-color:var(--brand);box-shadow:0 4px 14px rgba(15,118,110,.10)}
+  .qcard.compact:hover{border-color:var(--brand);box-shadow:0 4px 14px rgba(47,91,234,.10)}
   .qcard.compact .qbody,.qcard.compact .qmeta{display:none}
   .qcard.compact .qhead h3{font-size:14px}
   .qcard.compact .qans{font-size:12.5px;padding:7px 9px}
@@ -131,11 +132,11 @@
   .qcard.compact .qfoot{display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
   .qcard.open .qfoot{display:none}
   .qcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:8px;min-width:0}
-  .qcard.kept{border-color:#9ED6CC;box-shadow:0 1px 0 #9ED6CC inset,0 6px 18px rgba(15,118,110,.07)}
+  .qcard.kept{border-color:#B4C6FB;box-shadow:0 1px 0 #B4C6FB inset,0 6px 18px rgba(47,91,234,.07)}
   .qhead{display:flex;gap:8px;align-items:flex-start}
   .qhead h3{font-size:15px;line-height:1.35;flex:1;min-width:0;overflow-wrap:anywhere}
   .qstar{border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:#C9A227;padding:0 2px}
-  .qstar.off{color:#B8C4C2}
+  .qstar.off{color:#C3C8D2}
   .qmeta{font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px}
   .qmeta span{background:var(--line-2);border-radius:5px;padding:1px 6px}
   .qans{font-size:14px;line-height:1.5;background:var(--brand-bg);border-radius:10px;padding:10px 12px;color:var(--brand-deep)}
@@ -157,10 +158,10 @@
   .qacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
   .qacts .btn{font-size:12px}
   .q-empty{border:1px dashed var(--line);border-radius:12px;padding:16px;color:var(--muted);font-size:13px;text-align:center}
-  .q-editor{border:2px solid var(--brand);border-radius:14px;padding:16px;background:#FBFEFD;margin-bottom:8px}
+  .q-editor{border:2px solid var(--brand);border-radius:14px;padding:16px;background:#FAFBFF;margin-bottom:8px}
   .q-editor .seg{display:inline-flex;width:fit-content;max-width:100%}
   .q-editor h3{font-size:15px;margin-bottom:10px}
-  .q-editor input[type=text],.q-editor select,.q-editor input:not([type]){border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font-size:13px;background:#fff;max-width:100%}
+  .q-editor input[type=text],.q-editor select,.q-editor input:not([type]){border:1px solid #DADDE5;border-radius:8px;padding:7px 9px;font-size:13px;background:#fff;max-width:100%}
   #qe-q{width:100%;font-size:15px;padding:9px 11px}
   .qe-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-top:12px}
   .qe-lab{width:120px;flex:none;font-size:12px;font-weight:600;color:var(--ink-2);padding-top:8px}
@@ -182,12 +183,12 @@
   /* tabele */
   .table-wrap{max-height:70vh;overflow:auto;border:1px solid var(--line-2);border-radius:8px}
   table.t{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
-  table.t th{position:sticky;top:0;z-index:1;background:#F6FAF9;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.t th{position:sticky;top:0;z-index:1;background:#FAFAFC;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   table.t th.sortable{cursor:pointer;user-select:none}
-  .sarr{font-size:.75em;color:var(--brand,#0f766e)}
+  .sarr{font-size:.75em;color:var(--brand)}
   table.t th.sortable:hover,table.t th.active{color:var(--ink)}
   table.t td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}
-  table.t tr:hover td{background:#F4FAF8}
+  table.t tr:hover td{background:#F7F8FB}
   .num{text-align:right !important;font-variant-numeric:tabular-nums;white-space:nowrap}
   td.hl{font-weight:700}
   .w-rank{width:44px;color:var(--faint)}
@@ -204,8 +205,8 @@
   .pcell{display:block;width:100%;min-width:84px;box-sizing:border-box;border-radius:8px;padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;line-height:1.25;color:inherit}
   .pcell .s{display:block;font-size:10px;font-weight:500;opacity:.85}
   .pcell.ok{background:#BBF7D0;color:#14532D}.pcell.part{background:#FDE68A;color:#78350F}
-  .pcell.late{background:#FECACA;color:#7F1D1D}.pcell.wait{background:#fff;color:var(--ink);border-color:#D1D5DB}
-  .pcell.none{background:transparent;color:#D1D5DB;cursor:default;font-weight:400}
+  .pcell.late{background:#FECACA;color:#7F1D1D}.pcell.wait{background:#fff;color:var(--ink);border-color:#DADDE5}
+  .pcell.none{background:transparent;color:#DADDE5;cursor:default;font-weight:400}
   .pcell.sel{box-shadow:0 0 0 2px var(--ink)}
   .pm tr.tot td{font-size:12px;color:var(--muted);text-align:center;padding-top:6px;font-variant-numeric:tabular-nums}
   .pdet{border:1px solid var(--ink);border-radius:10px;padding:12px 14px;margin:2px 0 8px;background:#fff;white-space:normal;position:sticky;left:0;box-sizing:border-box}
@@ -218,11 +219,11 @@
   .leg i{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-right:5px;box-sizing:border-box}
   .xform{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--brand-bg);border-radius:10px;padding:12px;margin:12px 0}
   .xform label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--ink-2)}
-  .xform input,.xform select{border:1px solid #CFDAD8;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
+  .xform input,.xform select{border:1px solid #DADDE5;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
   .xform .chk{flex-direction:row;align-items:center;gap:6px;font-weight:500;padding-bottom:8px}
   .xcell{display:block;width:100%;min-width:76px;border-radius:8px;padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);line-height:1.25}
   .xcell:hover{border-color:var(--brand)}
-  .xcell.none{color:#C7D2D0;font-weight:400;border-style:dashed}
+  .xcell.none{color:#C3C8D2;font-weight:400;border-style:dashed}
   .xcell.est{color:var(--muted);font-style:italic;font-weight:500;border-style:dashed}
   .xcell.pers{background:#F5F3FF;border-color:#DDD6FE;color:#5B21B6}
   .xcell.sel{box-shadow:0 0 0 2px var(--brand)}
@@ -280,12 +281,12 @@
   .cp-row .base{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap}
   .cp-row .mv{border:1px solid var(--line);background:#fff;border-radius:5px;width:24px;height:24px;cursor:pointer;color:var(--ink);flex:none}
   .cp-row .mv:disabled{opacity:.3;cursor:default}
-  .cdot{width:22px;height:22px;border-radius:50%;border:1.5px dashed #B8C4C2;cursor:pointer;flex:none;padding:0;font-size:10px;color:var(--muted);line-height:1}
+  .cdot{width:22px;height:22px;border-radius:50%;border:1.5px dashed #C3C8D2;cursor:pointer;flex:none;padding:0;font-size:10px;color:var(--muted);line-height:1}
   .cp-row button.nm{border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:2px 0}
   .cp-row button.nm:hover{color:var(--brand-2)}
   .cp-f{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
   .cp-f>span:first-child{width:52px;font-size:11px;color:var(--muted);flex:none}
-  .cp-f input{flex:1;min-width:0;border:1px solid #D1D5DB;border-radius:6px;padding:5px 7px;font-size:13px}
+  .cp-f input{flex:1;min-width:0;border:1px solid #DADDE5;border-radius:6px;padding:5px 7px;font-size:13px}
   .cc-sws{display:flex;flex-wrap:wrap;gap:5px}
   .wbtn{border:1px solid var(--line);background:#fff;border-radius:6px;width:28px;height:26px;cursor:pointer;font-size:14px}
   .wval{font-size:12px;min-width:52px;text-align:center}
@@ -338,11 +339,11 @@
     .fn-table td:nth-child(2){grid-column:1/2}.fn-table td:nth-child(3){grid-column:2/5}
     .fn-table td:nth-child(4){grid-column:1}.fn-table td:nth-child(5){grid-column:2}.fn-table td:nth-child(6){grid-column:3/5;text-align:right;padding-top:11px!important}
   }
-  .d-row{cursor:pointer}.d-row:hover td{background:#F3F8F7}.d-row.open td{background:#E8F3F1;border-bottom-color:transparent}
+  .d-row{cursor:pointer}.d-row:hover td{background:#F7F8FB}.d-row.open td{background:#EBF0FF;border-bottom-color:transparent}
   .d-row.flash td{background:#FDF3C7}
   .d-arr{display:inline-block;width:12px;color:var(--brand);font-size:11px}
   .d-table tbody tr.d-det-row>td:first-child{position:static}
-  .d-det-row>td{background:#F6FAF9;padding:6px 10px 14px!important;white-space:normal!important}
+  .d-det-row>td{background:#FAFAFC;padding:6px 10px 14px!important;white-space:normal!important}
   .d-det{position:sticky;left:10px;max-width:min(860px,calc(100vw - 60px))}
   .d-det-h{font-size:13px;margin:4px 0 8px}
   table.t.d-det-t{table-layout:auto;background:#fff;font-size:12.5px}
@@ -368,7 +369,7 @@
   .pr-clasa.c-intrebat{background:var(--warn-bg);color:var(--warn-ink);border-color:transparent}
   .pr-nota{border:1px dashed transparent;border-radius:6px;padding:3px 6px;font:inherit;font-size:12px;width:100%;min-width:100px;background:transparent;color:var(--ink-2)}
   .pr-nota:hover{border-color:var(--line)}.pr-nota:focus{border:1px solid var(--brand);background:#fff;outline:none}
-  .pr-nota::placeholder{color:#B6C2C0}
+  .pr-nota::placeholder{color:#B6BBC6}
   .ln-table td:last-child .btn+.btn{margin-left:4px}
   @media(max-width:640px){
     .ln-table thead{display:none}
@@ -378,7 +379,7 @@
     .ln-table td:nth-child(4){grid-area:k}.ln-table td:nth-child(5){grid-area:b}
     .ln-table td.empty{grid-column:1/-1}
   }
-  .d-table tfoot td{position:sticky;bottom:0;background:#F3F7F6;font-weight:600;border-top:2px solid var(--line);white-space:nowrap}
+  .d-table tfoot td{position:sticky;bottom:0;background:#F4F5F8;font-weight:600;border-top:2px solid var(--line);white-space:nowrap}
   table.t.d-table{table-layout:auto;min-width:max-content}
   .d-table td{white-space:nowrap}
   .d-table tbody td:first-child{position:sticky;left:0;background:#fff;z-index:1}
@@ -505,7 +506,7 @@
   @media(max-width:760px){.set-grid{grid-template-columns:minmax(0,1fr)}}
   .set-grid label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
   .set-grid .hint{font-size:11px;margin-bottom:6px}
-  .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
+  .set-grid textarea,.set-grid input,.set-grid select{width:100%;border:1px solid #DADDE5;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;min-width:0}
   .set-grid textarea{min-height:74px;resize:vertical}
   .merge-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .merge-row select{flex:1 1 140px;min-width:0}
@@ -528,16 +529,164 @@
     .topbar{padding:12px 16px}
     .period{margin-left:0;width:100%}.period select{flex:1;max-width:none}
   }
+
+  /* ================= REDESIGN: navigatie + stil (etapa 1) ================= */
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased}
+  .app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+  .side{background:var(--card);border-right:1px solid var(--line);padding:22px 14px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 10px 20px;font-weight:700;font-size:15px;min-width:0}
+  .brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .logo{width:30px;height:30px;border-radius:9px;background:var(--brand)}
+  .side-new{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border:0;border-radius:12px;padding:11px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:18px}
+  .side-new:hover{background:var(--brand-2)}
+  .snav{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--ink-2);font:inherit;font-weight:500;font-size:14px;border:0;background:none;cursor:pointer;text-align:left;width:100%}
+  .snav:hover{background:var(--line-2)}
+  .snav.on{background:var(--brand-bg);color:var(--brand);font-weight:600}
+  .snav svg,.bnav svg{flex:none}
+  .snav .nb{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--bad)}
+  .snav .nb[hidden]{display:none}
+  .side-sp{flex:1}
+  .side-stat{display:flex;align-items:center;gap:8px;padding:12px 12px 4px;min-width:0}
+  .main{max-width:1500px;width:100%;padding:26px 32px 48px;gap:18px}
+  .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .top h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .top-r{margin-left:auto;display:flex;gap:10px;align-items:center;min-width:0}
+  .period{margin-left:0}
+  .period select,.top-scan,.top-set{border:1px solid var(--line);background:var(--card);color:var(--ink-2);border-radius:10px;padding:9px 12px;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+  .top-scan:hover,.top-set:hover{background:var(--line-2)}
+  .top-set{display:none}
+  .sync-chip{background:var(--line-2);color:var(--ink-2)}
+  .dot{background:var(--faint)}.dot.live{background:#22B07D}
+
+  .tabs{border-bottom:0;gap:4px;background:var(--card);border-radius:14px;padding:5px;width:fit-content;max-width:100%;box-shadow:var(--shadow)}
+  .tabs[hidden]{display:none}
+  .tab,.subtabs.tabs button{border:0;border-bottom:0!important;margin:0;background:none;padding:8px 14px;border-radius:10px;font:inherit;font-size:13.5px;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+  .tab[hidden]{display:none}
+  .tab:hover,.subtabs.tabs button:hover{color:var(--ink);background:var(--line-2)}
+  .tab.on,.subtabs.tabs button.on{background:var(--ink);color:#fff;font-weight:600;border-bottom:0}
+  .tab.on .n,.subtabs.tabs button.on .n{background:rgba(255,255,255,.2);color:#fff}
+  .subtabs.tabs{margin-top:0;flex-wrap:nowrap}
+
+  .card,.stage{border:0;border-radius:18px;box-shadow:var(--shadow)}
+  .stage{background:var(--card);padding:8px 22px 22px;min-width:0}
+  body[data-tab="acasa"] .stage{background:none;box-shadow:none;padding:0}
+  .card{padding:22px}
+  .card-title{font-size:15px;font-weight:650;text-transform:none;letter-spacing:0;color:var(--ink)}
+  .btn{border-color:var(--line);border-radius:10px;padding:8px 14px;font-weight:500;font-family:inherit}
+  .btn-sm{padding:5px 10px;border-radius:8px}
+  .btn-dark,.btn.primary{border-color:var(--brand);font-weight:600}
+  .btn.primary:hover{background:var(--brand-2)}
+  .search,.xform input,.xform select,.set-grid textarea,.set-grid input,.set-grid select,.period select{border-radius:10px}
+  .seg{border-radius:10px}.seg button{padding:6px 12px;font-family:inherit}
+  .headline{background:var(--line-2);border-radius:12px}
+  .headline b{background:none;padding:0}
+  .table-wrap{border-color:var(--line);border-radius:12px}
+  .xform{background:var(--line-2);border-radius:12px}
+  .rsec{border-radius:14px}.rnum{background:var(--ink)}
+  .pos{color:var(--ok-ink)}
+  .dlg{border-radius:16px}
+  .toast{border-radius:12px}
+
+  /* Acasa */
+  .home{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:16px;align-items:start}
+  .home>.metric{grid-column:span 2}
+  .home-due{grid-column:span 5}.home-side{grid-column:span 3}
+  .metric{border:0;border-top:0;border-radius:18px;padding:22px;box-shadow:var(--shadow)}
+  .metric-label{font-size:13px;font-weight:500;margin-bottom:10px}
+  .metric-label .ic{display:none}
+  .metric-value,.metric-grid .metric-value,.metric.hero .metric-value{font-size:28px;letter-spacing:-.02em;color:var(--ink)}
+  .metric-sub,.metric.hero .metric-sub{font-size:12.5px;margin-top:6px}
+  .metric.neg .metric-value{color:var(--bad-ink)}
+  .metric.alert{background:var(--card)}
+  .metric.click:hover{box-shadow:0 10px 28px -14px rgba(23,26,33,.3)}
+  .metric.hi,.metric.hi.alert{background:var(--brand);color:#fff}
+  .metric.hi .metric-label,.metric.hi .metric-sub,.metric.hi.click::after{color:rgba(255,255,255,.82)}
+  .metric.hi .metric-value,.metric.hi.alert .metric-value{color:#fff}
+  .home-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .home-h h2{font-size:16px;font-weight:650}
+  .home-h .linkbtn{text-decoration:none;font-weight:600;font-size:13px}
+  .home-side .metric{box-shadow:none;border-radius:0;padding:13px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:center;background:none}
+  .home-side .metric[hidden]{display:none}
+  .home-side .metric-label{margin:0;color:var(--ink);font-size:14px;grid-column:1}
+  .home-side .metric-sub{margin:0;grid-column:1}
+  .home-side .metric-sub:empty{display:none}
+  .home-side .metric-value{grid-column:2;grid-row:1/span 2;font-size:15px;min-width:34px;height:34px;padding:0 10px;border-radius:10px;background:var(--line-2);display:grid;place-items:center}
+  .home-side .metric.alert .metric-value{background:var(--bad-bg);color:var(--bad-ink)}
+  .home-side .metric.click::after{content:none}
+  .home-side .metric:not(.alert):not(#m-props-box){display:none}
+  .bk-warn{margin-bottom:0;border-radius:14px}
+  label.hint select,.merge-row select,#rv-sel,#inc-pana,.pr-clasa{border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;font:inherit;font-size:13px;color:var(--ink)}
+  .due-row{display:flex;align-items:center;gap:14px;padding:13px 0;border-top:1px solid var(--line)}
+  .due-av{width:38px;height:38px;border-radius:12px;background:var(--line-2);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--ink-2);flex:none}
+  .due-t{flex:1;min-width:0}.due-t b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .due-t span{font-size:12.5px;color:var(--muted)}
+  .due-amt{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .due-tick{width:38px;height:38px;border-radius:11px;border:1.5px solid var(--line);background:var(--card);display:grid;place-items:center;color:var(--muted);cursor:pointer;flex:none}
+  .due-tick:hover{border-color:var(--ok-ink);color:var(--ok-ink);background:var(--ok-bg)}
+  .due-tick:disabled{background:var(--ok-ink);border-color:var(--ok-ink);color:#fff}
+  .due-foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+  .pill{border-radius:99px;padding:3px 9px;font-size:11.5px}
+  /* Setari */
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+  .set-row:first-child{border-top:0}
+  .set-row b{display:block;font-size:14px}.set-row span{font-size:12.5px;color:var(--muted)}
+  #settings-box>summary,#log-fold>summary{display:none}
+  .log{max-height:60vh}
+
+  .bnav{display:none}
+  @media(max-width:860px){
+    .app{display:block}.side{display:none}
+    .main{padding:16px 14px 100px;gap:14px}
+    .top h1{font-size:22px}
+    .top .status-txt,.top .dot{display:none}
+    .top-set{display:inline-flex}
+    .top{flex-wrap:nowrap}.top h1{white-space:nowrap}
+    .period{width:auto}.period select{max-width:122px;flex:none}
+    .tabs{overflow-x:auto}
+    .stage{padding:6px 14px 16px;border-radius:16px}
+    .home{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .home>.metric{grid-column:span 1;order:3;padding:16px}
+    .home>.metric.hi{grid-column:1/-1;order:1}.metric.hi .metric-value{font-size:32px}
+    .home-due{grid-column:1/-1;order:2}.home-side{grid-column:1/-1;order:4}
+    .home>.metric:last-of-type{grid-column:1/-1}
+    .metric-value,.metric-grid .metric-value,.metric.hero .metric-value{font-size:22px}
+    .card{padding:18px;border-radius:16px}
+    .due-tick{width:46px;height:46px;border-radius:14px}
+    .due-row .pill{display:none}
+    .bnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line);padding:8px 6px calc(10px + env(safe-area-inset-bottom))}
+    .bnav button{border:0;background:none;font:inherit;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:500;color:var(--muted);cursor:pointer;padding:0}
+    .bnav button.on{color:var(--brand);font-weight:600}
+    .bnav .mid i{width:48px;height:48px;border-radius:16px;background:var(--brand);color:#fff;display:grid;place-items:center;margin-top:-22px;box-shadow:0 8px 18px -6px var(--brand)}
+    .toast,#txt-bar{bottom:84px}
+  }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <h1><span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 9"/><path d="M6 13h10l2 8H4z"/><path d="M9 17v4M13 17v4"/></svg></span>{{ firma }} <span class="sub-brand">· Analizator facturi</span></h1>
-  <div class="topbar-right"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span><span class="sync-chip" id="sync-chip" hidden></span><button class="top-scan" type="button" onclick="scan()" title="Verifică acum dacă sunt facturi noi în Drive">↻<span class="top-scan-t"> Scanează</span></button></div>
-</div>
+<div class="app">
+<aside class="side">
+  <div class="brand"><span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 9"/><path d="M6 13h10l2 8H4z"/><path d="M9 17v4M13 17v4"/></svg></span><span>{{ firma }}</span></div>
+  <button type="button" class="side-new" data-go="facturi:noua">＋ Factură nouă</button>
+  <button type="button" class="snav" data-sec="acasa"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Acasă<span class="nb" hidden></span></button>
+  <button type="button" class="snav" data-sec="facturi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg>Facturi<span class="nb" hidden></span></button>
+  <button type="button" class="snav" data-sec="activitate"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Activitate<span class="nb" hidden></span></button>
+  <button type="button" class="snav" data-sec="bani"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg>Bani<span class="nb" hidden></span></button>
+  <div class="side-sp"></div>
+  <button type="button" class="snav" data-sec="setari"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Setări<span class="nb" hidden></span></button>
+  <div class="side-stat"><div class="dot" id="dot"></div><span class="status-txt" id="status-txt">Se încarcă...</span></div>
+</aside>
 
 <div class="main">
+  <header class="top">
+    <h1 id="sec-title">Acasă</h1>
+    <div class="top-r">
+      <span class="sync-chip" id="sync-chip" hidden></span>
+      <div class="period"><select id="period" aria-label="Perioadă"><option value="all">Toată perioada</option></select></div>
+      <button class="top-scan" type="button" onclick="scan()" title="Verifică acum dacă sunt facturi noi în Drive">↻<span class="top-scan-t"> Scanează</span></button>
+      <button class="top-set" type="button" data-sec="setari" aria-label="Setări"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></button>
+    </div>
+  </header>
+
   <div class="bk-warn bk-red" id="bk-conf" role="alert" hidden><div><b>⛔ Un ALT server scrie în același backup din Drive:</b> <span id="bk-conf-who"></span>.<br>
     De aceea revin setările vechi: cele două aplicații își suprascriu una alteia setările. Caută și oprește (sau șterge) cealaltă aplicație — de ex. un al doilea serviciu în Render, un deploy vechi pe Railway / alt site — sau schimbă-i folderul din Drive.</div></div>
   <div class="bk-warn bk-red" id="bk-proc" role="alert" hidden><div><b>⛔ Serverul rulează în <span id="bk-proc-n"></span> procese în loc de unul.</b> Fiecare proces are propria copie a setărilor și se suprascriu una pe alta în Drive — de aceea „se pierd” modificări.<br>
@@ -552,48 +701,55 @@
     <button class="btn btn-dark btn-sm" type="button" id="bk-retry">↻ Reîncearcă acum</button>
   </div>
 
-  <div class="controls">
-    <button class="btn" type="button" id="ex-toggle" title="Ascunde / arată textele explicative (gri) din pagină">ⓘ Ascunde explicațiile</button>
-    <button class="btn" type="button" id="txt-toggle" title="Rescrie, scurtează sau ascunde orice text explicativ din pagină">✎ Editează textele</button>
-    <button class="btn" onclick="exportExcel()">&#x2B07; Export Excel</button>
-    <div class="period"><label for="period">Perioadă</label><select id="period"><option value="all">Toată perioada</option></select></div>
-  </div>
-
   <div class="card progress-card" id="progress">
     <div class="progress-top"><span class="progress-title" id="p-title">Scanare în curs</span><span class="progress-sub" id="p-sub"></span></div>
     <div class="progress-bg"><div class="progress-fill" id="p-fill"></div></div>
     <div class="progress-current" id="p-current"></div>
   </div>
 
-  <div class="hero-grid">
-    <div class="metric hero m-green"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></span>Venit facturat (menaje)</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
-    <div class="metric hero click m-teal" id="m-profit-box" onclick="showTab('cheltuieli')" title="Deschide Cheltuieli"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/></svg></span>Profit (după cheltuieli)</div><div class="metric-value" id="m-profit">—</div><div class="metric-sub" id="m-profit-sub"></div></div>
-  </div>
-  <div class="metric-grid">
-    <div class="metric click m-amber" id="m-due-box" onclick="showTab('incasari')" title="Deschide tab-ul Încasări"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg></span>De încasat</div><div class="metric-value" id="m-due">—</div><div class="metric-sub" id="m-due-sub"></div></div>
-    <div class="metric m-blue"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
-    <div class="metric m-teal" id="m-props-box"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Case</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
-    <div class="metric click m-violet" id="m-inactive-box" hidden onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
-    <div class="metric click m-rose" id="m-prices-box" hidden onclick="showTab('facturi', 'preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
-    <div class="metric click m-amber" id="m-warn-box" hidden onclick="showTab('facturi', 'fisiere')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
+  <nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-tab="acasa">Privire generală</button>
+    <button class="tab" role="tab" data-tab="intrebari">Întrebări <span class="n" id="n-q"></span></button>
+    <button class="tab" role="tab" data-tab="facturi">Facturi <span class="n" id="n-files"></span><span class="n" id="n-prices"></span></button>
+    <button class="tab" role="tab" data-tab="gcal" title="Calendarul cu menaje comparat cu facturile">Calendar <span class="n" id="n-gcal"></span></button>
+    <button class="tab" role="tab" data-tab="calendar" title="Harta zilelor în care ai lucrat">Zile lucrate</button>
+    <button class="tab" role="tab" data-tab="proprietati">Proprietăți <span class="n" id="n-props"></span></button>
+    <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
+    <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
+    <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
+    <button class="tab" role="tab" data-tab="cheltuieli">Cheltuieli și profit</button>
+    <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
+    <button class="tab" role="tab" data-tab="reguli">Reguli de calcul</button>
+    <button class="tab" role="tab" data-tab="texte">Texte și export</button>
+    <button class="tab" role="tab" data-tab="jurnal">Jurnal</button>
+  </nav>
+  <div class="subtabs tabs" id="f-sub" role="tablist" hidden>
+    <button type="button" data-st="noua" role="tab">Factură nouă</button>
+    <button type="button" data-st="fisiere" class="on" role="tab">Fișiere <span class="n" id="st-n-files"></span></button>
+    <button type="button" data-st="preturi" role="tab">Verificare prețuri <span class="n" id="st-n-prices"></span></button>
   </div>
 
-  <div class="card" style="padding-top:4px">
-    <nav class="tabs" role="tablist" id="tabs">
-      <button class="tab tab-q" role="tab" data-tab="intrebari" title="Pune întrebări și răspunde-le cu indicatorii"><span aria-hidden="true">✦</span> Întrebări <span class="n" id="n-q"></span></button>
-      <span class="tab-sep" aria-hidden="true"></span>
-      <button class="tab" role="tab" data-tab="proprietati">Proprietăți <span class="n" id="n-props"></span></button>
-      <button class="tab" role="tab" data-tab="clienti">Clienți <span class="n" id="n-clients"></span></button>
-      <button class="tab" role="tab" data-tab="evolutie">Evoluție</button>
-      <button class="tab" role="tab" data-tab="calendar" title="Harta zilelor în care ai lucrat">Zile lucrate</button>
-      <button class="tab" role="tab" data-tab="zone">Zone <span class="n" id="n-zone"></span></button>
-      <span class="tab-sep" aria-hidden="true"></span>
-      <button class="tab" role="tab" data-tab="incasari">Încasări <span class="n" id="n-inc"></span></button>
-      <button class="tab" role="tab" data-tab="cheltuieli" title="Cheltuieli și profit">Cheltuieli &amp; profit</button>
-      <span class="tab-sep" aria-hidden="true"></span>
-      <button class="tab" role="tab" data-tab="gcal" title="Verificare: calendarul cu menaje comparat cu facturile">✓ Calendar <span class="n" id="n-gcal"></span></button>
-      <button class="tab" role="tab" data-tab="facturi" title="Fișierele PDF și verificarea prețurilor">Facturi <span class="n" id="n-files" title="facturi de verificat"></span><span class="n" id="n-prices" title="abateri de preț"></span></button>
-    </nav>
+  <div class="stage">
+    <!-- ACASA -->
+    <section class="panel" id="panel-acasa" role="tabpanel">
+      <div class="home">
+        <div class="metric hi click " id="m-due-box" onclick="showTab('incasari')" title="Deschide tab-ul Încasări"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1"/></svg></span>De încasat</div><div class="metric-value" id="m-due">—</div><div class="metric-sub" id="m-due-sub"></div></div>
+        <div class="metric m-green"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></span>Venit facturat (menaje)</div><div class="metric-value" id="m-venit">—</div><div class="metric-sub" id="m-venit-sub"></div></div>
+        <div class="metric click m-teal" id="m-profit-box" onclick="showTab('cheltuieli')" title="Deschide Cheltuieli"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/></svg></span>Profit (după cheltuieli)</div><div class="metric-value" id="m-profit">—</div><div class="metric-sub" id="m-profit-sub"></div></div>
+        <div class="metric m-blue"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>Intervenții</div><div class="metric-value" id="m-int">—</div><div class="metric-sub" id="m-int-sub"></div></div>
+        <div class="card home-due">
+          <div class="home-h"><h2>De încasat</h2><button type="button" class="linkbtn" data-go="incasari">Toate încasările →</button></div>
+          <div id="due-list"><div class="empty">Se încarcă…</div></div>
+        </div>
+        <div class="card home-side">
+          <div class="home-h"><h2>De urmărit</h2></div>
+        <div class="metric click m-rose" id="m-prices-box" onclick="showTab('facturi', 'preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
+        <div class="metric click m-amber" id="m-warn-box" onclick="showTab('facturi', 'fisiere')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
+        <div class="metric click m-violet" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
+        <div class="metric m-teal" id="m-props-box"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></span>Case</div><div class="metric-value" id="m-props">—</div><div class="metric-sub" id="m-props-sub"></div></div>
+        </div>
+      </div>
+    </section>
 
     <!-- INTREBARI -->
     <section class="panel" id="panel-intrebari" role="tabpanel">
@@ -774,7 +930,7 @@
     <!-- ZONE -->
     <section class="panel" id="panel-zone" role="tabpanel">
       <div id="zone-setup" class="headline" style="margin-top:14px;display:none">
-        Distanțele nu sunt configurate încă. Deschide <b>Reguli de calcul și proprietăți → Distanțe</b>, lipește linkul Sheet-ului cu coordonate și salvează.
+        Distanțele nu sunt configurate încă. Deschide <b>Setări → Reguli de calcul → Distanțe</b>, lipește linkul Sheet-ului cu coordonate și salvează.
       </div>
       <div id="zone-body">
         <div style="margin-top:14px" class="headline" id="z-headline"></div>
@@ -803,11 +959,6 @@
 
     <!-- FACTURI -->
     <section class="panel" id="panel-facturi" role="tabpanel">
-      <div class="subtabs" id="f-sub" role="tablist">
-        <button type="button" data-st="fisiere" class="on" role="tab">📄 Fișiere <span class="n" id="st-n-files"></span></button>
-        <button type="button" data-st="preturi" role="tab">✓ Verificare prețuri <span class="n" id="st-n-prices"></span></button>
-        <button type="button" data-st="noua" role="tab">＋ Factură nouă</button>
-      </div>
       <div id="fsub-noua" hidden>
         <div id="fn-setup" hidden>
           <p class="hint" style="margin:12px 0 8px">Generatorul ia formatele de factură, clienții și tarifele din Sheet-ul tău de facturare (foile „Clients”, „Case /m2”, „Case /h” și primele două foi cu formatul facturii). Partajează Sheet-ul ca <b>Cititor</b> cu <b id="fn-sa"></b>, apoi lipește linkul lui aici.</p>
@@ -884,13 +1035,13 @@
       <div class="last-scan" id="last-scan"></div>
       </div>
     </section>
-  </div>
 
-  <div class="card">
-    <details class="fold" id="settings-box">
+    <!-- SETARI: reguli -->
+    <section class="panel" id="panel-reguli" role="tabpanel">
+    <details class="fold" id="settings-box" open>
       <summary><span class="card-title" id="settings-title">Reguli de calcul și proprietăți</span></summary>
       <nav class="rules-nav" aria-label="Secțiuni reguli"><a href="#rs-facturi">1 · Facturi</a><a href="#rs-clienti">2 · Clienți și case</a><a href="#rs-dist">3 · Distanțe și ore</a><a href="#rs-fx">4 · Indicatori proprii</a><a href="#rs-backup">5 · Backup</a><button type="button" class="btn btn-sm" data-gloss>📖 Glosar indicatori</button></nav>
-      <div class="hint ex" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în tab-ul <b>Cheltuieli &amp; profit</b>; calendarul, în <b>✓ Calendar</b> (verificarea calendarului).</div>
+      <div class="hint ex" style="margin:-4px 0 12px">Consumul mașinii și prețul motorinei se setează în <b>Bani → Cheltuieli și profit</b>; calendarul, în <b>Activitate → Calendar</b>.</div>
       <section class="rsec" id="rs-facturi">
         <h3 class="rsec-h"><span class="rnum">1</span>Cum se citesc facturile</h3>
         <div class="hint ex rsec-sub">Ce e facturat la oră, ce e forfait și ce rânduri nu sunt menaje.</div>
@@ -951,15 +1102,34 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><b style="font-size:13px">Sau dintr-un fișier descărcat:</b><input type="file" id="r-file" accept=".json,application/json"><button class="btn btn-dark btn-sm" type="button" id="r-btn">Recuperează setările</button><span class="hint" id="r-status"></span></div></div>
       </section>
     </details>
-  </div>
+    </section>
 
-  <div class="card">
-    <details class="fold" id="log-fold">
-      <summary><span class="card-title">Jurnal sistem</span><button class="btn btn-sm" onclick="event.preventDefault();resetAll()">&#x1F5D1; Reset</button></summary>
-      <div class="log" id="log-box">Aștept date...</div>
-    </details>
+    <!-- SETARI: texte si export -->
+    <section class="panel" id="panel-texte" role="tabpanel">
+      <div class="set-row"><div><b>Texte explicative</b><span>Explicațiile gri de sub tabele și formulare.</span></div><button class="btn" type="button" id="ex-toggle">ⓘ Arată explicațiile</button></div>
+      <div class="set-row"><div><b>Rescrie textele</b><span>Scurtează sau ascunde orice text explicativ din aplicație.</span></div><button class="btn" type="button" id="txt-toggle">✎ Editează textele</button></div>
+      <div class="set-row"><div><b>Export Excel</b><span>Toate datele perioadei alese, într-un fișier.</span></div><button class="btn" type="button" onclick="exportExcel()">&#x2B07; Export Excel</button></div>
+      <div class="set-row"><div><b>Glosar indicatori</b><span>Ce înseamnă fiecare indicator și cum se calculează.</span></div><button class="btn" type="button" data-gloss>📖 Glosar</button></div>
+    </section>
+
+    <!-- SETARI: jurnal -->
+    <section class="panel" id="panel-jurnal" role="tabpanel">
+      <div class="set-row"><div><b>Jurnal sistem</b><span>Ce a făcut aplicația în fundal.</span></div><button class="btn btn-sm" type="button" onclick="resetAll()">&#x1F5D1; Reset</button></div>
+      <details class="fold" id="log-fold" open><summary></summary>
+        <div class="log" id="log-box">Aștept date...</div>
+      </details>
+    </section>
   </div>
 </div>
+</div>
+
+<nav class="bnav" aria-label="Navigație">
+  <button type="button" data-sec="acasa"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Acasă</button>
+  <button type="button" data-sec="facturi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg>Facturi</button>
+  <button type="button" class="mid" data-go="incasari"><i><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg></i>Încasări</button>
+  <button type="button" data-sec="activitate"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="22" height="16" rx="3"/><path d="M3 10h22M8 3v4M16 3v4"/></svg>Activitate</button>
+  <button type="button" data-sec="bani"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="22" height="13" rx="3"/><path d="M3 10h22"/><circle cx="16.5" cy="14.5" r="1"/></svg>Bani</button>
+</nav>
 
 <div class="tip" id="tip" role="status"></div>
 <div class="ovl" id="ex-ovl" role="dialog" aria-modal="true" aria-labelledby="ex-dlg-title">
@@ -1025,7 +1195,7 @@ const hideTip = () => { tip.style.display = 'none'; };
 let S = null, A = null;               // /api/state si /api/analytics
 let period = store.get('period', 'all');
 let propClient = store.get('propClient', '');
-let tab = store.get('tab', 'proprietati');
+let tab = store.get('tab', 'acasa');
 let ABASE = null;
 const lastEdit = {formule: 0, coloane: 0, intrebari: 0};   // momentul ultimei modificari facute de tine
 let sortBy = store.get('sortBy2', 'total');
@@ -1062,6 +1232,7 @@ async function fetchAnalytics() {
     lastDataKey = key;
     renderAnalytics();
     if (tab === 'incasari') fetchPayments(); else if (payKey !== key) fetchPaySummary();
+    if (tab === 'acasa') fetchDue();
     if (tab === 'cheltuieli') fetchExpenses();
     if (tab === 'gcal' || !G || G.configurat) fetchGcal();
   } finally { anLoading = false; }
@@ -1572,7 +1743,7 @@ $('gl-ovl').addEventListener('click', e => { if (e.target === $('gl-ovl')) close
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('gl-ovl').classList.contains('on')) closeGloss(); });
 
 function openFormulaEditor() {
-  $('settings-box').open = true; loadSettings();
+  showTab('reguli'); $('settings-box').open = true; loadSettings();
   setTimeout(() => { const el = $('fx-box'); el.scrollIntoView({behavior: 'smooth', block: 'start'}); $('fx-text').focus({preventScroll: true}); }, 50);
 }
 
@@ -3284,8 +3455,8 @@ document.addEventListener('click', e => {
 $('txt-toggle').addEventListener('click', () => txtEdit(!document.body.classList.contains('txt-edit')));
 $('txt-done').addEventListener('click', () => txtEdit(false));
 collectTexts();
-function applyEx() { const off = store.get('faraExplicatii', '0') === '1'; document.body.classList.toggle('no-ex', off); $('ex-toggle').textContent = off ? 'ⓘ Arată explicațiile' : 'ⓘ Ascunde explicațiile'; }
-$('ex-toggle').addEventListener('click', () => { store.set('faraExplicatii', store.get('faraExplicatii', '0') === '1' ? '0' : '1'); applyEx(); });
+function applyEx() { const off = store.get('faraExplicatii', '1') === '1'; document.body.classList.toggle('no-ex', off); $('ex-toggle').textContent = off ? 'ⓘ Arată explicațiile' : 'ⓘ Ascunde explicațiile'; }
+$('ex-toggle').addEventListener('click', () => { store.set('faraExplicatii', store.get('faraExplicatii', '1') === '1' ? '0' : '1'); applyEx(); });
 applyEx();
 renderSyncChip();
 
@@ -3298,9 +3469,13 @@ function showSub(st) {
   $('fsub-noua').hidden = FSUB !== 'noua'; if (FSUB === 'noua') setTimeout(() => fnLoad(), 0);
 }
 $('f-sub').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (b) showSub(b.dataset.st); });
+const SEC = {acasa: ['acasa', 'intrebari'], facturi: ['facturi'], activitate: ['gcal', 'calendar', 'proprietati', 'clienti', 'zone'],
+  bani: ['incasari', 'cheltuieli', 'evolutie'], setari: ['reguli', 'texte', 'jurnal']};
+const SEC_T = {acasa: 'Acasă', facturi: 'Facturi', activitate: 'Activitate', bani: 'Bani', setari: 'Setări'};
+const secOf = t => Object.keys(SEC).find(s => SEC[s].includes(t)) || 'acasa';
 function showTab(t, sub) {
   if (t === 'preturi') { t = 'facturi'; sub = 'preturi'; }     // Preturi e acum o sub-sectiune a Facturilor
-  if (!document.getElementById('panel-' + t)) t = 'proprietati';
+  if (!document.getElementById('panel-' + t)) t = 'acasa';
   if (t === 'facturi') showSub(sub || FSUB);
   tab = t; store.set('tab', t);
   document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
@@ -3311,7 +3486,68 @@ function showTab(t, sub) {
   if (t === 'incasari') fetchPayments();
   if (t === 'cheltuieli') fetchExpenses();
   if (t === 'gcal') fetchGcal();
+  if (t === 'acasa') fetchDue();
+  // sectiunea din meniu careia ii apartine tabul
+  const sec = secOf(t); store.set('sec-' + sec, t);
+  document.body.dataset.sec = sec; document.body.dataset.tab = t;
+  $('sec-title').textContent = SEC_T[sec];
+  document.querySelectorAll('#tabs .tab').forEach(b => { b.hidden = !SEC[sec].includes(b.dataset.tab); });
+  $('tabs').hidden = SEC[sec].length < 2; $('f-sub').hidden = sec !== 'facturi';
+  document.querySelectorAll('[data-sec]').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 }
+function showSec(s) { showTab(s === 'acasa' ? 'acasa' : store.get('sec-' + s, SEC[s][0])); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-sec]'); if (b) { showSec(b.dataset.sec); scrollTo(0, 0); return; }
+  const g = e.target.closest('[data-go]'); if (g) { const [t, s] = g.dataset.go.split(':'); showTab(t, s); scrollTo(0, 0); }
+});
+// punct rosu in meniu cand o sub-sectiune are ceva de rezolvat
+function navBadges() {
+  for (const s in SEC) {
+    const el = document.querySelector('.snav[data-sec="' + s + '"] .nb'); if (!el) continue;
+    el.hidden = !SEC[s].some(t => [...document.querySelectorAll('#tabs .tab[data-tab="' + t + '"] .n.alert')].some(n => n.textContent.trim()));
+  }
+}
+new MutationObserver(navBadges).observe($('tabs'), {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class']});
+
+// ------------------------------------------------------------ Acasa: lista "De incasat" (bifa = factura incasata integral)
+let DUE = null, dueAll = false;
+async function fetchDue() {
+  try { DUE = await (await fetch('/api/incasari')).json(); renderDue(); } catch (e) { console.error(e); }
+}
+function renderDue() {
+  const box = $('due-list'); if (!DUE || !DUE.clienti) return;
+  const rows = [];
+  DUE.clienti.forEach(c => Object.values(c.celule).forEach(cell => cell.facturi.forEach(f => { if (f.rest > 0.01) rows.push({...f, cl: c.client}); })));
+  rows.sort((a, b) => (b.zile_intarziere - a.zile_intarziere) || String(a.scadenta || '9').localeCompare(String(b.scadenta || '9')));
+  const alti = Math.round(((DUE.sumar.de_incasat || 0) - (DUE.sumar.de_incasat_an || 0)) * 100) / 100;
+  if (!rows.length && alti <= 0.01) { box.innerHTML = '<div class="empty">Totul e încasat.</div>'; return; }
+  const N = 8, shown = dueAll ? rows : rows.slice(0, N);
+  const ck = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>';
+  let html = shown.map(f => {
+    const ini = (f.cl.match(/[\p{L}\p{N}]+/gu) || ['?']).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const luna = new Date(f.luna + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
+    let pill;
+    if (f.stare === 'late') pill = `<span class="pill late">restantă ${f.zile_intarziere} ${f.zile_intarziere === 1 ? 'zi' : 'zile'}</span>`;
+    else if (f.stare === 'part') pill = `<span class="pill part">parțial · din ${eur(f.total)}</span>`;
+    else pill = `<span class="pill wait">scadentă ${f.scadenta ? f.scadenta.slice(8, 10) + '.' + f.scadenta.slice(5, 7) : '—'}</span>`;
+    return `<div class="due-row"><div class="due-av" aria-hidden="true">${esc(ini)}</div><div class="due-t"><b>${esc(f.cl)}</b><span>${esc(luna)} · ${esc(f.numar || '—')}</span></div>${pill}<span class="due-amt">${eur(f.rest)}</span>
+      <button type="button" class="due-tick" data-due="${esc(f.id)}" data-nr="${esc(f.numar || 'Factura')}" title="Marchează încasată" aria-label="Marchează încasată: ${esc(f.cl)}, ${eur(f.rest)}">${ck}</button></div>`;
+  }).join('');
+  const foot = [];
+  if (rows.length > N) foot.push(`<button type="button" class="linkbtn" data-dueall="1">${dueAll ? 'Arată mai puține' : 'Arată toate (' + rows.length + ')'}</button>`);
+  if (alti > 0.01) foot.push(`<span>+ ${eur(alti)} din alți ani, în <button type="button" class="linkbtn" data-go="incasari">Încasări</button></span>`);
+  if (foot.length) html += `<div class="due-foot">${foot.join('')}</div>`;
+  box.innerHTML = html;
+}
+$('due-list').addEventListener('click', async e => {
+  if (e.target.closest('[data-dueall]')) { dueAll = !dueAll; renderDue(); return; }
+  const b = e.target.closest('[data-due]'); if (!b || b.disabled) return;
+  b.disabled = true;
+  const id = b.dataset.due, j = await post('/api/incasari', {ids: [id]});
+  if (!j) { b.disabled = false; return; }
+  await fetchDue(); fetchPaySummary();
+  showToast(`${b.dataset.nr} marcată încasată`, async () => { await post('/api/incasari', {ids: [id], undo: true}); fetchDue(); fetchPaySummary(); });
+});
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!A) return; if (tab === 'evolutie') drawMonthlyCharts(); if (tab === 'calendar') drawCalendar(); if (tab === 'zone') drawZoneChart(); }, 150); });
@@ -3446,11 +3682,7 @@ async function acceptSugg(i) { const x = lastSugg[i]; if (!x) return; const j = 
 async function ignoreSugg(i) { const x = lastSugg[i]; if (!x) return; const j = await post('/api/ignore-suggestion', {din: x.din, in: x.in}); if (j) loadSettings(j); }
 async function unmerge(din) { const j = await post('/api/unmerge', {din}); if (j) { loadSettings(j); fetchState(); } }
 $('settings-box').addEventListener('toggle', e => { if (e.target.open) loadSettings(); });
-['settings-box', 'log-fold'].forEach(id => {
-  const el = $(id), saved = store.get('open-' + id, null);
-  if (saved !== null) el.open = saved === '1';
-  el.addEventListener('toggle', () => store.set('open-' + id, el.open ? '1' : '0'));
-});
+$('settings-box').open = true; $('log-fold').open = true;   // mereu deschise: au acum pagina lor in Setari
 
 // ------------------------------------------------------------ pornire
 let timer = null, every = 5000, lastAct = Date.now(), paused = false;
