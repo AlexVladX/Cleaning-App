@@ -312,6 +312,29 @@
   .toast span{overflow-wrap:anywhere}
   .toast button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;flex:none}
   .muted{color:var(--muted)}
+  .fn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+  .fn-grid label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);font-weight:600}
+  .fn-grid .search{width:100%}
+  table.t.fn-table{table-layout:fixed}
+  .fn-table td{padding:5px 4px!important;vertical-align:top}
+  .fn-table .search{width:100%;padding:6px 7px;font-size:13px}
+  .fn-table input.num{text-align:right}
+  .fn-table .manual{border-color:#F59E0B;background:#FFFBEB}
+  .fn-table .lipsa{border-color:var(--bad-ink);background:var(--bad-bg)}
+  .fn-sub{font-size:11px;color:var(--muted);margin-top:2px;min-height:13px;white-space:normal}
+  .fn-sub a{color:var(--brand);cursor:pointer;text-decoration:underline}
+  .fn-total{margin-top:12px;font-size:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
+  .fn-total b.big{font-size:20px;color:var(--brand)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  @media(max-width:700px){
+    .fn-table thead{display:none}
+    table.t.fn-table,.fn-table tbody{display:block;width:100%}
+    .fn-table tr{display:grid;grid-template-columns:1fr 1fr 1fr 34px;gap:4px;padding:8px 0;border-bottom:1px solid var(--line)}
+    .fn-table td{border:none!important}
+    .fn-table td:nth-child(1){grid-column:1/4}.fn-table td:nth-child(7){grid-column:4;grid-row:1}
+    .fn-table td:nth-child(2){grid-column:1/2}.fn-table td:nth-child(3){grid-column:2/5}
+    .fn-table td:nth-child(4){grid-column:1}.fn-table td:nth-child(5){grid-column:2}.fn-table td:nth-child(6){grid-column:3/5;text-align:right;padding-top:11px!important}
+  }
   .d-row{cursor:pointer}.d-row:hover td{background:#F3F8F7}.d-row.open td{background:#E8F3F1;border-bottom-color:transparent}
   .d-row.flash td{background:#FDF3C7}
   .d-arr{display:inline-block;width:12px;color:var(--brand);font-size:11px}
@@ -780,6 +803,48 @@
       <div class="subtabs" id="f-sub" role="tablist">
         <button type="button" data-st="fisiere" class="on" role="tab">📄 Fișiere <span class="n" id="st-n-files"></span></button>
         <button type="button" data-st="preturi" role="tab">✓ Verificare prețuri <span class="n" id="st-n-prices"></span></button>
+        <button type="button" data-st="noua" role="tab">＋ Factură nouă</button>
+      </div>
+      <div id="fsub-noua" hidden>
+        <div id="fn-setup" hidden>
+          <p class="hint" style="margin:12px 0 8px">Generatorul ia formatele de factură, clienții și tarifele din Sheet-ul tău de facturare (foile „Clients”, „Case /m2”, „Case /h” și primele două foi cu formatul facturii). Partajează Sheet-ul ca <b>Cititor</b> cu <b id="fn-sa"></b>, apoi lipește linkul lui aici.</p>
+          <div class="toolbar"><input class="search" id="fn-link" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" style="flex:1;min-width:240px" aria-label="Linkul Sheet-ului de facturare"><button class="btn primary" type="button" id="fn-link-save">Salvează</button></div>
+          <div class="hint" id="fn-setup-err" style="color:var(--bad-ink);margin-top:8px"></div>
+        </div>
+        <div id="fn-form" hidden>
+          <p class="hint ex" style="margin:10px 0 8px">Alegi clientul, adaugi casele și scrii zilele (ex. „3, 10, 17”). Prețurile vin din Sheet; orice preț sau cantitate se poate schimba. Factura se descarcă pe acest dispozitiv: pune-o apoi în folderul de facturi din Drive.</p>
+          <div class="fn-grid">
+            <label>Client<select id="fn-client" class="search"></select></label>
+            <label>Format / cont<select id="fn-format" class="search"></select></label>
+            <label>Număr factură<input id="fn-numar" class="search" autocomplete="off"></label>
+            <label>Data facturii<input id="fn-data" class="search" type="date"></label>
+            <label>Scadență (zile)<input id="fn-zile" class="search" type="number" min="0" max="90" value="10"></label>
+            <label>Tarife din lista<select id="fn-tarife" class="search"></select></label>
+            <label>Luna menajelor<input id="fn-luna" class="search" type="month"></label>
+          </div>
+          <div class="hint" id="fn-client-info" style="margin:6px 0 10px"></div>
+          <div class="table-wrap" style="overflow:visible;max-height:none;height:auto"><table class="t fn-table">
+            <thead><tr><th style="width:26%">Casă / descriere</th><th style="width:15%">Tip</th><th style="width:24%">Zile (din luna aleasă)</th><th class="num" style="width:10%">Cant. / ore</th><th class="num" style="width:11%">Preț unitar</th><th class="num" style="width:10%">Total</th><th style="width:34px"></th></tr></thead>
+            <tbody id="fn-rows"></tbody>
+          </table></div>
+          <div class="toolbar" style="margin-top:8px">
+            <select id="fn-add" class="search" style="width:auto;max-width:260px" aria-label="Adaugă o casă"></select>
+            <button class="btn btn-sm" type="button" id="fn-add-free">＋ Rând liber</button>
+            <button class="btn btn-sm" type="button" id="fn-reload" title="Recitește clienții și tarifele din Sheet">↻ Tarife</button>
+            <button class="btn btn-sm" type="button" id="fn-clear">Golește</button>
+          </div>
+          <div class="fn-grid" style="margin-top:12px">
+            <label>Reducere / majorare<select id="fn-aj-mod" class="search"><option value="">fără</option><option value="-pct">reducere %</option><option value="-eur">reducere €</option><option value="+pct">majorare %</option><option value="+eur">majorare €</option></select></label>
+            <label>Valoare<input id="fn-aj-val" class="search" type="number" min="0" step="0.01"></label>
+            <label style="grid-column:span 2">Motiv (apare pe factură, opțional)<input id="fn-aj-motiv" class="search" maxlength="80"></label>
+          </div>
+          <div class="fn-total" id="fn-total"></div>
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn" type="button" id="fn-preview">👁 Previzualizează</button>
+            <button class="btn primary" type="button" id="fn-gen">⬇ Generează și descarcă</button>
+          </div>
+          <div class="hint" id="fn-result" style="margin-top:10px"></div>
+        </div>
       </div>
       <div id="fsub-preturi" hidden>
         <p class="hint ex" style="margin:10px 0 4px">Prețul fiecărei case e urmărit factură după factură (pe tip de menaj și client). Clasează fiecare semnalare, scrie o notă și sortează după orice coloană (click pe titlu, al doilea click inversează).</p>
@@ -2003,6 +2068,199 @@ $('d-body').addEventListener('keydown', e => { const tr = e.target.closest('tr.d
 $('d-head').addEventListener('click', e => { const th = e.target.closest('[data-dk]'); if (th) daySort(th); });
 $('d-head').addEventListener('keydown', e => { const th = e.target.closest('[data-dk]'); if (th && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); daySort(th); } });
 
+// ---- generatorul de facturi (Facturi → Factură nouă)
+let FN = null;                     // datele din Sheet: clienti, grupuri de tarife, formate
+let FNR = [];                      // randurile facturii: {nom, type, zile, qty, pu, mq, mp, liber}
+const fnDraftKey = 'facturaNouaCiorna';
+const fnNum = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(x) ? x : null; };
+const fnK = t => norm(t).replace(/[^a-z0-9]+/g, ' ').trim();
+const fnHouseName = n => String(n || '').replace(/\s*\(samedi\)\s*/i, '').trim();
+function fnGroup() { return (FN.grupuri || []).find(g => g.nume === $('fn-tarife').value) || null; }
+function fnHouse(nom) {
+  const k = fnK(nom); if (!k) return null;
+  const g = fnGroup();
+  const inG = g && g.case.find(c => fnK(c.nume) === k);
+  if (inG) return inG;
+  for (const gg of FN.grupuri) { const c = gg.case.find(c => fnK(c.nume) === k); if (c) return c; }
+  return null;
+}
+// "3, 10 17/10" -> date ISO (ziua fara luna = luna aleasa)
+function fnDates(txt) {
+  const [Y, M] = ($('fn-luna').value || FN.azi.slice(0, 7)).split('-').map(Number);
+  const ok = [], bad = [];
+  for (const tok of String(txt || '').split(/[\s,;]+/).filter(Boolean)) {
+    const m = tok.match(/^(\d{1,2})(?:[./-](\d{1,2})(?:[./-](\d{2,4}))?)?$/);
+    if (!m) { bad.push(tok); continue; }
+    const d = +m[1], mo = m[2] ? +m[2] : M; let y = m[3] ? +m[3] : Y; if (y < 100) y += 2000;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCDate() !== d || dt.getUTCMonth() !== mo - 1) { bad.push(tok); continue; }
+    ok.push(dt.toISOString().slice(0, 10));
+  }
+  return {ok: [...new Set(ok)].sort(), bad};
+}
+// pretul si cantitatea din tarife pentru un rand (null = nu exista in lista)
+function fnTariff(r) {
+  const src = r._src && fnK(fnHouseName(r._src)) === fnK(r.nom) ? r._src : r.nom;
+  const h = r.liber ? null : fnHouse(src), n = fnDates(r.zile).ok.length;
+  if (r.liber) { const sp = (FN.speciale || []).find(x => fnK(x.nume) === fnK(r.nom)); return {pu: sp ? sp.pret : null, qty: null, info: sp ? `tarif special: ${num(sp.pret)} €/${sp.unitate}` : ''}; }
+  if (!h) return {pu: null, qty: null, info: r.nom ? 'casa nu e în lista de tarife' : ''};
+  const samedi = /\(samedi\)/i.test(src) ? ' (tarif de sâmbătă)' : '';
+  if (h.mod === 'ora') {
+    const ore = r.type === 'Intermédiaire' ? h.ore_interm : r.type === 'Standard' ? h.ore_standard : null;
+    return {pu: h.tarif_ora, qty: ore && n ? ore * n : null, info: ore ? `${num(ore)} h × ${n || 0} ${n === 1 ? 'zi' : 'zile'} la ${num(h.tarif_ora)} €/h` : `la oră: ${num(h.tarif_ora)} €/h — scrie orele`};
+  }
+  if (r.type === 'Intermédiaire') return {pu: h.tarif_ora, qty: null, info: `la oră: ${num(h.tarif_ora)} €/h — scrie orele`};
+  if (r.type === 'Ouverture') return {pu: h.ouverture, qty: n || null, info: h.ouverture ? `tarif ouverture: ${num(h.ouverture)} €` : 'fără tarif de ouverture în listă — scrie prețul'};
+  if (r.type === 'Standard') return {pu: h.standard, qty: n || null, info: h.standard ? `tarif: ${num(h.standard)} €${samedi}` : 'fără preț în listă — scrie prețul', variante: h.variante};
+  return {pu: null, qty: n || null, info: ''};
+}
+function fnApply(r) {            // completeaza ce nu a fost schimbat de mana
+  const t = fnTariff(r);
+  if (!r.mp) r.pu = t.pu;
+  if (!r.mq) r.qty = t.qty;
+  return t;
+}
+function fnSave() {
+  try { localStorage.setItem(fnDraftKey, JSON.stringify({client: $('fn-client').value, luna: $('fn-luna').value, rows: FNR,
+    aj: [$('fn-aj-mod').value, $('fn-aj-val').value, $('fn-aj-motiv').value]})); } catch (e) {}
+}
+function fnRenderRows() {
+  const tipuri = FN.tipuri || ['Standard', 'Ouverture', 'Intermédiaire', 'Autre'];
+  $('fn-rows').innerHTML = FNR.map((r, i) => {
+    const t = fnApply(r), d = fnDates(r.zile);
+    const tot = r.qty != null && r.pu != null ? r.qty * r.pu : null;
+    const tarifDif = r.mp && t.pu != null && r.pu != null && Math.abs(t.pu - r.pu) > 0.004;
+    const vari = (t.variante || []).map(v => `<a data-fv="${i}" data-p="${v.pret}">${num(v.pret)} € ${esc(v.eticheta)}</a>`).join(' · ');
+    return `<tr data-i="${i}">
+      <td><input class="search" data-f="nom" value="${esc(r.nom)}" list="${r.liber ? 'fn-dl-sp' : 'fn-dl-case'}" placeholder="${r.liber ? 'descriere (ex. Repassage)' : 'casa'}" aria-label="Casă">
+        <div class="fn-sub">${esc(t.info || '')}${vari ? ' · ' + vari : ''}</div></td>
+      <td><select class="search" data-f="type" aria-label="Tip">${tipuri.map(x => `<option${x === r.type ? ' selected' : ''}>${x}</option>`).join('')}</select></td>
+      <td><input class="search${d.bad.length || (r.nom && !d.ok.length) ? ' lipsa' : ''}" data-f="zile" value="${esc(r.zile)}" placeholder="3, 10, 17" inputmode="text" aria-label="Zile">
+        <div class="fn-sub">${d.bad.length ? 'nu înțeleg: ' + esc(d.bad.join(', ')) : d.ok.map(x => x.slice(8) + '/' + x.slice(5, 7)).join(' · ')}</div></td>
+      <td><input class="search num${r.mq ? ' manual' : ''}${r.nom && r.qty == null ? ' lipsa' : ''}" data-f="qty" value="${r.qty ?? ''}" inputmode="decimal" aria-label="Cantitate sau ore">
+        <div class="fn-sub">${r.mq ? `<a data-fr="${i}" data-k="mq">↺ din tarife</a>` : ''}</div></td>
+      <td><input class="search num${tarifDif ? ' manual' : ''}${r.nom && r.pu == null ? ' lipsa' : ''}" data-f="pu" value="${r.pu ?? ''}" inputmode="decimal" aria-label="Preț unitar">
+        <div class="fn-sub">${r.mp ? `<a data-fr="${i}" data-k="mp">↺ tarif${t.pu != null ? ' ' + num(t.pu) : ''}</a>` : ''}</div></td>
+      <td class="num" style="padding-top:11px!important"><b>${tot == null ? '—' : eur2(tot)}</b></td>
+      <td><button class="btn btn-sm" type="button" data-fd="${i}" title="Șterge rândul" aria-label="Șterge rândul">✕</button></td></tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty">Adaugă o casă din listă sau un rând liber.</td></tr>';
+  fnTotals(); fnSave();
+}
+function fnAdjust(sub) {
+  const mod = $('fn-aj-mod').value, v = fnNum($('fn-aj-val').value) || 0;
+  if (!mod || !v) return {amount: 0, body: null};
+  const sign = mod[0] === '-' ? -1 : 1, kind = mod.slice(1);
+  return {amount: Math.round((kind === 'pct' ? sub * v / 100 : v) * sign * 100) / 100, body: {mod: kind, val: sign * v, motiv: $('fn-aj-motiv').value.trim()}};
+}
+function fnTotals() {
+  const sub = FNR.reduce((s, r) => s + (r.qty != null && r.pu != null ? r.qty * r.pu : 0), 0);
+  const aj = fnAdjust(sub).amount, nInt = FNR.reduce((s, r) => s + fnDates(r.zile).ok.length, 0);
+  $('fn-total').innerHTML = `<span>${FNR.filter(r => r.nom).length} rânduri · ${nInt} intervenții</span><span>Subtotal <b>${eur2(sub)}</b></span>`
+    + (aj ? `<span>${aj < 0 ? 'Reducere' : 'Majorare'} <b>${eur2(aj)}</b></span>` : '') + `<span>Total <b class="big">${eur2(sub + aj)}</b></span>`;
+}
+function fnFillLists() {
+  const g = fnGroup();
+  $('fn-add').innerHTML = `<option value="">＋ Adaugă o casă${g ? ' (' + esc(g.nume) + ')' : ''}…</option>`
+    + (g ? g.case.map(c => `<option>${esc(c.nume)}</option>`).join('') : '');
+  let dl = $('fn-dl-case'); if (!dl) { dl = document.createElement('datalist'); dl.id = 'fn-dl-case'; document.body.appendChild(dl); }
+  const all = [...(g ? g.case : []), ...FN.grupuri.filter(x => x !== g).flatMap(x => x.case)];
+  dl.innerHTML = [...new Set(all.map(c => c.nume))].map(n => `<option value="${esc(n)}">`).join('');
+  let ds = $('fn-dl-sp'); if (!ds) { ds = document.createElement('datalist'); ds.id = 'fn-dl-sp'; document.body.appendChild(ds); }
+  ds.innerHTML = [...new Set((FN.speciale || []).map(x => x.nume))].map(n => `<option value="${esc(n)}">`).join('');
+}
+function fnClientChanged(keepRows) {
+  const c = FN.clienti.find(x => x.nume === $('fn-client').value);
+  if (!c) { $('fn-client-info').textContent = ''; return; }
+  $('fn-tarife').value = c.tarife || '';
+  const f = FN.formate.find(x => x.id === c.format) || FN.formate[0];
+  if (f) { $('fn-format').value = f.id; $('fn-numar').value = f.urmator; }
+  $('fn-client-info').innerHTML = `${esc(c.adresa)}${c.siret ? ' · ' + esc(c.siret) : ''}`
+    + (c.tarife ? (c.tarife_confirmat ? '' : ` · <b style="color:var(--warn-ink)">lista de tarife „${esc(c.tarife)}” e ghicită: verific-o</b>`) : ' · <b style="color:var(--warn-ink)">alege lista de tarife</b>');
+  fnFillLists();
+  if (!keepRows) {
+    FNR = [];
+    const g = fnGroup(), own = c.casa && g && g.case.find(h => fnK(h.nume).includes(fnK(c.casa)) || fnK(c.casa).includes(fnK(h.nume)));
+    if (own) FNR.push({nom: fnHouseName(own.nume), type: 'Standard', zile: ''});   // proprietar cu o singura casa
+  }
+  fnRenderRows();
+}
+async function fnLoad(force) {
+  if (FN && !force) return;
+  let j;
+  try { j = await (await fetch('/api/facturare' + (force ? '?reincarca=1' : ''))).json(); } catch (e) { return; }
+  $('fn-setup').hidden = j.configurat && !j.eroare; $('fn-form').hidden = !(j.configurat && !j.eroare);
+  $('fn-sa').textContent = j.service_account || 'contul de serviciu al aplicației';
+  $('fn-setup-err').textContent = j.eroare || '';
+  if (!j.configurat || j.eroare) { FN = null; return; }
+  FN = j;
+  const draft = (() => { try { return JSON.parse(localStorage.getItem(fnDraftKey) || 'null'); } catch (e) { return null; } })();
+  $('fn-client').innerHTML = '<option value="">— alege clientul —</option>' + j.clienti.map(c => `<option value="${esc(c.nume)}">${esc(c.nume)}${c.casa ? ' (' + esc(c.casa) + ')' : ''}</option>`).join('');
+  $('fn-format').innerHTML = j.formate.map(f => `<option value="${f.id}">${esc(f.model.replace(/\d+$/, '…'))} · cont ${esc(f.titular)}</option>`).join('');
+  $('fn-tarife').innerHTML = '<option value="">— alege —</option>' + j.grupuri.map(g => `<option value="${esc(g.nume)}">${esc(g.nume)} (${g.case.length})</option>`).join('');
+  $('fn-data').value = j.azi;
+  const d = new Date(j.azi + 'T00:00:00'); if (d.getDate() <= 10) d.setMonth(d.getMonth() - 1);   // la inceput de luna se factureaza luna trecuta
+  $('fn-luna').value = (draft && draft.luna) || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  if (draft && draft.client && j.clienti.some(c => c.nume === draft.client)) {
+    $('fn-client').value = draft.client; FNR = draft.rows || [];
+    [$('fn-aj-mod').value, $('fn-aj-val').value, $('fn-aj-motiv').value] = draft.aj || ['', '', ''];
+    fnClientChanged(true);
+  } else { fnFillLists(); fnRenderRows(); }
+}
+$('fn-link-save').addEventListener('click', async () => { if (await post('/api/facturare/sheet', {link: $('fn-link').value})) fnLoad(true); });
+$('fn-reload').addEventListener('click', async () => { await fnLoad(true); showToast('Clienți și tarife recitite din Sheet'); });
+$('fn-client').addEventListener('change', () => fnClientChanged(false));
+$('fn-format').addEventListener('change', () => { const f = FN.formate.find(x => x.id === $('fn-format').value); if (f) $('fn-numar').value = f.urmator; });
+$('fn-tarife').addEventListener('change', () => { fnFillLists(); fnRenderRows(); });
+$('fn-luna').addEventListener('change', fnRenderRows);
+['fn-aj-mod', 'fn-aj-val', 'fn-aj-motiv'].forEach(id => $(id).addEventListener('input', () => { fnTotals(); fnSave(); }));
+$('fn-add').addEventListener('change', e => { if (!e.target.value) return; FNR.push({nom: fnHouseName(e.target.value), _src: e.target.value, type: 'Standard', zile: ''}); e.target.value = ''; fnRenderRows(); const ins = $('fn-rows').querySelectorAll('[data-f=zile]'); ins[ins.length - 1].focus(); });
+$('fn-add-free').addEventListener('click', () => { FNR.push({nom: '', type: 'Standard', zile: '', liber: true}); fnRenderRows(); const ins = $('fn-rows').querySelectorAll('[data-f=nom]'); ins[ins.length - 1].focus(); });
+$('fn-clear').addEventListener('click', () => { const old = FNR; FNR = []; fnRenderRows(); showToast('Rânduri șterse', () => { FNR = old; fnRenderRows(); }); });
+$('fn-rows').addEventListener('change', e => {
+  const tr = e.target.closest('tr[data-i]'), f = e.target.dataset.f; if (!tr || !f) return;
+  const r = FNR[+tr.dataset.i];
+  if (f === 'qty') { r.qty = fnNum(e.target.value); r.mq = r.qty != null; }
+  else if (f === 'pu') { r.pu = fnNum(e.target.value); r.mp = r.pu != null; }
+  else { r[f] = e.target.value.trim(); if (f === 'nom') { r._src = r.nom; r.mp = r.mq = false; } if (f === 'type') r.mp = r.mq = false; }
+  fnRenderRows();
+});
+$('fn-rows').addEventListener('click', e => {
+  const del = e.target.closest('[data-fd]'), rs = e.target.closest('[data-fr]'), va = e.target.closest('[data-fv]');
+  if (del) { const i = +del.dataset.fd, old = FNR[i]; FNR.splice(i, 1); fnRenderRows(); showToast('Rând șters', () => { FNR.splice(i, 0, old); fnRenderRows(); }); }
+  if (rs) { FNR[+rs.dataset.fr][rs.dataset.k] = false; fnRenderRows(); }
+  if (va) { const r = FNR[+va.dataset.fv]; r.pu = +va.dataset.p; r.mp = true; fnRenderRows(); }
+});
+function fnBody(final) {
+  const rows = FNR.filter(r => r.nom).map(r => ({nom: r.liber ? r.nom : fnHouseName(r.nom), type: r.type, dates: fnDates(r.zile).ok, qty: r.qty, pu: r.pu, liber: !!r.liber}));
+  const sub = rows.reduce((s, r) => s + (r.qty || 0) * (r.pu || 0), 0);
+  return {client: $('fn-client').value, format: $('fn-format').value, numar: $('fn-numar').value.trim(), data: $('fn-data').value,
+    zile_scadenta: +$('fn-zile').value, tarife: $('fn-tarife').value, randuri: rows, ajustare: fnAdjust(sub).body, final};
+}
+async function fnMake(final, force) {
+  const body = fnBody(final); if (force) body.forteaza = true;
+  const bad = FNR.find(r => r.nom && (fnDates(r.zile).bad.length || !fnDates(r.zile).ok.length || r.qty == null || r.pu == null));
+  if (bad) { $('fn-result').innerHTML = `<b style="color:var(--bad-ink)">Completează rândul „${esc(bad.nom)}”: zilele, cantitatea și prețul.</b>`; return; }
+  $('fn-result').textContent = 'Se construiește factura…';
+  const r = await fetch('/api/facturare/pdf', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (r.status === 409 && j.duplicat) { $('fn-result').innerHTML = `<b style="color:var(--bad-ink)">${esc(j.error)}</b> <button class="btn btn-sm" type="button" id="fn-force">Folosește totuși ${esc(body.numar)}</button>`; $('fn-force').onclick = () => fnMake(true, true); return; }
+  if (!r.ok) { $('fn-result').innerHTML = `<b style="color:var(--bad-ink)">${esc(j.error || 'Eroare')}</b>`; return; }
+  const bin = atob(j.pdf), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([buf], {type: 'application/pdf'}));
+  const check = j.verificare.length ? `<b style="color:var(--bad-ink)">⚠ Verificarea cu cititorul a găsit: ${esc(j.verificare.join(' · '))}</b>` : '✓ Verificată: cititorul de facturi o citește exact cum ai introdus-o.';
+  if (final) {
+    const a = document.createElement('a'); a.href = url; a.download = j.nume; document.body.appendChild(a); a.click(); a.remove();
+    $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> descărcată · total ${eur2(j.total)} · ${check}<br>Pune fișierul în folderul de facturi din Drive, ca să apară în aplicație. <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
+    try { localStorage.removeItem(fnDraftKey); } catch (e) {}
+    const keep = $('fn-result').innerHTML; FNR = []; await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep;
+  } else {
+    $('fn-result').innerHTML = `Previzualizare gata · total ${eur2(j.total)} · ${check} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
+    window.open(url, '_blank');
+  }
+}
+$('fn-preview').addEventListener('click', () => fnMake(false));
+$('fn-gen').addEventListener('click', () => fnMake(true));
+
 // ---- zone
 let pendingZone = false;
 function renderZones() {
@@ -3013,9 +3271,10 @@ renderSyncChip();
 // ------------------------------------------------------------ tab-uri & perioada
 let FSUB = store.get('facturiSub', 'fisiere');
 function showSub(st) {
-  FSUB = st === 'preturi' ? 'preturi' : 'fisiere'; store.set('facturiSub', FSUB);
+  FSUB = ['preturi', 'noua'].includes(st) ? st : 'fisiere'; store.set('facturiSub', FSUB);
   document.querySelectorAll('#f-sub [data-st]').forEach(b => { const on = b.dataset.st === FSUB; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
   $('fsub-preturi').hidden = FSUB !== 'preturi'; $('fsub-fisiere').hidden = FSUB !== 'fisiere';
+  $('fsub-noua').hidden = FSUB !== 'noua'; if (FSUB === 'noua') setTimeout(() => fnLoad(), 0);
 }
 $('f-sub').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (b) showSub(b.dataset.st); });
 function showTab(t, sub) {

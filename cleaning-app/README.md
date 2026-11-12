@@ -179,3 +179,20 @@ cleaning-app/
 └── README.md
 render.yaml             # în rădăcina repo-ului: configurația Render
 ```
+
+## Generatorul de facturi (Facturi → ＋ Factură nouă)
+
+Opțional: rămâne inactiv până când lipești linkul unui Google Sheet de facturare.
+
+1. Partajează Sheet-ul (Cititor) cu adresa contului de serviciu afișată în pagină.
+2. Lipește linkul în Facturi → Factură nouă. Aplicația citește din el, fără să scrie nimic:
+   primele două foi (modelele de factură: emitent, cont bancar, notă), foaia „Clients”,
+   foile „Case /m2” și „Case /h” (tarifele).
+3. Alegi clientul, adaugi casele, scrii zilele (ex. `3, 10 17`). Prețurile vin din Sheet;
+   orice preț sau cantitate se poate schimba pe loc, iar reducerile/majorările se pun la „Ajustements”.
+4. PDF-ul se descarcă pe dispozitiv; îl pui apoi în folderul de facturi din Drive.
+
+Datele din Sheet (clienți, tarife, IBAN) se țin doar în memorie, nu ajung în cod și nici în backup.
+Facturile generate au datele scrise ZZ/LL/AAAA și un marcaj ascuns (`Creator` în PDF), după care
+cititorul știe să le citească corect. Fiecare factură e trecută prin cititor înainte de descărcare.
+Fișiere: `facturare.py`, folderul `facturare/` (fonturi + logo), `reportlab` în `requirements.txt`.

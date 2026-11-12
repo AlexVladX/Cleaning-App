@@ -30,6 +30,7 @@ import calendar_check
 import costs
 import formulas
 import geo
+import facturare
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from invoice_parser import (
@@ -139,6 +140,10 @@ settings = {
     "texte": {},
     # verificarea preturilor: clasarea si nota fiecarei alerte {id: {"clasa": "greseala", "nota": "..."}}
     "preturi_note": {},
+    # generatorul de facturi: linkul Sheet-ului cu formate / clienti / tarife (datele raman in Sheet, nu in backup)
+    "facturare_sheet": os.environ.get("FACTURARE_SHEET_ID", ""),
+    # ce a ales utilizatorul: {grupuri: {client: lista de tarife}, formate: {client: f1|f2}, numere: {f1: ultimul numar}, emise: [numere]}
+    "facturare_mem": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -566,7 +571,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "facturare_sheet", "facturare_mem", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -3717,6 +3722,160 @@ def api_prices_ok():
     cache["dirty"] = True
     _save_async()
     return jsonify({"ok": True, "n": len(ids)})
+
+
+# ---------------------------------------------------------------- generatorul de facturi
+_fact_cache = {"sid": None, "t": 0.0, "data": None}
+_fact_lock = threading.Lock()
+
+
+def facturare_data(force=False):
+    """Formatele, clientii si tarifele din Sheet-ul de facturare (tinute in memorie 2 minute, niciodata salvate)."""
+    sid = sheet_id_from(settings.get("facturare_sheet"))
+    if not sid:
+        return None
+    with _fact_lock:
+        if force or _fact_cache["sid"] != sid or time.time() - _fact_cache["t"] > 120:
+            data = facturare.parse_book(facturare.read_book(_sheets_service(), sid))
+            _fact_cache.update(sid=sid, t=time.time(), data=data)
+        return _fact_cache["data"]
+
+
+def facturare_known_numbers():
+    with state_lock:
+        nums = {(f.get("numar") or "").strip() for f in state["files"].values()}
+    mem = settings.get("facturare_mem") or {}
+    nums |= set((mem.get("numere") or {}).values())
+    nums |= set(mem.get("emise") or [])
+    nums.discard("")
+    return nums
+
+
+@app.route("/api/facturare")
+def api_facturare():
+    if not sheet_id_from(settings.get("facturare_sheet")):
+        return jsonify({"configurat": False, "service_account": service_account_email()})
+    try:
+        data = facturare_data(force=request.args.get("reincarca") == "1")
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"configurat": True, "eroare": f"Nu pot citi Sheet-ul de facturare: {str(e)[:200]}",
+                        "service_account": service_account_email()})
+    mem = settings.get("facturare_mem") or {}
+    known, today = facturare_known_numbers(), date.today()
+    clienti = []
+    for c in data["clienti"]:
+        clienti.append({**{k: c[k] for k in ("nume", "adresa", "siret", "grup", "casa")},
+                        "tarife": (mem.get("grupuri") or {}).get(c["nume"]) or facturare.guess_group(c, data["grupuri"]),
+                        "tarife_confirmat": c["nume"] in (mem.get("grupuri") or {}),
+                        "format": (mem.get("formate") or {}).get(c["nume"])})
+    formate = [{"id": f["id"], "titular": f.get("titular") or "", "payable": f["payable"], "model": f["numar"],
+                "urmator": facturare.next_number(f["numar"], known, today)} for f in data["formate"]]
+    return jsonify({"configurat": True, "clienti": clienti, "grupuri": data["grupuri"], "speciale": data["speciale"],
+                    "formate": formate, "azi": today.isoformat(), "tipuri": list(facturare.TYPES),
+                    "prag_ora": float(current_rules().get("prag_forfait") or 40)})
+
+
+@app.route("/api/facturare/sheet", methods=["POST"])
+def api_facturare_sheet():
+    link = str((request.json or {}).get("link") or "").strip()
+    if link and not re.fullmatch(r"[A-Za-z0-9_-]{20,}", sheet_id_from(link)):
+        return jsonify({"ok": False, "error": "Linkul Sheet-ului nu e valid"}), 400
+    settings["facturare_sheet"] = link
+    _fact_cache.update(sid=None, data=None)
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/facturare/pdf", methods=["POST"])
+def api_facturare_pdf():
+    """
+    Construieste factura. final=false -> previzualizare (nimic nu se tine minte);
+    final=true -> se tin minte numarul folosit, formatul si lista de tarife a clientului.
+    """
+    import base64
+    d = request.json or {}
+    try:
+        data = facturare_data()
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"Nu pot citi Sheet-ul de facturare: {str(e)[:200]}"}), 502
+    if not data:
+        return jsonify({"ok": False, "error": "Sheet-ul de facturare nu e setat"}), 400
+    client = next((c for c in data["clienti"] if c["nume"] == d.get("client")), None)
+    if not client:
+        return jsonify({"ok": False, "error": "Alege clientul din listă"}), 400
+    em = next((f for f in data["formate"] if f["id"] == d.get("format")), None)
+    if not em:
+        return jsonify({"ok": False, "error": "Alege formatul facturii"}), 400
+    numar = re.sub(r"\s+", "", str(d.get("numar") or ""))
+    if not re.fullmatch(r"[A-Za-z]{2,10}(-\d{2})?-\d{1,5}", numar):
+        return jsonify({"ok": False, "error": "Numărul facturii nu are forma obișnuită (ex. NET-26-022)"}), 400
+    final = bool(d.get("final"))
+    if final and numar in facturare_known_numbers() and not d.get("forteaza"):
+        return jsonify({"ok": False, "duplicat": True,
+                        "error": f"Numărul {numar} a mai fost folosit. Schimbă-l sau confirmă că vrei să-l refolosești."}), 409
+    try:
+        when = datetime.strptime(str(d.get("data") or "")[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"ok": False, "error": "Data facturii lipsește"}), 400
+    rows, errs = facturare.build_rows((d.get("randuri") or [])[:200])
+    if not rows and not errs:
+        errs = ["Adaugă cel puțin un rând"]
+    if errs:
+        return jsonify({"ok": False, "error": " · ".join(errs[:6])}), 400
+    subtotal = round(sum(r["total"] for r in rows), 2)
+    aj = d.get("ajustare") or {}
+    ajust = facturare.adjustment(subtotal, aj.get("mod"), aj.get("val"))
+    label = ""
+    if ajust:
+        v = facturare.num(aj.get("val")) or 0
+        label = (("Remise" if ajust < 0 else "Majoration") + (" : %g %%" % abs(v) if aj.get("mod") == "pct" else "")
+                 + (" — " + str(aj.get("motiv"))[:80] if aj.get("motiv") else ""))
+    try:
+        zile = max(0, min(90, int(d.get("zile_scadenta", 10))))
+    except (TypeError, ValueError):
+        zile = 10
+    doc = {"emitent": em, "client": client, "numar": numar, "data": when, "scadenta": facturare.due_date(when, zile),
+           "rows": rows, "ajustari": ajust, "eticheta_ajustare": label,
+           "prefix_descriere": "" if em["payable"] else "Ménage "}
+    pdf = facturare.build_pdf(doc)
+
+    # verificare: factura trecuta prin cititor trebuie sa dea exact ce s-a introdus
+    probleme = []
+    try:
+        back = parse_invoice(io.BytesIO(pdf), current_rules(), None, "simnettoyage")
+        a, t = back["antet"], back["totaluri"]
+        n_dates = sum(len(r["dates"]) or 1 for r in rows)
+        if a.get("client") != client["nume"]:
+            probleme.append(f"clientul citit: „{a.get('client')}”")
+        if a.get("numar") != numar:
+            probleme.append(f"numărul citit: „{a.get('numar')}”")
+        if abs((t.get("total") or 0) - (subtotal + ajust)) > 0.01:
+            probleme.append(f"totalul citit: {t.get('total')}")
+        if len(back["interventii"]) != n_dates:
+            probleme.append(f"{len(back['interventii'])} intervenții citite în loc de {n_dates}")
+        if abs(sum(i["suma"] for i in back["interventii"]) - subtotal) > 0.01:
+            probleme.append("suma intervențiilor diferă")
+        probleme += [w for w in back["avertismente"] if "Ajustari" not in w][:5]
+    except Exception as e:  # noqa: BLE001
+        probleme.append(f"cititorul nu a putut citi factura: {str(e)[:120]}")
+
+    if final:
+        mem = _copy.deepcopy(settings.get("facturare_mem") or {})
+        mem.setdefault("numere", {})[em["id"]] = numar
+        emise = [n for n in (mem.get("emise") or []) if n != numar] + [numar]
+        mem["emise"] = emise[-400:]  # toate numerele emise de aici, pentru verificarea de duplicat
+        mem.setdefault("formate", {})[client["nume"]] = em["id"]
+        if d.get("tarife"):
+            mem.setdefault("grupuri", {})[client["nume"]] = str(d["tarife"])[:80]
+        settings["facturare_mem"] = mem
+        cache["dirty"] = True
+        _save_async()
+        add_log(f"🧾 Factură generată: {numar} · {client['nume']} · {subtotal + ajust:.2f} €"
+                + (" · ⚠ verificare: " + "; ".join(probleme) if probleme else " · verificată cu cititorul"))
+    return jsonify({"ok": True, "pdf": base64.b64encode(pdf).decode(), "nume": facturare.file_name(numar),
+                    "subtotal": subtotal, "ajustari": ajust, "total": round(subtotal + ajust, 2),
+                    "verificare": probleme})
 
 
 PRET_CLASE = ("greseala", "corectata", "tarif", "special", "intrebat")

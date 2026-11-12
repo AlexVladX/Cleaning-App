@@ -521,7 +521,10 @@ def compute_interventions(rows, header, rules=None):
 
         dates = []
         for d in r.get("dates_raw") or []:
-            pd, fixed = parse_service_date_checked(d, anchor)
+            if header.get("date_zi_luna"):       # factura facuta de generator: datele sunt sigur ZZ/LL/AAAA
+                pd, fixed = parse_ddmmyyyy(d), False
+            else:
+                pd, fixed = parse_service_date_checked(d, anchor)
             if pd:
                 dates.append(pd)
                 if fixed:
@@ -566,6 +569,7 @@ def compute_interventions(rows, header, rules=None):
 
 # --------------------------------------------------------------------------- intrare
 
+GENERATOR_MARKER = "SimNettoyage-Facturare"   # acelasi text ca facturare.MARKER
 MAX_PAGES = 6   # o factura are 1-3 pagini; peste atat e alt document (si ar consuma prea multa memorie)
 
 
@@ -609,6 +613,10 @@ def parse_invoice(pdf_source, rules=None, file_name=None, invoice_format="simnet
             return _parse_villas(pdf_source, rules, file_name)
 
         header = _parse_header(pages_words, full_text)
+        # facturile facute de generatorul din aplicatie scriu datele menajelor ZZ/LL/AAAA (nu LL/ZZ ca
+        # sablonul vechi) si se recunosc dupa semnul din proprietatile PDF-ului
+        if GENERATOR_MARKER in str((pdf.metadata or {}).get("Creator") or ""):
+            header["date_zi_luna"] = True
 
         rows, totals = None, None
         for page in pages:
