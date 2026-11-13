@@ -363,7 +363,8 @@ def require_password():
     if not APP_PASSWORD or request.path == "/healthz":
         return None
     auth = request.authorization
-    if auth and auth.password and hmac.compare_digest(auth.password, APP_PASSWORD):
+    # comparam bytes: compare_digest pe text da TypeError daca parola are caractere non-ASCII (ex. ă, é)
+    if auth and auth.password and hmac.compare_digest(auth.password.encode("utf-8"), APP_PASSWORD.encode("utf-8")):
         return None
     return Response("Autentificare necesara", 401,
                     {"WWW-Authenticate": 'Basic realm="Facturi"'})
