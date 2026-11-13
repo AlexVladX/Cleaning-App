@@ -1089,7 +1089,7 @@
           <div class="fn-total" id="fn-total"></div>
           <div class="toolbar" style="margin-top:10px">
             <button class="btn" type="button" id="fn-preview">👁 Previzualizează</button>
-            <button class="btn primary" type="button" id="fn-gen">⬇ Generează și descarcă</button>
+            <button class="btn primary" type="button" id="fn-gen">⬇ Generează factura</button>
           </div>
           <div class="hint" id="fn-result" style="margin-top:10px"></div>
           <div class="fn-more" id="fn-drive"></div>
@@ -2603,12 +2603,14 @@ async function fnMake(final, force) {
   const url = URL.createObjectURL(new Blob([buf], {type: 'application/pdf'}));
   const check = j.verificare.length ? `<b style="color:var(--bad-ink)">⚠ Verificarea cu cititorul a găsit: ${esc(j.verificare.join(' · '))}</b>` : '✓ Verificată: cititorul de facturi o citește exact cum ai introdus-o.';
   if (final) {
-    const a = document.createElement('a'); a.href = url; a.download = j.nume; document.body.appendChild(a); a.click(); a.remove();
+    const inDrive = j.drive && j.drive.ok;
+    // salvata in Drive -> nu o mai descarcam si pe dispozitiv (ar fi doua copii); altfel o descarcam
+    if (!inDrive) { const a = document.createElement('a'); a.href = url; a.download = j.nume; document.body.appendChild(a); a.click(); a.remove(); }
     const dr = j.drive, drTxt = !dr ? 'Pune fișierul în folderul de facturi din Drive, ca să apară în aplicație.'
       : dr.ok && dr.gasit === false ? `<b style="color:var(--warn-ink)">Salvată în Drive, dar direct în „${esc(dr.folder)}”: nu am găsit un subfolder cu numele clientului.</b> Mut-o tu în folderul lui (sau redenumește folderul clientului ca în Sheet, pentru data viitoare).`
       : dr.ok ? `✓ Salvată în Drive, în „${esc(dr.folder)}”${FN && FN.drive && FN.drive.in_radacina === false ? ' (folder pe care aplicația nu îl citește)' : ': apare în aplicație în scurt timp'}.`
       : `<b style="color:var(--bad-ink)">⚠ Nu s-a salvat în Drive: ${esc(dr.error || 'eroare')}.</b> Pune de mână fișierul descărcat în folder.`;
-    $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> descărcată · total ${eur2(j.total)} · ${check}<br>${drTxt} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
+    $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> ${inDrive ? 'generată' : 'descărcată'} · total ${eur2(j.total)} · ${check}<br>${drTxt} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>${inDrive ? ` · <a href="${url}" download="${esc(j.nume)}">descarc-o și pe dispozitiv</a>` : ''}`;
     try { localStorage.removeItem(fnDraftKey); } catch (e) {}
     const keep = $('fn-result').innerHTML; FNR = []; $('fn-aj-mod').value = $('fn-aj-val').value = $('fn-aj-motiv').value = ''; fnAjShow(false); $('fn-cal-info').textContent = ''; await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep;
   } else {
