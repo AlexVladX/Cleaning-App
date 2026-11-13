@@ -611,6 +611,72 @@ def recompute_all():
                                 if f.get("status") in ("done", "warning")
                                 for iv in f.get("interventii") or []]
     cache["dirty"] = True
+    relink_payments()
+
+
+# ---------------------------------------------------------------- incasarile urmeaza factura, nu fisierul
+# Incasarile sunt tinute pe ID-ul fisierului din Drive. Daca o factura e incarcata din nou (copiata, reurcata,
+# mutata intre conturi), fisierul primeste alt ID si incasarea ramanea „orfana” -> factura parea restanta.
+# De aceea fiecare incasare tine minte si factura (numar + client + total) si se muta singura pe fisierul nou.
+def _inv_ident(numar, client, total):
+    n = re.sub(r"[^a-z0-9]", "", norm_text(numar or ""))
+    c = re.sub(r"[^a-z0-9]", "", norm_text(client or ""))
+    try:
+        t = round(float(total or 0), 2)
+    except (TypeError, ValueError):
+        t = 0.0
+    return (n, c, t) if n and t > 0 else None
+
+
+def relink_payments(old_files=None):
+    """
+    old_files: {id vechi: {numar, client, total}} (ex. dintr-un backup vechi) pentru incasarile care nu au
+    inca factura tinuta minte. Intoarce cate incasari s-au mutat pe fisierul nou.
+    """
+    pay = settings.get("incasari") or {}
+    if not pay:
+        return 0
+    with state_lock:
+        cur = {fid: f for fid, f in state["files"].items() if f.get("status") in ("done", "warning")}
+        toate = set(state["files"])
+    changed, moved = False, 0
+    for fid, p in pay.items():                 # incasarile legate: tin minte factura (o singura data)
+        f = cur.get(fid)
+        if f and isinstance(p, dict) and not p.get("numar"):
+            p.update(numar=f.get("numar") or "", client=f.get("client") or "", total=f.get("total"))
+            changed = True
+    orfane = [k for k in pay if k not in toate]
+    if orfane:
+        by_ident = {}
+        for fid, f in cur.items():
+            k = _inv_ident(f.get("numar"), f.get("client"), f.get("total"))
+            if k:
+                by_ident.setdefault(k, []).append(fid)
+        for k in orfane:
+            p = pay.get(k)
+            if not isinstance(p, dict):
+                continue
+            src = p if p.get("numar") else (old_files or {}).get(k) or {}
+            ident = _inv_ident(src.get("numar"), src.get("client"), src.get("total"))
+            cand = [x for x in by_ident.get(ident, []) if x not in pay] if ident else []
+            if len(cand) == 1:
+                pay[cand[0]] = {**p, "numar": src.get("numar"), "client": src.get("client"), "total": src.get("total")}
+                del pay[k]
+                moved += 1
+                changed = True
+    if changed:
+        settings["incasari"] = pay
+        cache["dirty"] = True
+        _save_async()
+    if moved:
+        add_log(f"Încasări: {moved} legate din nou de facturile lor (fișierele din Drive aveau alt ID)")
+    return moved
+
+
+def payments_orphans():
+    pay = settings.get("incasari") or {}
+    with state_lock:
+        return sum(1 for k in pay if k not in state["files"])
 
 
 def apply_saved_settings(saved):
@@ -2787,6 +2853,12 @@ def _invoice_month(f, emis):
     return emis.strftime("%Y-%m") if emis else None
 
 
+def _pay_ident(fid):
+    with state_lock:
+        f = state["files"].get(fid) or {}
+    return {"numar": f.get("numar") or "", "client": f.get("client") or "", "total": f.get("total")}
+
+
 def invoice_ledger(today=None):
     """O intrare pe factura valida (fara duplicate/erori), cu scadenta, suma si cat s-a incasat."""
     today = today or date.today()
@@ -2939,12 +3011,12 @@ def api_incasari_set():
                 pay.pop(ids[0], None)
             else:
                 pay[ids[0]] = {"suma": round(min(suma, totals.get(ids[0], suma)), 2), "data": when,
-                               "nota": (data.get("nota") or "").strip()[:200]}
+                               "nota": (data.get("nota") or "").strip()[:200], **_pay_ident(ids[0])}
         else:
             for fid in ids:
                 if fid in totals:
                     pay[fid] = {"suma": round(totals[fid], 2), "data": when,
-                                "nota": (data.get("nota") or "").strip()[:200]}
+                                "nota": (data.get("nota") or "").strip()[:200], **_pay_ident(fid)}
     cache["dirty"] = True
     _save_async()
     if pana_la:
@@ -3355,8 +3427,9 @@ def api_diagnostic():
         return {"formule": [f.get("nume") for f in st.get("formule") or []],
                 "coloane": {k: (len(v) if isinstance(v, (list, dict)) else v) for k, v in col.items()},
                 "ascunse": col.get("ascunse") or [], "ordine": (col.get("props") or [])[:20],
-                "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or [])}
-    out = {"eu": WRITER_ID, "trafic": traffic_info(), "conflict": cache.get("conflict") or "", "proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
+                "intrebari": len(st.get("intrebari") or []), "grupuri": len(st.get("grupuri_clienti") or []),
+                "incasari": len(st.get("incasari") or {})}
+    out = {"eu": WRITER_ID, "incasari_fara_factura": payments_orphans(), "facturi": len(state["files"]), "trafic": traffic_info(), "conflict": cache.get("conflict") or "", "proces": os.getpid(), "procese": process_count(), "principal": IS_PRIMARY,
            "gata": bool(cache.get("ready")), "citit": bool(cache["loaded"]), "activ": bool(cache["enabled"]),
            "fisiere_backup": cache.get("duplicate") or 1, "nesalvat": bool(cache["dirty"]),
            "ultima_salvare": datetime.fromtimestamp(cache["saved_at"]).strftime("%d.%m %H:%M:%S") if cache.get("saved_at") else "—",
@@ -3455,6 +3528,14 @@ def _restore_settings_from(data):
     if not isinstance(old, dict):
         return jsonify({"ok": False, "error": "Backup-ul nu conține setări"}), 400
     got = merge_old_settings(old)
+    old_files = {fid: {"numar": f.get("numar"), "client": f.get("client"), "total": f.get("total")}
+                 for fid, f in (data.get("files") or {}).items() if isinstance(f, dict)}
+    legate = relink_payments(old_files)
+    if legate:
+        got.append(f"încasări legate din nou de facturi: {legate}")
+    ramase = payments_orphans()
+    if ramase:
+        got.append(f"{ramase} încasări încă fără factură (alege o versiune mai veche)")
     if not got:
         return jsonify({"ok": True, "recuperat": [], "msg": "Nimic nou de recuperat din fișierul ăsta"})
     for k in ("geo_v", "cost_v", "ore_v", "folder_v"):
