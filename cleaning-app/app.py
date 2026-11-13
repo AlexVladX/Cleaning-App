@@ -144,6 +144,8 @@ settings = {
     "facturare_sheet": os.environ.get("FACTURARE_SHEET_ID", ""),
     # ce a ales utilizatorul: {grupuri: {client: lista de tarife}, formate: {client: f1|f2}, numere: {f1: ultimul numar}, emise: [numere]}
     "facturare_mem": {},
+    # salvarea facturilor generate in Drive, printr-un script Google instalat de utilizator: {url, cheie, folder}
+    "facturare_drive": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -571,7 +573,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "facturare_sheet", "facturare_mem", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "facturare_sheet", "facturare_mem", "facturare_drive", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -3562,7 +3564,8 @@ def read_calendar():
         set_stage(None)
 
 
-def calendar_report():
+def calendar_report(ctx=None):
+    """ctx: un dict gol in care se pun indexul caselor si evenimentele, pentru vederea pe luna."""
     if not settings.get("calendar_id"):
         return {"configurat": False, "calendar_id": "", "de_la_setat": settings.get("calendar_de_la"), "citit": None,
                 "eroare": None, "service_account": service_account_email(), "de_verificat": 0, "evenimente": 0,
@@ -3592,7 +3595,10 @@ def calendar_report():
             start = date.fromisoformat(settings["calendar_de_la"])
         except ValueError:
             start = None
-    out = calendar_check.compare(cal.get("events") or [], inv, calendar_check.build_index(names), start,
+    index = calendar_check.build_index(names)
+    if ctx is not None:
+        ctx.update(index=index, inv=inv, display=display, events=cal.get("events") or [])
+    out = calendar_check.compare(cal.get("events") or [], inv, index, start,
                                  frozenset(settings.get("calendar_ok") or []))
     for lst in ("nefacturat", "data_diferita", "fara_eveniment", "de_facturat"):
         for x in out[lst]:
@@ -3607,6 +3613,56 @@ def calendar_report():
 @app.route("/api/calendar")
 def api_calendar():
     return jsonify(calendar_report())
+
+
+@app.route("/api/calendar/luna")
+def api_calendar_luna():
+    """
+    Calendarul unei luni, cu starea fiecarui menaj fata de facturi:
+    facturat / alta_data (facturat cu 1-3 zile diferenta) / nefacturat / corect (marcat „E corect”) /
+    de_facturat (dupa ultima zi facturata) / vechi (dinaintea perioadei verificate) / nerecunoscut / doar_factura.
+    """
+    luna = str(request.args.get("luna") or "")[:7]
+    if not re.fullmatch(r"\d{4}-\d{2}", luna):
+        return jsonify({"ok": False, "error": "Lună greșită"}), 400
+    ctx = {}
+    rep = calendar_report(ctx)
+    if not ctx:
+        return jsonify({"ok": True, "luna": luna, "zile": {}, "total": {}})
+    stare = {}
+    for x in rep["nefacturat"]:
+        stare[(x["cheie"], x["data"])] = ("corect" if x["ok"] else "nefacturat", None)
+    for x in rep["data_diferita"]:
+        stare[(x["cheie"], x["data_calendar"])] = ("corect" if x["ok"] else "alta_data",
+                                                   f"pe factura {x.get('factura') or ''} e {x['data_factura'][8:]}/{x['data_factura'][5:7]}")
+    for x in rep["de_facturat"]:
+        stare[(x["cheie"], x["data"])] = ("de_facturat", None)
+    zile, total, vazut = {}, {}, set()
+
+    def add(d, item):
+        zile.setdefault(d, []).append(item)
+        total[item["stare"]] = total.get(item["stare"], 0) + 1
+    for d, title in ctx["events"]:
+        iso = d.isoformat()
+        if iso[:7] != luna:
+            continue
+        keys = calendar_check.houses_in_title(title, ctx["index"])
+        if not keys:
+            add(iso, {"nume": title[:60], "stare": "nerecunoscut", "titlu": title})
+        for k in keys:
+            if (k, iso) in vazut:
+                continue
+            vazut.add((k, iso))
+            f = ctx["inv"].get((k, iso))
+            st, nota = ("facturat", f"factura {f.get('factura') or ''}".strip()) if f else stare.get((k, iso), ("vechi", None))
+            add(iso, {"nume": ctx["display"].get(k, k), "stare": st, "titlu": title, "nota": nota,
+                      "client": (f or {}).get("client")})
+    for x in rep["fara_eveniment"]:
+        if x["data"][:7] == luna:
+            add(x["data"], {"nume": x.get("nume") or x["cheie"], "stare": "doar_factura", "titlu": "",
+                            "nota": f"pe factura {x.get('factura') or ''}, fără eveniment în calendar", "client": x.get("client")})
+    return jsonify({"ok": True, "luna": luna, "zile": zile, "total": total, "facturat_pana_la": rep.get("facturat_pana_la"),
+                    "de_la": rep.get("de_la")})
 
 
 @app.route("/api/calendar", methods=["POST"])
@@ -3751,6 +3807,158 @@ def facturare_known_numbers():
     return nums
 
 
+DRIVE_SCRIPT = """// Salveaza facturile generate de aplicatie in folderul tau de facturi din Drive.
+const CHEIE = '__CHEIE__';
+const FOLDER = '__FOLDER__';
+
+function doPost(e) {
+  let out;
+  try {
+    const d = JSON.parse(e.postData.contents);
+    if (d.cheie !== CHEIE) throw new Error('cheie gresita');
+    const folder = DriveApp.getFolderById(FOLDER);
+    if (d.test) {
+      out = {ok: true, folder: folder.getName()};
+    } else {
+      if (!/^[A-Za-z0-9 ._()-]{1,80}\\.pdf$/.test(d.nume)) throw new Error('nume de fisier nepermis');
+      if (folder.getFilesByName(d.nume).hasNext()) {
+        out = {ok: false, exista: true, error: 'exista deja un fisier cu acest nume in folder'};
+      } else {
+        const f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.nume));
+        out = {ok: true, id: f.getId(), folder: folder.getName()};
+      }
+    }
+  } catch (err) {
+    out = {ok: false, error: String(err && err.message || err)};
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Ruleaza o data functia aceasta din editor (butonul Run) ca sa dai permisiunea de acces la Drive.
+function autorizeaza() { DriveApp.getFolderById(FOLDER).getName(); }
+"""
+_DRIVE_URL_RE = re.compile(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]{20,}/exec")
+
+
+def _drive_cfg():
+    """Setarile salvarii in Drive; cheia se genereaza o singura data si ramane doar in backup-ul de setari."""
+    cfg = dict(settings.get("facturare_drive") or {})
+    if not cfg.get("cheie"):
+        import secrets
+        cfg["cheie"] = secrets.token_urlsafe(24)
+        settings["facturare_drive"] = cfg
+        cache["dirty"] = True
+        _save_async()
+    return cfg
+
+
+def _drive_call(url, payload, timeout=40):
+    """Trimite o cerere scriptului Google (raspunsul vine dupa un redirect, pe care urllib il urmeaza)."""
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "text/plain;charset=utf-8"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read(200000).decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": f"scriptul a răspuns cu eroarea {e.code} (verifică implementarea: „Oricine” la acces)"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"nu pot contacta scriptul: {str(e)[:120]}"}
+    try:
+        out = json.loads(raw)
+        return out if isinstance(out, dict) else {"ok": False, "error": "răspuns neașteptat de la script"}
+    except ValueError:
+        return {"ok": False, "error": "scriptul nu a răspuns cum trebuie: la implementare alege acces „Oricine” "
+                                      "și rulează o dată funcția „autorizeaza”"}
+
+
+def _drive_public():
+    cfg = _drive_cfg()
+    return {"conectat": bool(cfg.get("url")), "folder": cfg.get("folder") or "",
+            "script": DRIVE_SCRIPT.replace("__CHEIE__", cfg["cheie"]).replace("__FOLDER__", FOLDER_ID or "ID-UL-FOLDERULUI")}
+
+
+@app.route("/api/facturare/drive", methods=["POST"])
+def api_facturare_drive():
+    """Leaga (sau dezleaga, cu url gol) scriptul care salveaza facturile in Drive; il si probeaza."""
+    url = str((request.json or {}).get("url") or "").strip()
+    cfg = _drive_cfg()
+    if not url:
+        cfg.pop("url", None)
+        cfg.pop("folder", None)
+    else:
+        if not _DRIVE_URL_RE.fullmatch(url):
+            return jsonify({"ok": False, "error": "Linkul trebuie să fie cel de „Aplicație web”, de forma "
+                                                  "https://script.google.com/macros/s/…/exec"}), 400
+        r = _drive_call(url, {"cheie": cfg["cheie"], "test": True})
+        if not r.get("ok"):
+            return jsonify({"ok": False, "error": "Proba nu a reușit: " + str(r.get("error") or "")[:200]}), 400
+        cfg.update(url=url, folder=str(r.get("folder") or "")[:120])
+        add_log(f"Salvarea facturilor în Drive e conectată (folderul „{cfg['folder']}”)")
+    settings["facturare_drive"] = cfg
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True, "drive": _drive_public()})
+
+
+_TIP_CAL = (("Ouverture", ("ouverture", "ouvert", "deschidere")), ("Intermédiaire", ("intermediaire", "interm", "inter")))
+
+
+@app.route("/api/facturare/calendar")
+def api_facturare_calendar():
+    """
+    Menajele dintr-o luna, luate din Google Calendar, pentru casele din listele de tarife.
+    ?luna=2026-10&tarife=<lista clientului>. Intoarce doar casele din lista ceruta; ce nu se leaga de nicio casa
+    din nicio lista apare la „nerecunoscute”, ca sa nu se piarda.
+    """
+    luna, grup = str(request.args.get("luna") or "")[:7], str(request.args.get("tarife") or "")
+    if not re.fullmatch(r"\d{4}-\d{2}", luna):
+        return jsonify({"ok": False, "error": "Alege luna menajelor"}), 400
+    if not settings.get("calendar_id"):
+        return jsonify({"ok": False, "error": "Calendarul nu e conectat: conectează-l la Activitate → Calendar."}), 400
+    try:
+        data = facturare_data()
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"Nu pot citi Sheet-ul de facturare: {str(e)[:200]}"}), 400
+    if not data:
+        return jsonify({"ok": False, "error": "Sheet-ul de facturare nu e configurat"}), 400
+    with state_lock:
+        cal = dict(state["calendar"])
+        ivs_raw = list(state["interventii"])
+    if cal.get("eroare") and not cal.get("events"):
+        return jsonify({"ok": False, "error": "Calendarul nu a putut fi citit: " + str(cal["eroare"])[:200]}), 400
+
+    def baza(n):   # „villa PAD 2 (samedi)” -> „villa PAD 2”
+        return re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", " ", n)).strip()
+    names, mine = {}, set()
+    for g in sorted(data["grupuri"], key=lambda g: g["nume"] != grup):     # lista ceruta are intaietate la nume egale
+        for c in g["case"]:
+            b = baza(c["nume"])
+            if b and b not in names:
+                names[b] = [b]
+                if g["nume"] == grup:
+                    mine.add(b)
+    index = calendar_check.build_index(names)
+    facturat = {(prop_key(re.sub(r"\s+", " ", (iv.get("proprietate") or "").strip())), iv.get("data_iso"))
+                for iv in split_ivs(ivs_raw)[0] if iv.get("data_iso")}
+    menaje, sarite, necunoscute, vazut = [], [], [], set()
+    for d, title in cal.get("events") or []:
+        if d.isoformat()[:7] != luna:
+            continue
+        keys = calendar_check.houses_in_title(title, index)
+        if not keys:
+            necunoscute.append({"data": d.isoformat(), "titlu": title})
+            continue
+        toks = set(calendar_check.norm_tokens(title))
+        tip = next((t for t, words in _TIP_CAL if toks & set(words)), "Standard")
+        for k in keys:
+            if k not in mine or (k, d.isoformat(), tip) in vazut:
+                continue
+            vazut.add((k, d.isoformat(), tip))
+            item = {"casa": k, "data": d.isoformat(), "tip": tip, "sambata": d.weekday() == 5, "titlu": title}
+            (sarite if (prop_key(k), d.isoformat()) in facturat else menaje).append(item)
+    return jsonify({"ok": True, "menaje": menaje, "deja_facturate": sarite, "nerecunoscute": necunoscute[:60],
+                    "citit": cal.get("citit")})
+
+
 @app.route("/api/facturare")
 def api_facturare():
     if not sheet_id_from(settings.get("facturare_sheet")):
@@ -3772,6 +3980,7 @@ def api_facturare():
                 "urmator": facturare.next_number(f["numar"], known, today)} for f in data["formate"]]
     return jsonify({"configurat": True, "clienti": clienti, "grupuri": data["grupuri"], "speciale": data["speciale"],
                     "formate": formate, "azi": today.isoformat(), "tipuri": list(facturare.TYPES),
+                    "drive": _drive_public(), "calendar": bool(settings.get("calendar_id")),
                     "prag_ora": float(current_rules().get("prag_forfait") or 40)})
 
 
@@ -3795,6 +4004,7 @@ def api_facturare_pdf():
     """
     import base64
     d = request.json or {}
+    drive = None
     try:
         data = facturare_data()
     except Exception as e:  # noqa: BLE001
@@ -3873,7 +4083,18 @@ def api_facturare_pdf():
         _save_async()
         add_log(f"🧾 Factură generată: {numar} · {client['nume']} · {subtotal + ajust:.2f} €"
                 + (" · ⚠ verificare: " + "; ".join(probleme) if probleme else " · verificată cu cititorul"))
-    return jsonify({"ok": True, "pdf": base64.b64encode(pdf).decode(), "nume": facturare.file_name(numar),
+        dcfg = settings.get("facturare_drive") or {}
+        if dcfg.get("url"):                      # o copie direct in folderul de facturi din Drive
+            r = _drive_call(dcfg["url"], {"cheie": dcfg.get("cheie"), "nume": facturare.file_name(numar),
+                                          "pdf": base64.b64encode(pdf).decode()})
+            drive = {"ok": bool(r.get("ok")), "exista": bool(r.get("exista")), "folder": dcfg.get("folder") or "",
+                     "error": str(r.get("error") or "")[:200]}
+            if drive["ok"]:
+                add_log(f"Factura {numar} a fost salvată în Drive")
+                threading.Thread(target=scan_folder, daemon=True).start()     # sa apara imediat in aplicatie
+            else:
+                add_log(f"⚠ Factura {numar} nu a putut fi salvată în Drive: {drive['error']}")
+    return jsonify({"ok": True, "pdf": base64.b64encode(pdf).decode(), "nume": facturare.file_name(numar), "drive": drive,
                     "subtotal": subtotal, "ajustari": ajust, "total": round(subtotal + ajust, 2),
                     "verificare": probleme})
 

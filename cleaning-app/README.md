@@ -196,3 +196,12 @@ Datele din Sheet (clienți, tarife, IBAN) se țin doar în memorie, nu ajung în
 Facturile generate au datele scrise ZZ/LL/AAAA și un marcaj ascuns (`Creator` în PDF), după care
 cititorul știe să le citească corect. Fiecare factură e trecută prin cititor înainte de descărcare.
 Fișiere: `facturare.py`, folderul `facturare/` (fonturi + logo), `reportlab` în `requirements.txt`.
+
+### Factură din calendar și salvare în Drive
+
+- **📅 Ia din calendar** (în Factură nouă): pentru clientul și luna alese, ia din Google Calendar menajele caselor din
+  lista lui de tarife (numele casei trebuie să apară în titlul evenimentului; „ouverture” / „interm…” în titlu dau tipul).
+  Ce e deja pe o factură citită e sărit; evenimentele care nu se leagă de nicio casă sunt listate, ca să nu se piardă.
+- **Salvare automată în Drive**: contul de serviciu nu poate crea fișiere în Drive-ul tău, așa că salvarea se face
+  printr-un mic script Google (Apps Script) instalat o singură dată din pagină. Aplicația îi trimite PDF-ul, iar scriptul
+  îl pune în folderul de facturi. Cheia scriptului se ține doar în backup-ul de setări, nu în cod.
