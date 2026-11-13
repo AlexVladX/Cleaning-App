@@ -146,6 +146,8 @@ settings = {
     "facturare_mem": {},
     # salvarea facturilor generate in Drive, printr-un script Google instalat de utilizator: {url, cheie, folder}
     "facturare_drive": {},
+    # sablonul mailului cu care se trimite factura: {subiect, corp}; gol = cel implicit
+    "facturare_mail": {},
     # --- etapa 2: distante (salvate in backup, NU in cod)
     "baza": os.environ.get("BASE_COORDS", "41.595529046210864, 9.274690276554628"),
     "coord_sheet": os.environ.get("COORDS_SHEET_ID", ""),  # ID-ul Sheet-ului cu coordonate
@@ -573,7 +575,7 @@ CACHE_KEYS = ("id", "name", "sig", "status", "error", "avertismente", "intervent
 RULE_KEYS = ("prag_forfait", "tipuri_la_ora", "clienti_la_ora")
 PERSIST_KEYS = ("alias", "ignorate", "verificate", "preturi_ok", "excluse", "cuvinte_produse", "pastrate", "grupuri_clienti", "incasari", "cheltuieli",
                 "categorii_cheltuieli", "consum", "pret_motorina", "dist_matrix",
-                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "facturare_sheet", "facturare_mem", "facturare_drive", "baza", "coord_sheet", "coords",
+                "calendar_id", "calendar_de_la", "calendar_ok", "ore_estimate", "ore_nescrise", "formule", "coloane", "intrebari", "intrebari_ts", "separate", "texte", "preturi_note", "facturare_sheet", "facturare_mem", "facturare_drive", "facturare_mail", "baza", "coord_sheet", "coords",
                 "coord_alias", "distante", "distante_baza", "geo_sync")
 
 
@@ -3952,9 +3954,20 @@ function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.cheie !== CHEIE) throw new Error('cheie gresita');
+    if (d.mail) {                                          // trimite factura pe mail, din contul tau
+      const m = d.mail;
+      if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+(\s*,\s*[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+)*$/.test(m.catre || '')) throw new Error('adresa de mail nu e buna');
+      if (!/^[A-Za-z0-9 ._()-]{1,80}\.pdf$/.test(m.nume || '')) throw new Error('nume de fisier nepermis');
+      MailApp.sendEmail(m.catre, String(m.subiect || '').slice(0, 200), String(m.corp || '').slice(0, 5000), {
+        name: String(m.expeditor || '').slice(0, 80) || undefined,
+        attachments: [Utilities.newBlob(Utilities.base64Decode(m.pdf), 'application/pdf', m.nume)]
+      });
+      return ContentService.createTextOutput(JSON.stringify({ok: true, ramase: MailApp.getRemainingDailyQuota()}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     const root = DriveApp.getFolderById(d.folder || FOLDER_IMPLICIT);
     if (d.test) {
-      out = {ok: true, folder: root.getName(), id: root.getId(),
+      out = {ok: true, folder: root.getName(), id: root.getId(), mail: true,
              in_radacina: d.radacina ? eInauntru(root, d.radacina) : null,
              subfoldere: subfoldere(root, 1, '', []).length};
     } else {
@@ -3978,8 +3991,8 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Ruleaza o data functia aceasta din editor (butonul Rulati) ca sa dai permisiunea de acces la Drive.
-function autorizeaza() { DriveApp.getFolderById(FOLDER_IMPLICIT).getName(); }
+// Ruleaza o data functia aceasta din editor (butonul Rulati) ca sa dai permisiunile: Drive si trimitere de mail.
+function autorizeaza() { DriveApp.getFolderById(FOLDER_IMPLICIT).getName(); MailApp.getRemainingDailyQuota(); }
 """
 _DRIVE_URL_RE = re.compile(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]{20,}/exec")
 
@@ -4026,6 +4039,7 @@ def _drive_public():
     cfg = _drive_cfg()
     return {"conectat": bool(cfg.get("url")), "folder": cfg.get("folder") or "",
             "alt_folder": bool(cfg.get("folder_id") and cfg.get("folder_id") != FOLDER_ID),
+            "mail": bool(cfg.get("url") and cfg.get("mail")),
             "in_radacina": cfg.get("in_radacina"),
             "script": DRIVE_SCRIPT.replace("__CHEIE__", cfg["cheie"]).replace("__FOLDER__", FOLDER_ID or "ID-UL-FOLDERULUI")}
 
@@ -4056,12 +4070,90 @@ def api_facturare_drive():
         if not r.get("ok"):
             return jsonify({"ok": False, "error": "Proba nu a reușit: " + str(r.get("error") or "")[:200]}), 400
         cfg.update(url=url, folder=str(r.get("folder") or "")[:120], folder_id=fid,
-                   in_radacina=r.get("in_radacina") if fid else True)
+                   in_radacina=r.get("in_radacina") if fid else True, mail=bool(r.get("mail")))
         add_log(f"Salvarea facturilor în Drive e conectată (folderul „{cfg['folder']}”)")
     settings["facturare_drive"] = cfg
     cache["dirty"] = True
     _save_async()
     return jsonify({"ok": True, "drive": _drive_public()})
+
+
+MAIL_SABLON = {
+    "subiect": "Facture {numero} – {mois} {annee}",
+    "corp": ("Bonjour,\n\n"
+             "Veuillez trouver ci-joint la facture {numero} pour les prestations de ménage réalisées en {mois} {annee}, "
+             "d'un montant de {total}.\n\n"
+             "Merci d'effectuer le règlement avant le {echeance}.\n\n"
+             "Je reste à votre disposition pour toute question.\n\n"
+             "Cordialement,\n{entreprise}"),
+}
+_MAIL_RE = re.compile(r"[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+")
+
+
+def _mail_sablon():
+    s = settings.get("facturare_mail") or {}
+    return {"subiect": s.get("subiect") or MAIL_SABLON["subiect"], "corp": s.get("corp") or MAIL_SABLON["corp"],
+            "modificat": bool(s.get("subiect") or s.get("corp"))}
+
+
+@app.route("/api/facturare/mail-sablon", methods=["POST"])
+def api_facturare_mail_sablon():
+    """Salveaza sablonul mailului; {reset: true} revine la cel implicit."""
+    d = request.json or {}
+    if d.get("reset"):
+        settings["facturare_mail"] = {}
+    else:
+        sub, corp = str(d.get("subiect") or "").strip()[:200], str(d.get("corp") or "").strip()[:5000]
+        if not sub or not corp:
+            return jsonify({"ok": False, "error": "Completează subiectul și textul"}), 400
+        settings["facturare_mail"] = {"subiect": sub, "corp": corp}
+    cache["dirty"] = True
+    _save_async()
+    return jsonify({"ok": True, "sablon": _mail_sablon()})
+
+
+@app.route("/api/facturare/mail", methods=["POST"])
+def api_facturare_mail():
+    """Trimite factura clientului, din contul Google al scriptului. {client, numar, catre, subiect, corp, nume, pdf}"""
+    d = request.json or {}
+    cfg = settings.get("facturare_drive") or {}
+    if not cfg.get("url"):
+        return jsonify({"ok": False, "error": "Conectează întâi salvarea în Drive: trimiterea folosește același script."}), 400
+    catre = ", ".join(_MAIL_RE.findall(str(d.get("catre") or "")))
+    if not catre:
+        return jsonify({"ok": False, "error": "Scrie adresa de mail a clientului"}), 400
+    sub, corp, nume, pdf = (str(d.get(k) or "") for k in ("subiect", "corp", "nume", "pdf"))
+    if not sub.strip() or not corp.strip() or not pdf or len(pdf) > 6_000_000:
+        return jsonify({"ok": False, "error": "Lipsește subiectul, textul sau factura"}), 400
+    try:
+        data = facturare_data()
+    except Exception:  # noqa: BLE001
+        data = None
+    exp = ""
+    if data:
+        em = next((f for f in data["formate"] if f["id"] == d.get("format")), None) or (data["formate"] or [{}])[0]
+        exp = em.get("nume") or ""
+    r = _drive_call(cfg["url"], {"cheie": cfg.get("cheie"), "mail": {"catre": catre, "subiect": sub[:200], "corp": corp[:5000],
+                                                                     "nume": nume, "pdf": pdf, "expeditor": exp}}, timeout=60)
+    if not r.get("ok"):
+        err = str(r.get("error") or "")
+        if "permission" in err.lower() or "autoriz" in err.lower() or "MailApp" in err:
+            err += " — pune scriptul nou pe script.google.com, rulează o dată „autorizeaza” și fă o implementare nouă"
+        return jsonify({"ok": False, "error": "Mailul nu a plecat: " + err[:300]}), 400
+    client, numar = str(d.get("client") or "")[:120], str(d.get("numar") or "")[:40]
+    mem = settings.setdefault("facturare_mem", {})
+    if client:
+        mem.setdefault("emailuri", {})[client] = catre
+    if numar:
+        tr = mem.setdefault("trimise", {})
+        tr[numar] = {"catre": catre, "la": datetime.now().strftime("%d/%m/%Y %H:%M")}
+        if len(tr) > 400:
+            for k in list(tr)[:len(tr) - 400]:
+                tr.pop(k, None)
+    cache["dirty"] = True
+    _save_async()
+    add_log(f"✉ Factura {numar} trimisă la {catre}")
+    return jsonify({"ok": True, "catre": catre, "ramase": r.get("ramase")})
 
 
 _TIP_CAL = (("Ouverture", ("ouverture", "ouvert", "deschidere")), ("Intermédiaire", ("intermediaire", "interm", "inter")))
@@ -4140,12 +4232,14 @@ def api_facturare():
         clienti.append({**{k: c[k] for k in ("nume", "adresa", "siret", "grup", "casa")},
                         "tarife": (mem.get("grupuri") or {}).get(c["nume"]) or facturare.guess_group(c, data["grupuri"]),
                         "tarife_confirmat": c["nume"] in (mem.get("grupuri") or {}),
-                        "format": (mem.get("formate") or {}).get(c["nume"])})
+                        "format": (mem.get("formate") or {}).get(c["nume"]),
+                        "email": (mem.get("emailuri") or {}).get(c["nume"]) or c.get("email") or ""})
     formate = [{"id": f["id"], "titular": f.get("titular") or "", "payable": f["payable"], "model": f["numar"],
+                "emitent": f.get("nume") or "",
                 "urmator": facturare.next_number(f["numar"], known, today)} for f in data["formate"]]
     return jsonify({"configurat": True, "clienti": clienti, "grupuri": data["grupuri"], "speciale": data["speciale"],
                     "formate": formate, "azi": today.isoformat(), "tipuri": list(facturare.TYPES),
-                    "drive": _drive_public(), "calendar": bool(settings.get("calendar_id")),
+                    "drive": _drive_public(), "calendar": bool(settings.get("calendar_id")), "mail": _mail_sablon(),
                     "prag_ora": float(current_rules().get("prag_forfait") or 40)})
 
 
@@ -4263,6 +4357,7 @@ def api_facturare_pdf():
             else:
                 add_log(f"⚠ Factura {numar} nu a putut fi salvată în Drive: {drive['error']}")
     return jsonify({"ok": True, "pdf": base64.b64encode(pdf).decode(), "nume": facturare.file_name(numar), "drive": drive,
+                    "numar": numar, "client": client["nume"], "scadenta": doc["scadenta"].isoformat(),
                     "subtotal": subtotal, "ajustari": ajust, "total": round(subtotal + ajust, 2),
                     "verificare": probleme})
 

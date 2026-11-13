@@ -405,7 +405,7 @@ def build_pdf(doc):
             p.text(X0, y, part)
             y += 11.5
         y += 2.1
-    p.line(85, 435, 170.8)
+    p.line(85, 378, 170.8)            # se opreste inainte de logo
     y = 173.3
     for ln in em.get("banca") or []:
         p.text(X0, y, ln, color=INK)
