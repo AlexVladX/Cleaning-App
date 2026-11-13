@@ -3807,25 +3807,88 @@ def facturare_known_numbers():
     return nums
 
 
-DRIVE_SCRIPT = """// Salveaza facturile generate de aplicatie in folderul tau de facturi din Drive.
+DRIVE_SCRIPT = r"""// Salveaza facturile generate de aplicatie in folderul de facturi din Drive,
+// in subfolderul clientului (ales dupa nume) si, daca exista, in subfolderul anului.
 const CHEIE = '__CHEIE__';
-const FOLDER = '__FOLDER__';
+const FOLDER_IMPLICIT = '__FOLDER__';
+
+function norm(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function subfoldere(folder, adancime, cale, out) {
+  const it = folder.getFolders();
+  while (it.hasNext()) {
+    const f = it.next(), c = cale ? cale + '/' + f.getName() : f.getName();
+    out.push({f: f, cale: c, n: norm(f.getName())});
+    if (adancime > 1) subfoldere(f, adancime - 1, c, out);
+  }
+  return out;
+}
+
+// cuvinte prea generale ca sa lege singure un client de un folder
+const GENERALE = ['sci', 'sas', 'sasu', 'sarl', 'eurl', 'sa', 'snc', 'ste', 'societe', 'villa', 'villas', 'les', 'le', 'la', 'de', 'des',
+  'du', 'et', 'm', 'mme', 'mr', 'monsieur', 'madame', 'conciergerie', 'immobilier', 'location', 'locations', 'factures', 'facture'];
+function cuvinte(n) { return n.split(' ').filter(function (t) { return t && GENERALE.indexOf(t) < 0; }); }
+
+// subfolderul al carui nume se potriveste cel mai bine cu numele clientului
+function alegeFolder(root, nume) {
+  const lista = subfoldere(root, 2, '', []);
+  let best = null, scor = 0;
+  nume.forEach(function (cand) {
+    const c = norm(cand);
+    if (c.length < 3) return;
+    const ct = cuvinte(c);
+    lista.forEach(function (x) {
+      const xt = cuvinte(x.n);
+      if (!xt.length || !ct.length || xt.join('').length < 3 || /^\d+$/.test(x.n)) return;
+      let s = 0;
+      if (x.n === c) s = 100;
+      else if (xt.every(function (t) { return ct.indexOf(t) >= 0; }) || ct.every(function (t) { return xt.indexOf(t) >= 0; }))
+        s = 50 + Math.min(xt.length, ct.length);
+      if (s > scor) { scor = s; best = x; }
+    });
+  });
+  return best;
+}
+
+function eInauntru(folder, radacinaId) {
+  let nivel = [folder];
+  for (let k = 0; k < 8 && nivel.length; k++) {
+    const urm = [];
+    for (let i = 0; i < nivel.length; i++) {
+      if (nivel[i].getId() === radacinaId) return true;
+      const p = nivel[i].getParents();
+      while (p.hasNext()) urm.push(p.next());
+    }
+    nivel = urm;
+  }
+  return false;
+}
 
 function doPost(e) {
   let out;
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.cheie !== CHEIE) throw new Error('cheie gresita');
-    const folder = DriveApp.getFolderById(FOLDER);
+    const root = DriveApp.getFolderById(d.folder || FOLDER_IMPLICIT);
     if (d.test) {
-      out = {ok: true, folder: folder.getName()};
+      out = {ok: true, folder: root.getName(), id: root.getId(),
+             in_radacina: d.radacina ? eInauntru(root, d.radacina) : null,
+             subfoldere: subfoldere(root, 1, '', []).length};
     } else {
-      if (!/^[A-Za-z0-9 ._()-]{1,80}\\.pdf$/.test(d.nume)) throw new Error('nume de fisier nepermis');
+      if (!/^[A-Za-z0-9 ._()-]{1,80}\.pdf$/.test(d.nume)) throw new Error('nume de fisier nepermis');
+      const ales = alegeFolder(root, d.clienti || []);
+      let folder = ales ? ales.f : root, cale = ales ? root.getName() + '/' + ales.cale : root.getName();
+      if (ales && d.an) {                                   // ex. INA CONCIERGERIE/2026
+        const it = folder.getFolders();
+        while (it.hasNext()) { const f = it.next(); if (norm(f.getName()).indexOf(String(d.an)) >= 0) { folder = f; cale += '/' + f.getName(); break; } }
+      }
       if (folder.getFilesByName(d.nume).hasNext()) {
-        out = {ok: false, exista: true, error: 'exista deja un fisier cu acest nume in folder'};
+        out = {ok: false, exista: true, folder: cale, error: 'exista deja un fisier cu acest nume in ' + cale};
       } else {
         const f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.nume));
-        out = {ok: true, id: f.getId(), folder: folder.getName()};
+        out = {ok: true, id: f.getId(), folder: cale, gasit: !!ales};
       }
     }
   } catch (err) {
@@ -3834,8 +3897,8 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Ruleaza o data functia aceasta din editor (butonul Run) ca sa dai permisiunea de acces la Drive.
-function autorizeaza() { DriveApp.getFolderById(FOLDER).getName(); }
+// Ruleaza o data functia aceasta din editor (butonul Rulati) ca sa dai permisiunea de acces la Drive.
+function autorizeaza() { DriveApp.getFolderById(FOLDER_IMPLICIT).getName(); }
 """
 _DRIVE_URL_RE = re.compile(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]{20,}/exec")
 
@@ -3870,28 +3933,49 @@ def _drive_call(url, payload, timeout=40):
                                       "și rulează o dată funcția „autorizeaza”"}
 
 
+def _folder_id_from(link):
+    link = str(link or "").strip()
+    m = re.search(r"/folders/([A-Za-z0-9_-]{10,})", link) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", link)
+    if m:
+        return m.group(1)
+    return link if re.fullmatch(r"[A-Za-z0-9_-]{10,}", link) else ""
+
+
 def _drive_public():
     cfg = _drive_cfg()
     return {"conectat": bool(cfg.get("url")), "folder": cfg.get("folder") or "",
+            "alt_folder": bool(cfg.get("folder_id") and cfg.get("folder_id") != FOLDER_ID),
+            "in_radacina": cfg.get("in_radacina"),
             "script": DRIVE_SCRIPT.replace("__CHEIE__", cfg["cheie"]).replace("__FOLDER__", FOLDER_ID or "ID-UL-FOLDERULUI")}
 
 
 @app.route("/api/facturare/drive", methods=["POST"])
 def api_facturare_drive():
-    """Leaga (sau dezleaga, cu url gol) scriptul care salveaza facturile in Drive; il si probeaza."""
-    url = str((request.json or {}).get("url") or "").strip()
+    """
+    Leaga (sau dezleaga) scriptul care salveaza facturile in Drive si il probeaza.
+    {url?, folder? (linkul folderului de facturi; gol = cel citit de aplicatie), deconecteaza?}
+    """
+    d = request.json or {}
     cfg = _drive_cfg()
-    if not url:
-        cfg.pop("url", None)
-        cfg.pop("folder", None)
+    if d.get("deconecteaza"):
+        for k in ("url", "folder", "folder_id", "in_radacina"):
+            cfg.pop(k, None)
     else:
+        url = str(d.get("url") or "").strip() or cfg.get("url") or ""
         if not _DRIVE_URL_RE.fullmatch(url):
-            return jsonify({"ok": False, "error": "Linkul trebuie să fie cel de „Aplicație web”, de forma "
+            return jsonify({"ok": False, "error": "Lipsește adresa scriptului: trebuie să fie cea de „Aplicație web”, de forma "
                                                   "https://script.google.com/macros/s/…/exec"}), 400
-        r = _drive_call(url, {"cheie": cfg["cheie"], "test": True})
+        fid = cfg.get("folder_id") or ""
+        if "folder" in d:
+            fid = _folder_id_from(d.get("folder"))
+            if str(d.get("folder") or "").strip() and not fid:
+                return jsonify({"ok": False, "error": "Linkul folderului nu e bun: deschide folderul în Drive și copiază "
+                                                      "adresa din bara browserului (conține /folders/…)"}), 400
+        r = _drive_call(url, {"cheie": cfg["cheie"], "test": True, "folder": fid or None, "radacina": FOLDER_ID or None})
         if not r.get("ok"):
             return jsonify({"ok": False, "error": "Proba nu a reușit: " + str(r.get("error") or "")[:200]}), 400
-        cfg.update(url=url, folder=str(r.get("folder") or "")[:120])
+        cfg.update(url=url, folder=str(r.get("folder") or "")[:120], folder_id=fid,
+                   in_radacina=r.get("in_radacina") if fid else True)
         add_log(f"Salvarea facturilor în Drive e conectată (folderul „{cfg['folder']}”)")
     settings["facturare_drive"] = cfg
     cache["dirty"] = True
@@ -4085,9 +4169,12 @@ def api_facturare_pdf():
                 + (" · ⚠ verificare: " + "; ".join(probleme) if probleme else " · verificată cu cititorul"))
         dcfg = settings.get("facturare_drive") or {}
         if dcfg.get("url"):                      # o copie direct in folderul de facturi din Drive
+            nume_cl = [client["nume"], d.get("tarife") or "", client.get("grup") or "", client.get("casa") or ""]
             r = _drive_call(dcfg["url"], {"cheie": dcfg.get("cheie"), "nume": facturare.file_name(numar),
-                                          "pdf": base64.b64encode(pdf).decode()})
-            drive = {"ok": bool(r.get("ok")), "exista": bool(r.get("exista")), "folder": dcfg.get("folder") or "",
+                                          "pdf": base64.b64encode(pdf).decode(), "folder": dcfg.get("folder_id") or None,
+                                          "clienti": [x for x in nume_cl if x], "an": when.year})
+            drive = {"ok": bool(r.get("ok")), "exista": bool(r.get("exista")), "gasit": r.get("gasit"),
+                     "folder": str(r.get("folder") or dcfg.get("folder") or "")[:200],
                      "error": str(r.get("error") or "")[:200]}
             if drive["ok"]:
                 add_log(f"Factura {numar} a fost salvată în Drive")
