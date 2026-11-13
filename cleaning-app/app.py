@@ -360,7 +360,7 @@ def gzip_json(resp):
 
 @app.before_request
 def require_password():
-    if not APP_PASSWORD or request.path == "/healthz":
+    if not APP_PASSWORD or request.path == "/healthz" or request.path in ICON_PATHS:
         return None
     auth = request.authorization
     # comparam bytes: compare_digest pe text da TypeError daca parola are caractere non-ASCII (ex. ă, é)
@@ -4443,6 +4443,63 @@ def api_unmerge():
         add_log(f"Unire anulata: '{key}'")
         _save_async()
     return jsonify(_settings_payload())
+
+
+# ---------------------------------------------------------------- iconita (tab, ecranul de pornire al telefonului)
+# APP_ICON: gol = iconita generica din static/icon.png; „logo” = logo-ul de pe facturi (facturare/logo.png);
+# altfel calea unui PNG de pe server. Iconitele nu sunt protejate de parola: iPhone-ul le cere fara ea.
+ICON_SIZES = {"/apple-touch-icon.png": 180, "/apple-touch-icon-precomposed.png": 180, "/favicon.png": 64,
+              "/favicon.ico": 64, "/icon-192.png": 192, "/icon-512.png": 512}
+ICON_PATHS = set(ICON_SIZES) | {"/manifest.webmanifest"}
+_icon_cache = {}
+
+
+def _icon_source():
+    v = os.environ.get("APP_ICON", "").strip()
+    here = os.path.dirname(os.path.abspath(__file__))
+    if v.lower() == "logo":
+        return os.path.join(here, "facturare", "logo.png")
+    return v if v and os.path.isfile(v) else os.path.join(here, "static", "icon.png")
+
+
+def _icon_png(size):
+    if size not in _icon_cache:
+        import io
+        from PIL import Image
+        with Image.open(_icon_source()) as im:
+            im = im.convert("RGB")                 # iPhone vrea iconita fara transparenta
+            w, h = im.size
+            if w != h:                             # o facem patrata, taiind din mijloc
+                m = min(w, h)
+                im = im.crop(((w - m) // 2, (h - m) // 2, (w - m) // 2 + m, (h - m) // 2 + m))
+            buf = io.BytesIO()
+            im.resize((size, size), Image.LANCZOS).save(buf, "PNG", optimize=True)
+        _icon_cache[size] = buf.getvalue()
+    return _icon_cache[size]
+
+
+def _icon_route(path):
+    def view():
+        try:
+            return Response(_icon_png(ICON_SIZES[path]), mimetype="image/png",
+                            headers={"Cache-Control": "public, max-age=604800"})
+        except Exception as e:  # noqa: BLE001
+            return Response(f"iconita indisponibila: {e}", 404)
+    view.__name__ = "icon_" + re.sub(r"\W", "_", path)
+    app.add_url_rule(path, view_func=view)
+
+
+for _p in ICON_SIZES:
+    _icon_route(_p)
+
+
+@app.route("/manifest.webmanifest")
+def web_manifest():
+    name = COMPANY_NAME or "Facturi"
+    return jsonify({"name": name, "short_name": name[:12], "start_url": "/", "display": "standalone",
+                    "background_color": "#ffffff", "theme_color": "#2F5BEA",
+                    "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                              {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]})
 
 
 @app.route("/healthz")
