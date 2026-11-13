@@ -633,6 +633,40 @@
   #settings-box>summary,#log-fold>summary{display:none}
   .log{max-height:60vh}
 
+  /* ---- etapa 2: Factura noua ---- */
+  .fn-lay{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start;margin-top:14px}
+  .fn-side{position:sticky;top:16px;background:var(--line-2);border-radius:16px;padding:18px}
+  .fn-side h3{font-size:15px;font-weight:650;margin-bottom:12px}
+  .fn-side .fn-total{flex-direction:column;gap:8px;margin:0;align-items:stretch;font-size:13.5px;color:var(--ink-2)}
+  .fn-side .fn-total span{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .fn-side .fn-total span:last-child{border-top:1px solid var(--line);padding-top:12px;margin-top:4px;color:var(--ink);font-weight:600}
+  .fn-side .fn-total b.big{font-size:24px;color:var(--ink);letter-spacing:-.02em}
+  .fn-side .toolbar{flex-direction:column;align-items:stretch;margin-top:16px!important}
+  .fn-side .toolbar .btn{justify-content:center;padding:11px}
+  .fn-side #fn-result{line-height:1.5;overflow-wrap:anywhere}
+  .fn-side #fn-result:empty{display:none}
+  .fn-grid label{font-weight:500}
+  @media(max-width:1100px){.fn-lay{grid-template-columns:minmax(0,1fr)}.fn-side{position:static}}
+  /* ---- etapa 2: Incasari ---- */
+  .inc-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .inc-bar .seg button{padding:7px 14px;font-size:13px}
+  #inc-head{margin:12px 0 4px}
+  #inc-list .due-row:first-child{border-top:0}
+  .due-part{border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;padding:4px;white-space:nowrap}
+  .due-part:hover{color:var(--brand)}
+  #pay-sum{border:1px solid #DADDE5;border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;text-align:right}
+  /* ---- etapa 2: Calendar ---- */
+  .gstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;margin-top:14px}
+  .gstats button{border:1.5px solid var(--line);background:var(--card);border-radius:14px;padding:12px 14px;font:inherit;font-size:12.5px;color:var(--muted);text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+  .gstats button b{font-size:22px;color:var(--ink);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .gstats button:hover{border-color:var(--faint)}
+  .gstats button.on{border-color:var(--ink);color:var(--ink)}
+  .gstats button.has[data-g="nefacturat"] b{color:var(--bad-ink)}
+  .gstats button.has[data-g="data_diferita"] b,.gstats button.has[data-g="fara_eveniment"] b{color:var(--warn-ink)}
+  #g-head{margin:12px 0 8px}
+  #g-list td{vertical-align:middle}
+  .ok-btn{border-radius:8px;padding:5px 10px;font-size:12px;font-family:inherit}
+
   .bnav{display:none}
   @media(max-width:860px){
     .app{display:block}.side{display:none}
@@ -658,6 +692,8 @@
     .bnav button.on{color:var(--brand);font-weight:600}
     .bnav .mid i{width:48px;height:48px;border-radius:16px;background:var(--brand);color:#fff;display:grid;place-items:center;margin-top:-22px;box-shadow:0 8px 18px -6px var(--brand)}
     .toast,#txt-bar{bottom:84px}
+    .due-part{display:none}
+    .gstats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.gstats button{padding:10px}.gstats button b{font-size:19px}
   }
 </style>
 </head>
@@ -743,6 +779,7 @@
         </div>
         <div class="card home-side">
           <div class="home-h"><h2>De urmărit</h2></div>
+        <div class="metric click" id="m-gcal-box" data-go="gcal"><div class="metric-label">De verificat în calendar</div><div class="metric-value" id="m-gcal">—</div><div class="metric-sub">calendar față de facturi</div></div>
         <div class="metric click m-rose" id="m-prices-box" onclick="showTab('facturi', 'preturi')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></span>Abateri de preț</div><div class="metric-value" id="m-prices">—</div><div class="metric-sub">posibile greșeli în facturi</div></div>
         <div class="metric click m-amber" id="m-warn-box" onclick="showTab('facturi', 'fisiere')"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 13h5M10 17h5"/></svg></span>Facturi de verificat</div><div class="metric-value" id="m-warn">—</div><div class="metric-sub" id="m-files-sub"></div></div>
         <div class="metric click m-violet" id="m-inactive-box" onclick="showInactive()" title="Case fără menaj de mult mai mult timp decât de obicei"><div class="metric-label"><span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></span>Case inactive</div><div class="metric-value" id="m-inactive">—</div><div class="metric-sub" id="m-inactive-sub"></div></div>
@@ -857,10 +894,13 @@
 
     <!-- INCASARI -->
     <section class="panel" id="panel-incasari" role="tabpanel">
-      <div class="toolbar" style="margin-top:14px;justify-content:space-between">
-        <div class="headline" id="inc-head" style="margin:0"></div>
-        <label class="hint" style="display:flex;gap:6px;align-items:center">An <select id="inc-an" style="width:auto"></select></label>
+      <div class="inc-bar">
+        <div class="seg" id="inc-view"><button type="button" data-v="lista">De bifat</button><button type="button" data-v="tabel">Pe luni</button></div>
+        <label class="hint" id="inc-an-l" style="display:flex;gap:6px;align-items:center">An <select id="inc-an" style="width:auto"></select></label>
       </div>
+      <div class="headline" id="inc-head"></div>
+      <div id="inc-v-lista" hidden><div id="inc-list"><div class="empty">Se încarcă…</div></div></div>
+      <div id="inc-v-tabel">
       <div class="leg"><span><i style="background:#BBF7D0"></i>încasat</span><span><i style="background:#FDE68A"></i>plată parțială</span><span><i style="background:#FECACA"></i>restant</span><span><i style="background:#fff;border:1px solid #D1D5DB"></i>neîncasat, încă nescadent</span><span class="hint ex">Click pe o căsuță → facturile din luna aceea</span></div>
       <div style="overflow-x:auto" id="inc-wrap"><table class="pm" id="inc-table"></table></div>
       <details class="fold" style="margin-top:12px">
@@ -869,6 +909,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span>Marchează încasate toate facturile până la</span><select id="inc-pana" style="width:auto"></select><span>inclusiv</span><button class="btn btn-dark btn-sm" id="inc-pana-btn">Marchează</button></div>
       </details>
       <p class="hint ex" style="margin-top:8px">Căsuța = facturile clientului pentru luna lucrărilor (luna menajelor de pe factură). Scadența se citește din factură; dacă lipsește, se consideră 30 de zile de la emitere. Clienții grupați apar pe un singur rând. Facturile duplicate sau cu eroare nu apar.</p>
+      </div>
     </section>
 
     <!-- CHELTUIELI -->
@@ -911,20 +952,23 @@
         </ol>
         <p class="hint ex" style="margin-bottom:12px">Recomandat: un calendar separat doar pentru menaje, cu numele casei în titlu (ex. „Villa Emma 45 – Ouverture”). Titlurile evenimentelor nu se salvează nicăieri, se citesc doar pentru comparație.</p>
       </div>
-      <div class="xform" id="g-form" style="margin-top:14px">
+      <div id="g-body" style="display:none">
+        <div class="gstats" id="g-filter">
+          <button type="button" data-g="nefacturat" data-l="Nefacturate" class="on"></button><button type="button" data-g="data_diferita" data-l="Dată diferită"></button><button type="button" data-g="fara_eveniment" data-l="Fără eveniment"></button><button type="button" data-g="de_facturat" data-l="De facturat"></button><button type="button" data-g="neidentificate" data-l="Neidentificate"></button><button type="button" data-g="ok" data-l="Verificate"></button>
+        </div>
+        <div class="headline" id="g-head"></div>
+        <div class="hint ex" id="g-help" style="margin-bottom:8px"></div>
+        <div class="table-wrap"><table class="t"><tbody id="g-list"></tbody></table></div>
+      </div>
+      <details class="fold" id="g-cfg" style="margin-top:16px">
+        <summary><span class="card-title">Setări calendar</span></summary>
+      <div class="xform" id="g-form">
         <label style="flex:3 1 280px">ID-ul calendarului<input id="g-cid" placeholder="abc123…@group.calendar.google.com"></label>
         <label>Verifică de la (opțional)<input type="date" id="g-from"></label>
         <button class="btn btn-dark" type="button" id="g-save">Salvează și citește calendarul</button>
         <span class="hint" id="gc-status" style="flex-basis:100%"></span>
       </div>
-      <div id="g-body" style="display:none">
-        <div class="headline" id="g-head"></div>
-        <div class="seg" id="g-filter" style="margin-bottom:10px">
-          <button data-g="nefacturat" class="on">Nefacturate</button><button data-g="data_diferita">Dată diferită</button><button data-g="fara_eveniment">Fără eveniment</button><button data-g="de_facturat">De facturat</button><button data-g="neidentificate">Neidentificate</button><button data-g="ok">Verificate</button>
-        </div>
-        <div class="hint" id="g-help" style="margin-bottom:8px"></div>
-        <div class="table-wrap"><table class="t"><tbody id="g-list"></tbody></table></div>
-      </div>
+      </details>
     </section>
 
     <!-- ZONE -->
@@ -966,8 +1010,9 @@
           <div class="hint" id="fn-setup-err" style="color:var(--bad-ink);margin-top:8px"></div>
         </div>
         <div id="fn-form" hidden>
+        <div class="fn-lay"><div class="fn-main">
           <p class="hint ex" style="margin:10px 0 8px">Alegi clientul, adaugi casele și scrii zilele (ex. „3, 10, 17”). Prețurile vin din Sheet; orice preț sau cantitate se poate schimba. Factura se descarcă pe acest dispozitiv: pune-o apoi în folderul de facturi din Drive.</p>
-          <div class="fn-grid">
+          <div class="fn-grid" style="margin-top:0">
             <label>Client<select id="fn-client" class="search"></select></label>
             <label>Format / cont<select id="fn-format" class="search"></select></label>
             <label>Număr factură<input id="fn-numar" class="search" autocomplete="off"></label>
@@ -996,12 +1041,14 @@
             <label>Valoare<input id="fn-aj-val" class="search" type="number" min="0" step="0.01"></label>
             <label style="grid-column:span 2">Motiv (apare pe factură, opțional)<input id="fn-aj-motiv" class="search" maxlength="80"></label>
           </div>
+        </div><aside class="fn-side"><h3>Total factură</h3>
           <div class="fn-total" id="fn-total"></div>
           <div class="toolbar" style="margin-top:10px">
             <button class="btn" type="button" id="fn-preview">👁 Previzualizează</button>
             <button class="btn primary" type="button" id="fn-gen">⬇ Generează și descarcă</button>
           </div>
           <div class="hint" id="fn-result" style="margin-top:10px"></div>
+        </aside></div>
         </div>
       </div>
       <div id="fsub-preturi" hidden>
@@ -1232,7 +1279,7 @@ async function fetchAnalytics() {
     lastDataKey = key;
     renderAnalytics();
     if (tab === 'incasari') fetchPayments(); else if (payKey !== key) fetchPaySummary();
-    if (tab === 'acasa') fetchDue();
+    if (tab === 'acasa' || (tab === 'incasari' && incView === 'lista')) fetchDue();
     if (tab === 'cheltuieli') fetchExpenses();
     if (tab === 'gcal' || !G || G.configurat) fetchGcal();
   } finally { anLoading = false; }
@@ -2963,6 +3010,8 @@ const G_HELP = {
 function renderGcal() {
   if (!G) return;
   const nb = $('n-gcal'); nb.textContent = G.de_verificat || ''; nb.classList.toggle('alert', !!G.de_verificat);
+  $('m-gcal').textContent = G.de_verificat || 0; $('m-gcal-box').classList.toggle('alert', !!G.de_verificat);
+  if (!(G.configurat && G.citit) || G.eroare) $('g-cfg').open = true;
   $('g-setup').style.display = G.configurat && G.citit ? 'none' : '';
   $('g-sa').textContent = G.service_account || 'email-ul service account-ului';
   const ci = $('g-cid'); if (document.activeElement !== ci) ci.value = G.calendar_id || '';
@@ -2978,7 +3027,7 @@ function renderGcal() {
     + (dd ? `<b>${dd}</b> cu dată diferită. ` : '') + (fe ? `${fe} facturate fără eveniment.` : '');
   const counts = {nefacturat: nf, data_diferita: dd, fara_eveniment: fe, de_facturat: G.de_facturat.length, neidentificate: G.neidentificate.length,
     ok: ['nefacturat', 'data_diferita', 'fara_eveniment'].reduce((a, k) => a + G[k].filter(x => x.ok).length, 0)};
-  document.querySelectorAll('#g-filter button').forEach(b => { b.classList.toggle('on', b.dataset.g === gFilter); const base = b.textContent.replace(/ \(\d+\)$/, ''); b.textContent = counts[b.dataset.g] ? `${base} (${counts[b.dataset.g]})` : base; });
+  document.querySelectorAll('#g-filter button').forEach(b => { b.classList.toggle('on', b.dataset.g === gFilter); b.classList.toggle('has', !!counts[b.dataset.g]); b.innerHTML = `<b>${counts[b.dataset.g] || 0}</b>${esc(b.dataset.l)}`; });
   $('g-help').textContent = G_HELP[gFilter];
   let rows;
   const okBtn = x => x.ok ? `<button class="undo-btn" data-gundo="${esc(x.id)}">anulează</button>` : `<button class="ok-btn" data-gok="${esc(x.id)}">✓ E corect</button>`;
@@ -3487,6 +3536,7 @@ function showTab(t, sub) {
   if (t === 'cheltuieli') fetchExpenses();
   if (t === 'gcal') fetchGcal();
   if (t === 'acasa') fetchDue();
+  if (t === 'incasari') applyIncView();
   // sectiunea din meniu careia ii apartine tabul
   const sec = secOf(t); store.set('sec-' + sec, t);
   document.body.dataset.sec = sec; document.body.dataset.tab = t;
@@ -3509,45 +3559,65 @@ function navBadges() {
 }
 new MutationObserver(navBadges).observe($('tabs'), {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class']});
 
-// ------------------------------------------------------------ Acasa: lista "De incasat" (bifa = factura incasata integral)
+// ------------------------------------------------------------ lista "De incasat" (Acasa + Incasari): bifa = factura incasata integral
 let DUE = null, dueAll = false;
 async function fetchDue() {
-  try { DUE = await (await fetch('/api/incasari')).json(); renderDue(); } catch (e) { console.error(e); }
+  try {
+    const first = await (await fetch('/api/incasari')).json(), all = [first];
+    if ((first.sumar.de_incasat || 0) - (first.sumar.de_incasat_an || 0) > 0.01)        // au ramas neincasate si din alti ani
+      for (const an of first.ani.filter(a => a !== first.an)) all.push(await (await fetch('/api/incasari?an=' + encodeURIComponent(an))).json());
+    const rows = [];
+    all.forEach(P1 => P1.clienti.forEach(c => Object.values(c.celule).forEach(cell => cell.facturi.forEach(f => { if (f.rest > 0.01) rows.push({...f, cl: c.client}); }))));
+    rows.sort((a, b) => (b.zile_intarziere - a.zile_intarziere) || String(a.scadenta || '9').localeCompare(String(b.scadenta || '9')));
+    DUE = rows; renderDue();
+  } catch (e) { console.error(e); }
+}
+function dueRow(f, part) {
+  const ck = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>';
+  const ini = (f.cl.match(/[\p{L}\p{N}]+/gu) || ['?']).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const luna = new Date(f.luna + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
+  let pill;
+  if (f.stare === 'late') pill = `<span class="pill late">restantă ${f.zile_intarziere} ${f.zile_intarziere === 1 ? 'zi' : 'zile'}</span>`;
+  else if (f.stare === 'part') pill = `<span class="pill part">parțial · din ${eur(f.total)}</span>`;
+  else pill = `<span class="pill wait">scadentă ${f.scadenta ? f.scadenta.slice(8, 10) + '.' + f.scadenta.slice(5, 7) : '—'}</span>`;
+  return `<div class="due-row"><div class="due-av" aria-hidden="true">${esc(ini)}</div><div class="due-t"><b>${esc(f.cl)}</b><span>${esc(luna)} · ${esc(f.numar || '—')}</span></div>${pill}
+    ${part ? `<button type="button" class="due-part" data-duepart="${esc(f.id)}">Parțial…</button>` : ''}<span class="due-amt">${eur(f.rest)}</span>
+    <button type="button" class="due-tick" data-due="${esc(f.id)}" data-nr="${esc(f.numar || 'Factura')}" title="Marchează încasată" aria-label="Marchează încasată: ${esc(f.cl)}, ${eur(f.rest)}">${ck}</button></div>`;
 }
 function renderDue() {
-  const box = $('due-list'); if (!DUE || !DUE.clienti) return;
-  const rows = [];
-  DUE.clienti.forEach(c => Object.values(c.celule).forEach(cell => cell.facturi.forEach(f => { if (f.rest > 0.01) rows.push({...f, cl: c.client}); })));
-  rows.sort((a, b) => (b.zile_intarziere - a.zile_intarziere) || String(a.scadenta || '9').localeCompare(String(b.scadenta || '9')));
-  const alti = Math.round(((DUE.sumar.de_incasat || 0) - (DUE.sumar.de_incasat_an || 0)) * 100) / 100;
-  if (!rows.length && alti <= 0.01) { box.innerHTML = '<div class="empty">Totul e încasat.</div>'; return; }
-  const N = 8, shown = dueAll ? rows : rows.slice(0, N);
-  const ck = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>';
-  let html = shown.map(f => {
-    const ini = (f.cl.match(/[\p{L}\p{N}]+/gu) || ['?']).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-    const luna = new Date(f.luna + '-01T00:00:00').toLocaleDateString('ro-RO', {month: 'long', year: 'numeric'});
-    let pill;
-    if (f.stare === 'late') pill = `<span class="pill late">restantă ${f.zile_intarziere} ${f.zile_intarziere === 1 ? 'zi' : 'zile'}</span>`;
-    else if (f.stare === 'part') pill = `<span class="pill part">parțial · din ${eur(f.total)}</span>`;
-    else pill = `<span class="pill wait">scadentă ${f.scadenta ? f.scadenta.slice(8, 10) + '.' + f.scadenta.slice(5, 7) : '—'}</span>`;
-    return `<div class="due-row"><div class="due-av" aria-hidden="true">${esc(ini)}</div><div class="due-t"><b>${esc(f.cl)}</b><span>${esc(luna)} · ${esc(f.numar || '—')}</span></div>${pill}<span class="due-amt">${eur(f.rest)}</span>
-      <button type="button" class="due-tick" data-due="${esc(f.id)}" data-nr="${esc(f.numar || 'Factura')}" title="Marchează încasată" aria-label="Marchează încasată: ${esc(f.cl)}, ${eur(f.rest)}">${ck}</button></div>`;
-  }).join('');
-  const foot = [];
-  if (rows.length > N) foot.push(`<button type="button" class="linkbtn" data-dueall="1">${dueAll ? 'Arată mai puține' : 'Arată toate (' + rows.length + ')'}</button>`);
-  if (alti > 0.01) foot.push(`<span>+ ${eur(alti)} din alți ani, în <button type="button" class="linkbtn" data-go="incasari">Încasări</button></span>`);
-  if (foot.length) html += `<div class="due-foot">${foot.join('')}</div>`;
-  box.innerHTML = html;
+  if (!DUE) return;
+  const N = 8, none = '<div class="empty">Totul e încasat.</div>';
+  $('due-list').innerHTML = !DUE.length ? none : (dueAll ? DUE : DUE.slice(0, N)).map(f => dueRow(f, false)).join('')
+    + (DUE.length > N ? `<div class="due-foot"><button type="button" class="linkbtn" data-dueall="1">${dueAll ? 'Arată mai puține' : 'Arată toate (' + DUE.length + ')'}</button></div>` : '');
+  $('inc-list').innerHTML = !DUE.length ? none : DUE.map(f => dueRow(f, true)).join('');
 }
-$('due-list').addEventListener('click', async e => {
+async function dueClick(e) {
   if (e.target.closest('[data-dueall]')) { dueAll = !dueAll; renderDue(); return; }
+  const pp = e.target.closest('[data-duepart]');
+  if (pp) {          // plata partiala: deschide factura in tabelul pe luni, cu campul de suma
+    const f = (DUE || []).find(x => x.id === pp.dataset.duepart); if (!f) return;
+    payYear = f.luna.slice(0, 4); store.set('payYear', payYear); payOpen = {c: f.cl, m: f.luna}; payPartial = f.id;
+    incView = 'tabel'; store.set('incView', incView); applyIncView(); fetchPayments(); return;
+  }
   const b = e.target.closest('[data-due]'); if (!b || b.disabled) return;
   b.disabled = true;
   const id = b.dataset.due, j = await post('/api/incasari', {ids: [id]});
   if (!j) { b.disabled = false; return; }
-  await fetchDue(); fetchPaySummary();
-  showToast(`${b.dataset.nr} marcată încasată`, async () => { await post('/api/incasari', {ids: [id], undo: true}); fetchDue(); fetchPaySummary(); });
-});
+  const again = () => { fetchDue(); if (tab === 'incasari') fetchPayments(); else fetchPaySummary(); };
+  again();
+  showToast(`${b.dataset.nr} marcată încasată`, async () => { await post('/api/incasari', {ids: [id], undo: true}); again(); });
+}
+$('due-list').addEventListener('click', dueClick); $('inc-list').addEventListener('click', dueClick);
+// Incasari: lista de bifat (implicit pe telefon) sau tabelul pe luni (implicit pe PC)
+let incView = store.get('incView', innerWidth <= 860 ? 'lista' : 'tabel');
+function applyIncView() {
+  ['lista', 'tabel'].forEach(v => { $('inc-v-' + v).hidden = v !== incView; });
+  document.querySelectorAll('#inc-view button').forEach(b => b.classList.toggle('on', b.dataset.v === incView));
+  $('inc-an-l').style.visibility = incView === 'tabel' ? '' : 'hidden';
+  if (incView === 'lista') fetchDue(); else fitPayDetail();
+}
+$('inc-view').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; incView = b.dataset.v; store.set('incView', incView); applyIncView(); });
+applyIncView();
 $('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
 $('period').addEventListener('change', e => { period = e.target.value; store.set('period', period); lastDataKey = null; fetchAnalytics(); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!A) return; if (tab === 'evolutie') drawMonthlyCharts(); if (tab === 'calendar') drawCalendar(); if (tab === 'zone') drawZoneChart(); }, 150); });
