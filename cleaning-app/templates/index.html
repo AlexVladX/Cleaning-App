@@ -356,6 +356,10 @@
   }
   .fn-drive-setup{margin-top:14px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff)}
   .fn-drive-setup h3{margin:0;font-size:15px}
+  .fn-mail-grid{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .fn-mail-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+  .fn-mail-grid textarea{font:13.5px/1.5 inherit;resize:vertical;width:100%}
+  #fn-mail a{color:var(--brand);text-decoration:underline;cursor:pointer;font-size:13px}
   .fn-drive-setup ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px;font-size:13.5px;line-height:1.5}
   .fn-drive-setup a,#fn-cal-info a{color:var(--brand);text-decoration:underline;cursor:pointer}
   #fn-cal-info ul{margin:4px 0 0;padding-left:18px}
@@ -1094,6 +1098,33 @@
           <div class="hint" id="fn-result" style="margin-top:10px"></div>
           <div class="fn-more" id="fn-drive"></div>
         </aside></div>
+        <div id="fn-mail" class="fn-drive-setup" hidden>
+          <h3>Trimite factura <span id="fn-mail-nr"></span> clientului</h3>
+          <div class="fn-mail-grid">
+            <label>Către<input class="search" id="fn-mail-to" type="text" placeholder="adresa@client.fr (mai multe: separate cu virgulă)" autocomplete="off"></label>
+            <label>Subiect<input class="search" id="fn-mail-sub" type="text" maxlength="200"></label>
+            <label>Mesaj<textarea class="search" id="fn-mail-body" rows="11" maxlength="5000"></textarea></label>
+          </div>
+          <div class="hint" style="margin-top:6px">Factura e atașată automat. Pleacă din contul tău Gmail (cel al scriptului) și rămâne în „Trimise”. Adresa se ține minte pentru data viitoare.</div>
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn primary" type="button" id="fn-mail-send">✉ Trimite</button>
+            <button class="btn" type="button" id="fn-mail-cancel">Închide</button>
+            <a id="fn-mail-tpl-open" style="margin-left:auto">✎ Modifică șablonul (pentru toate facturile)</a>
+          </div>
+          <div class="hint" id="fn-mail-err" style="margin-top:8px"></div>
+          <div id="fn-mail-tpl" hidden style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+            <b style="font-size:13.5px">Șablonul mailului</b>
+            <div class="hint" style="margin:4px 0 8px">Cuvintele dintre acolade se înlocuiesc singure la fiecare factură: <code>{client}</code> <code>{numero}</code> <code>{mois}</code> (luna menajelor, ex. octobre) <code>{annee}</code> <code>{total}</code> <code>{echeance}</code> <code>{entreprise}</code></div>
+            <div class="fn-mail-grid">
+              <label>Subiect<input class="search" id="fn-tpl-sub" type="text" maxlength="200"></label>
+              <label>Mesaj<textarea class="search" id="fn-tpl-body" rows="11" maxlength="5000"></textarea></label>
+            </div>
+            <div class="toolbar" style="margin-top:8px">
+              <button class="btn primary btn-sm" type="button" id="fn-tpl-save">Salvează șablonul</button>
+              <button class="btn btn-sm" type="button" id="fn-tpl-reset">Revino la cel inițial</button>
+            </div>
+          </div>
+        </div>
         <div id="fn-drive-setup" class="fn-drive-setup" hidden>
           <h3>Salvare automată în Drive</h3>
           <p class="hint" style="margin:4px 0 10px">Se face o singură dată, în vreo 5 minute. După aceea, fiecare factură generată ajunge singură în folderul de facturi, <b>în subfolderul clientului</b> (găsit după nume; dacă are și un subfolder cu anul, ex. „2026”, intră acolo), și apare în aplicație.</p>
@@ -2611,13 +2642,72 @@ async function fnMake(final, force) {
       : dr.ok ? `✓ Salvată în Drive, în „${esc(dr.folder)}”${FN && FN.drive && FN.drive.in_radacina === false ? ' (folder pe care aplicația nu îl citește)' : ': apare în aplicație în scurt timp'}.`
       : `<b style="color:var(--bad-ink)">⚠ Nu s-a salvat în Drive: ${esc(dr.error || 'eroare')}.</b> Pune de mână fișierul descărcat în folder.`;
     $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> ${inDrive ? 'generată' : 'descărcată'} · total ${eur2(j.total)} · ${check}<br>${drTxt} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>${inDrive ? ` · <a href="${url}" download="${esc(j.nume)}">descarc-o și pe dispozitiv</a>` : ''}`;
+    const fmt = (FN.formate || []).find(x => x.id === body.format) || {};
+    FN_LAST = {pdf: j.pdf, nume: j.nume, numar: j.numar, client: j.client, total: j.total, scadenta: j.scadenta,
+               luna: $('fn-luna').value, format: body.format, entreprise: fmt.emitent || '',
+               email: ((FN.clienti || []).find(c => c.nume === j.client) || {}).email || ''};
+    $('fn-result').innerHTML += FN.drive && FN.drive.mail
+      ? `<div style="margin-top:8px"><button class="btn btn-sm primary" type="button" id="fn-mail-go">✉ Trimite clientului</button> <span id="fn-mail-st"></span></div>`
+      : `<div class="fn-more" style="margin-top:6px">Ca să poți trimite facturile pe mail, ${FN.drive && FN.drive.conectat ? 'pune scriptul nou pe script.google.com (are acum și trimiterea de mail) și reconectează-l din „setări”.' : 'conectează salvarea automată în Drive: trimiterea folosește același script.'}</div>`;
     try { localStorage.removeItem(fnDraftKey); } catch (e) {}
-    const keep = $('fn-result').innerHTML; FNR = []; $('fn-aj-mod').value = $('fn-aj-val').value = $('fn-aj-motiv').value = ''; fnAjShow(false); $('fn-cal-info').textContent = ''; await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep;
+    const keep = $('fn-result').innerHTML; FNR = []; $('fn-aj-mod').value = $('fn-aj-val').value = $('fn-aj-motiv').value = ''; fnAjShow(false); $('fn-cal-info').textContent = ''; await fnLoad(true); $('fn-client').value = ''; $('fn-client-info').textContent = ''; fnRenderRows(); $('fn-result').innerHTML = keep; if ($('fn-mail-go')) $('fn-mail-go').onclick = fnMailOpen;
   } else {
     $('fn-result').innerHTML = `Previzualizare gata · total ${eur2(j.total)} · ${check} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
     window.open(url, '_blank');
   }
 }
+// ---- trimiterea facturii pe mail
+let FN_LAST = null;
+const LUNI_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+function fnMailFill(t) {
+  const L = FN_LAST || {}, [an, lu] = (L.luna || '').split('-').map(Number);
+  const v = {client: L.client || '', numero: L.numar || '', mois: lu ? LUNI_FR[lu - 1] : '', annee: an || '',
+             total: L.total != null ? L.total.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €' : '',
+             echeance: L.scadenta ? L.scadenta.slice(8) + '/' + L.scadenta.slice(5, 7) + '/' + L.scadenta.slice(0, 4) : '', entreprise: L.entreprise || ''};
+  return String(t || '').replace(/\{(\w+)\}/g, (m, k) => k in v ? v[k] : m);
+}
+function fnMailOpen() {
+  const t = (FN && FN.mail) || {};
+  $('fn-mail-nr').textContent = FN_LAST.numar;
+  $('fn-mail-to').value = FN_LAST.email || '';
+  $('fn-mail-sub').value = fnMailFill(t.subiect);
+  $('fn-mail-body').value = fnMailFill(t.corp);
+  $('fn-mail-err').textContent = ''; $('fn-mail-tpl').hidden = true;
+  $('fn-mail').hidden = false; $('fn-mail').scrollIntoView({behavior: 'smooth', block: 'start'});
+  (FN_LAST.email ? $('fn-mail-send') : $('fn-mail-to')).focus();
+}
+$('fn-mail-cancel').addEventListener('click', () => { $('fn-mail').hidden = true; });
+$('fn-mail-send').addEventListener('click', async () => {
+  const err = $('fn-mail-err'), btn = $('fn-mail-send');
+  if (!/@/.test($('fn-mail-to').value)) { err.style.color = 'var(--bad-ink)'; err.textContent = 'Scrie adresa de mail a clientului.'; $('fn-mail-to').focus(); return; }
+  btn.disabled = true; err.style.color = ''; err.textContent = 'Se trimite…';
+  let j;
+  try { j = await (await fetch('/api/facturare/mail', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+    client: FN_LAST.client, numar: FN_LAST.numar, format: FN_LAST.format, nume: FN_LAST.nume, pdf: FN_LAST.pdf,
+    catre: $('fn-mail-to').value, subiect: $('fn-mail-sub').value, corp: $('fn-mail-body').value})})).json(); }
+  catch (e) { j = {ok: false, error: 'Nu am putut contacta aplicația'}; }
+  btn.disabled = false;
+  if (!j.ok) { err.style.color = 'var(--bad-ink)'; err.textContent = j.error || 'Nu a mers'; return; }
+  const c = (FN.clienti || []).find(x => x.nume === FN_LAST.client); if (c) c.email = j.catre;
+  FN_LAST.email = j.catre; $('fn-mail').hidden = true;
+  if ($('fn-mail-st')) { $('fn-mail-st').innerHTML = `✓ Trimisă la ${esc(j.catre)}`; $('fn-mail-go').textContent = '✉ Trimite din nou'; }
+  showToast(`Factura ${FN_LAST.numar} a fost trimisă`);
+});
+$('fn-mail-tpl-open').addEventListener('click', () => {
+  const t = (FN && FN.mail) || {}, box = $('fn-mail-tpl');
+  box.hidden = !box.hidden; $('fn-tpl-sub').value = t.subiect || ''; $('fn-tpl-body').value = t.corp || '';
+});
+async function fnTplSave(body) {
+  let j;
+  try { j = await (await fetch('/api/facturare/mail-sablon', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json(); }
+  catch (e) { j = {ok: false, error: 'Nu am putut contacta aplicația'}; }
+  if (!j.ok) { $('fn-mail-err').style.color = 'var(--bad-ink)'; $('fn-mail-err').textContent = j.error || 'Nu a mers'; return; }
+  FN.mail = j.sablon; $('fn-tpl-sub').value = j.sablon.subiect; $('fn-tpl-body').value = j.sablon.corp;
+  $('fn-mail-sub').value = fnMailFill(j.sablon.subiect); $('fn-mail-body').value = fnMailFill(j.sablon.corp);
+  showToast('Șablonul e salvat');
+}
+$('fn-tpl-save').addEventListener('click', () => fnTplSave({subiect: $('fn-tpl-sub').value, corp: $('fn-tpl-body').value}));
+$('fn-tpl-reset').addEventListener('click', () => fnTplSave({reset: true}));
 $('fn-aj-show').addEventListener('click', () => { fnAjShow(true); $('fn-aj-mod').focus(); });
 ['fn-data', 'fn-zile'].forEach(id => $(id).addEventListener('input', fnMore));
 $('fn-preview').addEventListener('click', () => fnMake(false));
