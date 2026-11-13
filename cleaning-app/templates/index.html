@@ -1096,13 +1096,15 @@
         </aside></div>
         <div id="fn-drive-setup" class="fn-drive-setup" hidden>
           <h3>Salvare automată în Drive</h3>
-          <p class="hint" style="margin:4px 0 10px">Se face o singură dată, în vreo 5 minute. După aceea, fiecare factură generată ajunge singură în folderul de facturi și apare în aplicație.</p>
+          <p class="hint" style="margin:4px 0 10px">Se face o singură dată, în vreo 5 minute. După aceea, fiecare factură generată ajunge singură în folderul de facturi, <b>în subfolderul clientului</b> (găsit după nume; dacă are și un subfolder cu anul, ex. „2026”, intră acolo), și apare în aplicație.</p>
           <ol>
             <li>Apasă <button class="btn btn-sm" type="button" id="fn-drive-copy">Copiază scriptul</button></li>
             <li>Deschide <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> cu contul Google în care ai folderul de facturi. Șterge tot ce e scris acolo, lipește scriptul și salvează (💾).</li>
             <li>Sus, lângă „Rulați”, alege funcția <b>autorizeaza</b> și apasă <b>Rulați</b>. Acceptă permisiunile (la avertisment: „Avansat” → „Accesați…”).</li>
             <li>Apasă <b>Implementați</b> → <b>Implementare nouă</b> → tipul <b>Aplicație web</b>. Alege „Executați ca: <b>Eu</b>” și „Cine are acces: <b>Oricine</b>”, apoi „Implementați”. Copiază <b>adresa URL a aplicației web</b>.</li>
-            <li>Lipește adresa aici: <span class="toolbar" style="margin-top:6px"><input class="search" id="fn-drive-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" style="flex:1;min-width:220px" aria-label="Adresa aplicației web"><button class="btn primary" type="button" id="fn-drive-save">Conectează</button><button class="btn" type="button" id="fn-drive-cancel">Închide</button></span></li>
+            <li>Lipește adresa aici: <span class="toolbar" style="margin-top:6px"><input class="search" id="fn-drive-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" style="flex:1;min-width:220px" aria-label="Adresa aplicației web"></span>
+              <span class="hint" style="display:block;margin-top:8px">Folderul de facturi (opțional): lipește linkul lui doar dacă e altul decât cel pe care îl citește aplicația. Deschide folderul în Drive și copiază adresa din bara browserului.</span>
+              <span class="toolbar" style="margin-top:6px"><input class="search" id="fn-drive-folder" type="url" placeholder="https://drive.google.com/drive/folders/…" style="flex:1;min-width:220px" aria-label="Linkul folderului de facturi"><button class="btn primary" type="button" id="fn-drive-save">Conectează</button><button class="btn" type="button" id="fn-drive-cancel">Închide</button></span></li>
           </ol>
           <textarea id="fn-drive-code" class="search" readonly hidden rows="6" style="width:100%;font:12px ui-monospace,monospace" aria-label="Scriptul de copiat"></textarea>
           <div class="hint" id="fn-drive-err" style="margin-top:8px"></div>
@@ -2478,16 +2480,18 @@ function fnClientChanged(keepRows) {
 }
 function fnDrive() {
   const d = (FN && FN.drive) || {};
+  const afara = d.conectat && d.in_radacina === false
+    ? `<br><b style="color:var(--bad-ink)">⚠ Folderul „${esc(d.folder)}” nu e în folderul pe care îl citește aplicația: facturile salvate acolo nu vor apărea în aplicație.</b>` : '';
   $('fn-drive').innerHTML = d.conectat
-    ? `✓ Facturile se salvează și în Drive${d.folder ? ', în folderul „' + esc(d.folder) + '”' : ''} · <a id="fn-drive-off">deconectează</a>`
+    ? `✓ Facturile se salvează și în Drive${d.folder ? ', în „' + esc(d.folder) + '”' : ''}, la subfolderul clientului · <a id="fn-drive-set">setări</a> · <a id="fn-drive-off">deconectează</a>${afara}`
     : `Factura se descarcă doar pe acest dispozitiv · <a id="fn-drive-on">salvează automat și în Drive</a>`;
-  const on = $('fn-drive-on'), off = $('fn-drive-off');
-  if (on) on.onclick = () => { $('fn-drive-setup').hidden = false; $('fn-drive-err').textContent = ''; $('fn-drive-setup').scrollIntoView({behavior: 'smooth', block: 'center'}); };
-  if (off) off.onclick = async () => { const r = await fnDriveSet(''); if (r.ok) showToast('Salvarea în Drive e oprită'); };
+  const on = $('fn-drive-on') || $('fn-drive-set'), off = $('fn-drive-off');
+  if (on) on.onclick = () => { $('fn-drive-url').placeholder = d.conectat ? 'lasă gol ca să păstrezi adresa de acum' : 'https://script.google.com/macros/s/…/exec'; $('fn-drive-setup').hidden = false; $('fn-drive-err').textContent = ''; $('fn-drive-setup').scrollIntoView({behavior: 'smooth', block: 'center'}); };
+  if (off) off.onclick = async () => { const r = await fnDriveSet({deconecteaza: true}); if (r.ok) showToast('Salvarea în Drive e oprită'); };
 }
-async function fnDriveSet(url) {
+async function fnDriveSet(body) {
   let j;
-  try { j = await (await fetch('/api/facturare/drive', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url})})).json(); }
+  try { j = await (await fetch('/api/facturare/drive', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json(); }
   catch (e) { j = {ok: false, error: 'Nu am putut contacta aplicația'}; }
   if (j.ok && FN) { FN.drive = j.drive; fnDrive(); }
   return j;
@@ -2500,9 +2504,10 @@ $('fn-drive-copy').addEventListener('click', async () => {
 $('fn-drive-cancel').addEventListener('click', () => { $('fn-drive-setup').hidden = true; });
 $('fn-drive-save').addEventListener('click', async () => {
   $('fn-drive-err').style.color = ''; $('fn-drive-err').textContent = 'Probez legătura cu Drive…';
-  const j = await fnDriveSet($('fn-drive-url').value.trim());
+  const j = await fnDriveSet({url: $('fn-drive-url').value.trim(), folder: $('fn-drive-folder').value.trim()});
   if (!j.ok) { $('fn-drive-err').style.color = 'var(--bad-ink)'; $('fn-drive-err').textContent = j.error || 'Nu a mers'; return; }
-  $('fn-drive-setup').hidden = true; $('fn-drive-url').value = ''; showToast('Conectat: facturile se salvează în Drive');
+  $('fn-drive-setup').hidden = true; $('fn-drive-url').value = ''; $('fn-drive-folder').value = '';
+  showToast(j.drive.in_radacina === false ? 'Conectat, dar vezi avertismentul de sub buton' : 'Conectat: facturile se salvează în Drive');
 });
 // casele si zilele lunii, luate din Google Calendar
 $('fn-cal').addEventListener('click', async () => {
@@ -2600,7 +2605,8 @@ async function fnMake(final, force) {
   if (final) {
     const a = document.createElement('a'); a.href = url; a.download = j.nume; document.body.appendChild(a); a.click(); a.remove();
     const dr = j.drive, drTxt = !dr ? 'Pune fișierul în folderul de facturi din Drive, ca să apară în aplicație.'
-      : dr.ok ? `✓ Salvată și în Drive${dr.folder ? ' („' + esc(dr.folder) + '”)' : ''}: apare în aplicație în scurt timp.`
+      : dr.ok && dr.gasit === false ? `<b style="color:var(--warn-ink)">Salvată în Drive, dar direct în „${esc(dr.folder)}”: nu am găsit un subfolder cu numele clientului.</b> Mut-o tu în folderul lui (sau redenumește folderul clientului ca în Sheet, pentru data viitoare).`
+      : dr.ok ? `✓ Salvată în Drive, în „${esc(dr.folder)}”${FN && FN.drive && FN.drive.in_radacina === false ? ' (folder pe care aplicația nu îl citește)' : ': apare în aplicație în scurt timp'}.`
       : `<b style="color:var(--bad-ink)">⚠ Nu s-a salvat în Drive: ${esc(dr.error || 'eroare')}.</b> Pune de mână fișierul descărcat în folder.`;
     $('fn-result').innerHTML = `<b>${esc(j.nume)}</b> descărcată · total ${eur2(j.total)} · ${check}<br>${drTxt} <a href="${url}" target="_blank" rel="noopener">Deschide PDF-ul</a>`;
     try { localStorage.removeItem(fnDraftKey); } catch (e) {}
