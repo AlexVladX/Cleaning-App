@@ -3547,7 +3547,7 @@ function showTab(t, sub) {
 }
 function showSec(s) { showTab(s === 'acasa' ? 'acasa' : store.get('sec-' + s, SEC[s][0])); }
 document.addEventListener('click', e => {
-  const b = e.target.closest('[data-sec]'); if (b) { showSec(b.dataset.sec); scrollTo(0, 0); return; }
+  const b = e.target.closest('[data-sec]'); if (b && b !== document.body) { showSec(b.dataset.sec); scrollTo(0, 0); return; }
   const g = e.target.closest('[data-go]'); if (g) { const [t, s] = g.dataset.go.split(':'); showTab(t, s); scrollTo(0, 0); }
 });
 // punct rosu in meniu cand o sub-sectiune are ceva de rezolvat
